@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+credentials.txt
+credentials.txt~
+downloads/
+.env
+*~
