@@ -21,20 +21,21 @@ class GalleryItem(ListItem):
         cat_upper = category.upper() if category else 'UNKNOWN'
         
         # Color mapping roughly matching typical EH/EX colors
+        # Using foreground colors with 'reverse' for the pill effect, which adapts better to the terminal theme
         cat_colors = {
-            "DOUJINSHI": "bold red",
-            "MANGA": "bold dark_orange",
-            "ARTIST CG": "bold yellow",
-            "GAME CG": "bold green",
-            "WESTERN": "bold green_yellow",
-            "NON-H": "bold blue",
-            "IMAGE SET": "bold dark_blue",
-            "COSPLAY": "bold purple",
-            "ASIAN PORN": "bold magenta",
-            "MISC": "bold grey74"
+            "DOUJINSHI": "bold red reverse",
+            "MANGA": "bold dark_orange reverse",
+            "ARTIST CG": "bold yellow reverse",
+            "GAME CG": "bold green reverse",
+            "WESTERN": "bold green_yellow reverse",
+            "NON-H": "bold blue reverse",
+            "IMAGE SET": "bold dark_blue reverse",
+            "COSPLAY": "bold purple reverse",
+            "ASIAN PORN": "bold magenta reverse",
+            "MISC": "bold grey74 reverse"
         }
         
-        cat_style = cat_colors.get(cat_upper, "bold white")
+        cat_style = cat_colors.get(cat_upper, "bold white reverse")
         title = self.gallery.get('title', 'Unknown Title')
         posted = self.gallery.get('posted', '')
         language = self.gallery.get('language', '')
@@ -46,10 +47,9 @@ class GalleryItem(ListItem):
         text.append("★" * 4 + "☆" + "\n", style="yellow")
         
         # Bottom row: [CATEGORY]     LANG    DATE
-        text.append(f"[{cat_upper}]", style=f"{cat_style} on black")
+        text.append(f" {cat_upper} ", style=cat_style)
         
-        # Use simple spacing. In Textual it's tricky to right align parts of text in one Label without columns, 
-        # but we can add some spaces.
+        # Space out the right info
         right_info = ""
         if language:
             right_info += f"  {language}"
@@ -79,10 +79,13 @@ class RightPane(VerticalScroll):
 class ExhentaiApp(App):
     """A Yazi-style, keyboard-centric TUI for Exhentai browsing & downloads."""
 
+    # Using Textual's standard CSS variables for theme-aware backgrounds/foregrounds
+    # so it matches the terminal's native colors or the user's Textual theme setting
     CSS = """
     Screen {
         layout: vertical;
-        background: $surface;
+        background: $background;
+        color: $text;
     }
 
     #main-container {
@@ -92,43 +95,48 @@ class ExhentaiApp(App):
 
     LeftPane {
         width: 30%;
-        border-right: solid $accent;
+        border-right: solid $panel-lighten-2;
         height: 100%;
+        background: $panel;
     }
 
     MiddlePane {
         width: 40%;
-        border-right: solid $accent;
+        border-right: solid $panel-lighten-2;
         height: 100%;
+        background: $panel;
     }
 
     RightPane {
         width: 30%;
         height: 100%;
         padding: 1;
+        background: $panel;
     }
     
     ListView {
         height: 100%;
         border: none;
+        background: transparent;
     }
     
     GalleryItem {
         padding: 1 1;
-        border-bottom: solid $primary-background;
+        border-bottom: solid $panel-lighten-2;
         height: auto;
     }
     
     GalleryItem:focus {
-        background: $primary;
+        background: $accent 30%;
     }
     
     ListItem {
         padding: 0 1;
+        background: transparent;
     }
     
     ListItem:focus {
-        background: $primary;
+        background: $accent 30%;
     }
     """
 
