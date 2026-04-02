@@ -1,12 +1,65 @@
 from textual.app import App, ComposeResult
 from textual.widgets import Label, ListView, ListItem, Markdown, Footer
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, VerticalScroll, Vertical, Container
 from textual import work
 from textual.binding import Binding
+from rich.text import Text
 import os
 import parser
 from client import ExhentaiClient
 from downloader import GalleryDownloader
+
+class GalleryItem(ListItem):
+    """Custom widget for a gallery list item."""
+    def __init__(self, index: int, gallery: dict):
+        super().__init__(name=str(index))
+        self.gallery = gallery
+        self.idx = index
+
+    def compose(self) -> ComposeResult:
+        category = self.gallery.get('category', 'UNKNOWN')
+        cat_upper = category.upper() if category else 'UNKNOWN'
+        
+        # Color mapping roughly matching typical EH/EX colors
+        cat_colors = {
+            "DOUJINSHI": "bold red",
+            "MANGA": "bold dark_orange",
+            "ARTIST CG": "bold yellow",
+            "GAME CG": "bold green",
+            "WESTERN": "bold green_yellow",
+            "NON-H": "bold blue",
+            "IMAGE SET": "bold dark_blue",
+            "COSPLAY": "bold purple",
+            "ASIAN PORN": "bold magenta",
+            "MISC": "bold grey74"
+        }
+        
+        cat_style = cat_colors.get(cat_upper, "bold white")
+        title = self.gallery.get('title', 'Unknown Title')
+        posted = self.gallery.get('posted', '')
+        language = self.gallery.get('language', '')
+        
+        text = Text()
+        # Title in bold (wrapping text)
+        text.append(f"{title}\n", style="bold")
+        # Placeholder for rating stars
+        text.append("★" * 4 + "☆" + "\n", style="yellow")
+        
+        # Bottom row: [CATEGORY]     LANG    DATE
+        text.append(f"[{cat_upper}]", style=f"{cat_style} on black")
+        
+        # Use simple spacing. In Textual it's tricky to right align parts of text in one Label without columns, 
+        # but we can add some spaces.
+        right_info = ""
+        if language:
+            right_info += f"  {language}"
+        if posted:
+            right_info += f"    {posted}"
+            
+        if right_info:
+            text.append(right_info, style="dim")
+             
+        yield Label(text)
 
 class LeftPane(VerticalScroll):
     """Pane for displaying the gallery list."""
@@ -58,6 +111,16 @@ class ExhentaiApp(App):
     ListView {
         height: 100%;
         border: none;
+    }
+    
+    GalleryItem {
+        padding: 1 1;
+        border-bottom: solid $primary-background;
+        height: auto;
+    }
+    
+    GalleryItem:focus {
+        background: $primary;
     }
     
     ListItem {
@@ -116,8 +179,9 @@ class ExhentaiApp(App):
     def _populate_galleries(self):
         self.gallery_list.clear()
         for i, g in enumerate(self.galleries):
-            self.gallery_list.append(ListItem(Label(f"[{i}] {g['title']}"), name=str(i)))
-        self.gallery_list.focus()
+            self.gallery_list.append(GalleryItem(i, g))
+        if len(self.galleries) > 0:
+            self.gallery_list.focus()
 
     def on_list_view_highlighted(self, event: ListView.Highlighted):
         if event.list_view.id == "gallery-list":
@@ -126,6 +190,7 @@ class ExhentaiApp(App):
                 gallery = self.galleries[idx]
                 
                 md = f"# {gallery['title']}\n\n"
+                md += f"**Category:** {gallery.get('category', 'Unknown')}\n"
                 md += f"**Uploader:** {gallery['uploader']}\n"
                 md += f"**Thumb:** {gallery['thumb_url']}\n"
                 md += f"**URL:** {gallery['url']}\n"
@@ -189,8 +254,6 @@ class ExhentaiApp(App):
             
     @work(thread=True)
     def action_download(self):
-        # We find the currently highlighted gallery in Left Pane
-        # Even if page_list has focus, we download the current gallery
         idx = -1
         if self.gallery_list.highlighted_child:
             idx = int(self.gallery_list.highlighted_child.name)

@@ -11,6 +11,19 @@ def parse_gallery_url(url: str) -> Optional[Dict[str, str]]:
         return {"gid": match.group(1), "token": match.group(2)}
     return None
 
+def _extract_language(title: str) -> str:
+    """Guesses language indicator from title, similar to reference project or standard practice."""
+    t_lower = title.lower()
+    if "[chinese]" in t_lower or "汉化" in t_lower or "漢化" in t_lower or "中文" in t_lower:
+        return "ZH"
+    if "[japanese]" in t_lower:
+        return "JP"
+    if "[english]" in t_lower:
+        return "EN"
+    if "[korean]" in t_lower:
+        return "KR"
+    return ""
+
 def parse_gallery_list(html: str) -> List[Dict[str, str]]:
     """Parses a gallery list page (e.g., homepage or search results)."""
     soup = BeautifulSoup(html, "html.parser")
@@ -24,8 +37,28 @@ def parse_gallery_list(html: str) -> List[Dict[str, str]]:
                 "title": "Unknown",
                 "url": "",
                 "thumb_url": "",
-                "uploader": "Unknown"
+                "uploader": "Unknown",
+                "category": "Unknown",
+                "posted": "",
+                "language": ""
             }
+            
+            # Category
+            cn = row.find(class_="cn")
+            cs = row.find(class_="cs")
+            if cn:
+                gallery["category"] = cn.get_text(strip=True)
+            elif cs:
+                gallery["category"] = cs.get_text(strip=True)
+                
+            # Date (posted)
+            posted_elem = row.find(id=re.compile(r"^posted_"))
+            if posted_elem:
+                gallery["posted"] = posted_elem.get_text(strip=True)
+            else:
+                date_match = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", row.get_text())
+                if date_match:
+                    gallery["posted"] = date_match.group(0)
             
             # Usually in compact/extended mode it's in td.gl3c
             gl3c = row.find("td", class_="gl3c")
@@ -38,6 +71,8 @@ def parse_gallery_list(html: str) -> List[Dict[str, str]]:
                         gallery["title"] = title_div.get_text(strip=True)
                     else:
                         gallery["title"] = a_tag.get_text(strip=True)
+            
+            gallery["language"] = _extract_language(gallery["title"])
 
             gl2c = row.find("td", class_="gl2c")
             if gl2c:
