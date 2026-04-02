@@ -30,7 +30,11 @@ Now that the core foundation of `exhentai_api` is complete, the next steps are t
    - Popular / TopList
    - **Important Source Code Reference:** You should look into the parent directory `../reference_project/` (especially its Java parsers and clients) to extract relevant details, logic, and constants to accurately implement the above remaining endpoints.
 
-2. **Integrate with `tui.py`:** Refactor the existing `Textual` interface to consume the new `exhentai_api` instead of the old monolithic code.
+2. **Implement CLI Downloader:** Before dealing with complex GUI/TUI integrations, build a simple Command Line Interface (CLI) tool. This CLI should:
+   - Accept a gallery URL as input.
+   - Use `exhentai_api` to parse the details and iterate through image pages.
+   - Download the full-resolution images into the `downloads/` directory.
+3. **GUI / TUI Integration (TODO):** The existing `tui.py` is mostly a prototype. Once the API and CLI downloader are fully robust, design and integrate a proper UI (either Textual-based TUI or a graphical GUI) to consume the `exhentai_api`.
 
 ---
 
