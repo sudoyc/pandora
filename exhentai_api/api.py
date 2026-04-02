@@ -4,8 +4,19 @@ from exhentai_api.constants import BASE_URL
 
 class ExhentaiAPI:
     def __init__(self, client: ExhentaiClient = None):
+        self._owns_client = client is None
         self.client = client or ExhentaiClient()
-        
+
+    async def aclose(self):
+        if self._owns_client:
+            await self.client.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.aclose()
+
     async def get_homepage(self):
         html = await self.client.get_html(f"{BASE_URL}/")
         return parse_gallery_list(html)
