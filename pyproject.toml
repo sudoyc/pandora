@@ -13,3 +13,8 @@ dependencies = [
 
 [project.scripts]
 exhentai-dl = "cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
