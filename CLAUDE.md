@@ -27,7 +27,16 @@ Now that the core foundation of `exhentai_api` is complete, the next steps are t
    - Search (`search`)
    - Favorites (`get_favorites`, `add_favorite`)
    - Image Viewing (`get_image_url`)
+   - Popular / TopList
+   - **Important Source Code Reference:** You should look into the parent directory `../reference_project/` (especially its Java parsers and clients) to extract relevant details, logic, and constants to accurately implement the above remaining endpoints.
+
 2. **Integrate with `tui.py`:** Refactor the existing `Textual` interface to consume the new `exhentai_api` instead of the old monolithic code.
+
+---
+
+## 🛑 IMPORTANT RULES & CONSTRAINTS
+- **Tool Usage:** When reading or editing files, you MUST use the built-in `Read`, `Edit`, or `Write` tools. **NEVER use Bash scripts (like `sed`, `cat`, `echo`, `awk`) to read or edit files.** This avoids unnecessary permission prompts and ensures safe file handling.
+- **Python Environment:** The host system is Arch Linux, which has very strict Python environment isolation (`PEP 668`). When executing Python scripts or installing packages, **always use `uv`** (e.g., `uv run python script.py`, `uv pip install <package>`, `uv run pytest`). Never use plain `pip install` or `python` globally.
 
 ---
 
