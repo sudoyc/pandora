@@ -72,6 +72,20 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
             except ValueError:
                 pass
 
+    preview_urls = []
+    for gdt in soup.find_all(class_=["gdtm", "gdtl"]):
+        a_tag = gdt.find("a")
+        if a_tag and a_tag.get("href"):
+            preview_urls.append(a_tag.get("href"))
+
+    # For large gallery view, sometimes there are id="gdt"
+    if not preview_urls:
+        gdt = soup.find(id="gdt")
+        if gdt:
+            for a_tag in gdt.find_all("a"):
+                if a_tag and a_tag.get("href") and "/s/" in a_tag.get("href"):
+                    preview_urls.append(a_tag.get("href"))
+
     return GalleryDetail(
         gid=gid,
         token=token,
@@ -85,5 +99,6 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
         size=size,
         posted=posted,
         favorite_slot=favorite_slot,
-        preview_pages=preview_pages
+        preview_pages=preview_pages,
+        preview_urls=preview_urls
     )

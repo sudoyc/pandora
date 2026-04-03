@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Dict, List
 from exhentai_api.constants import BASE_URL
 
@@ -31,6 +31,7 @@ class GalleryDetail:
     posted: str
     favorite_slot: Optional[int]
     preview_pages: int = 1
+    preview_urls: List[str] = field(default_factory=list)
 
     @property
     def url(self) -> str:

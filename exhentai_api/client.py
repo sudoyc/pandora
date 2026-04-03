@@ -16,7 +16,12 @@ class ExhentaiClient:
             "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
         }
 
-        self.session = httpx.AsyncClient(cookies=self.cookies, headers=self.headers, timeout=30.0)
+        self.session = httpx.AsyncClient(
+            cookies=self.cookies,
+            headers=self.headers,
+            timeout=30.0,
+            follow_redirects=True
+        )
 
     async def aclose(self):
         await self.session.aclose()
