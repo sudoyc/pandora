@@ -31,13 +31,13 @@ class ExhentaiAPI:
         html = await self.client.get_html(url)
         return parse_gallery_detail(html, gid, token)
 
-    async def get_image_url(self, gid: str, imgkey: str, page: int, nl: str = None) -> ImageDetail:
+    async def get_image_url(self, gid: str, imgkey: str, page: int, nl: Optional[str] = None) -> ImageDetail:
         if nl:
             # Use api.php to reload the image URL using the nl token
             payload = {
                 "method": "showpage",
-                "gid": int(gid) if str(gid).isdigit() else gid,
-                "page": int(page),
+                "gid": gid,
+                "page": str(page),
                 "imgkey": imgkey,
                 "showkey": nl
             }

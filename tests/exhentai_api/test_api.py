@@ -68,5 +68,5 @@ async def test_get_image_url_with_nl():
     assert image.nl == "new_nl"
     mock_client.post_json.assert_called_once_with(
         f"{BASE_URL}/api.php",
-        json={"method": "showpage", "gid": 123, "page": 1, "imgkey": "abc", "showkey": "old_nl"}
+        json={"method": "showpage", "gid": "123", "page": "1", "imgkey": "abc", "showkey": "old_nl"}
     )
