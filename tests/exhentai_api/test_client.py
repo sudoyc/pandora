@@ -9,7 +9,6 @@ async def test_client_headers():
     assert client.cookies["igneous"] == "test_ig"
     assert client.cookies["ipb_member_id"] == "123"
     assert "User-Agent" in client.headers
-    await client.aclose()
 
 @pytest.mark.asyncio
 async def test_client_context_manager():
@@ -22,11 +21,10 @@ async def test_client_context_manager():
 @patch("httpx.AsyncClient.get")
 async def test_get_html_success(mock_get):
     url = "https://exhentai.org"
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = AsyncMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.headers = {}
     mock_response.text = "<html>Success</html>"
-    mock_response.raise_for_status = MagicMock()
     mock_get.return_value = mock_response
 
     async with ExhentaiClient() as client:
@@ -37,10 +35,9 @@ async def test_get_html_success(mock_get):
 @patch("httpx.AsyncClient.get")
 async def test_get_html_sad_panda(mock_get):
     url = "https://exhentai.org"
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = AsyncMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.headers = {"Content-Disposition": 'inline; filename="sadpanda.jpg"'}
-    mock_response.raise_for_status = MagicMock()
     mock_get.return_value = mock_response
 
     async with ExhentaiClient() as client:
@@ -52,11 +49,10 @@ async def test_get_html_sad_panda(mock_get):
 async def test_get_html_retry(mock_get):
     url = "https://exhentai.org"
 
-    mock_response_success = MagicMock(spec=httpx.Response)
+    mock_response_success = AsyncMock(spec=httpx.Response)
     mock_response_success.status_code = 200
     mock_response_success.headers = {}
     mock_response_success.text = "<html>Success after retry</html>"
-    mock_response_success.raise_for_status = MagicMock()
 
     # Fail twice, succeed on third attempt
     mock_get.side_effect = [
@@ -87,14 +83,11 @@ async def test_get_html_retry_failure(mock_get):
 async def test_post_json():
     client = ExhentaiClient()
     with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
-        mock_response = MagicMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx.Response)
         mock_response.json.return_value = {"success": True}
-        mock_response.raise_for_status = MagicMock()
         mock_post.return_value = mock_response
 
         result = await client.post_json("https://example.com/api", json={"test": 123})
 
         mock_post.assert_called_once_with("https://example.com/api", json={"test": 123})
         assert result == {"success": True}
-
-    await client.aclose()
