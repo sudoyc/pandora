@@ -30,6 +30,7 @@ class GalleryDetail:
     size: str
     posted: str
     favorite_slot: Optional[int]
+    preview_pages: int = 1
 
     @property
     def url(self) -> str:
