@@ -34,8 +34,8 @@ async def test_get_popular(monkeypatch):
             pass
 
     mock_client = MockClient()
-
-    api = ExhentaiAPI(client=mock_client)
+    # pyright: ignore[reportArgumentType]
+    api = ExhentaiAPI(client=mock_client)  # type: ignore
     result = await api.get_popular()
 
     assert len(result) == 1
@@ -52,8 +52,8 @@ async def test_get_toplist(monkeypatch):
             pass
 
     mock_client = MockClient()
-
-    api = ExhentaiAPI(client=mock_client)
+    # pyright: ignore[reportArgumentType]
+    api = ExhentaiAPI(client=mock_client)  # type: ignore
     result = await api.get_toplist(tl="15")
 
     # Just asserting it returns a list and makes the correct API call
