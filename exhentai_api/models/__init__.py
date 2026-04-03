@@ -2,6 +2,7 @@ from .gallery import GalleryListItem, GalleryDetail
 from .tags import Tag, WatchedTag
 from .image import ImageDetail
 from .search import SearchParams
+from .favorites import FavoriteCategory, FavoritesResponse
 
 __all__ = [
     "GalleryListItem",
@@ -9,5 +10,7 @@ __all__ = [
     "Tag",
     "WatchedTag",
     "ImageDetail",
-    "SearchParams"
+    "SearchParams",
+    "FavoriteCategory",
+    "FavoritesResponse"
 ]
