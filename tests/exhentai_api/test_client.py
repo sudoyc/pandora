@@ -82,3 +82,19 @@ async def test_get_html_retry_failure(mock_get):
         with pytest.raises(httpx.ConnectError, match="Network error"):
             await client.get_html(url, retries=2, backoff_factor=0.01)
         assert mock_get.call_count == 2
+
+@pytest.mark.asyncio
+async def test_post_json():
+    client = ExhentaiClient()
+    with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.json.return_value = {"success": True}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        result = await client.post_json("https://example.com/api", json={"test": 123})
+
+        mock_post.assert_called_once_with("https://example.com/api", json={"test": 123})
+        assert result == {"success": True}
+
+    await client.aclose()

@@ -51,3 +51,19 @@ class ExhentaiClient:
             raise last_exception
 
         return ""
+
+    async def post_json(self, url: str, json: dict, retries: int = 3, backoff_factor: float = 0.1) -> dict:
+        last_exception = None
+        for attempt in range(retries):
+            try:
+                response = await self.session.post(url, json=json)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                last_exception = e
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff_factor * (2 ** attempt))
+
+        if last_exception:
+            raise last_exception
+        return {}
