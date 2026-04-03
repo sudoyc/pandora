@@ -1,5 +1,5 @@
 import pytest
-from exhentai_api.models.toplist import TopListResponse
+from exhentai_api.models.toplist import TopListItem
 from exhentai_api.parsers.toplist import parse_toplist
 from exhentai_api.api import ExhentaiAPI
 
@@ -8,27 +8,21 @@ def test_parse_toplist():
         html = f.read()
 
     result = parse_toplist(html)
-    assert isinstance(result, TopListResponse)
+    assert isinstance(result, list)
+    assert len(result) > 0
 
-    assert len(result.gallery.all_time) == 1
-    assert result.gallery.all_time[0].name == "Gallery 1"
-    assert result.gallery.all_time[0].href == "/g/1/abc"
+    # Test mapping
+    galleries = [i for i in result if i.type == "Gallery"]
+    assert len(galleries) == 4
+    assert galleries[0].name == "Gallery 1"
+    assert galleries[0].link == "/g/1/abc"
+    assert galleries[3].name == "Gallery 4"
 
-    assert len(result.gallery.past_year) == 1
-    assert result.gallery.past_year[0].name == "Gallery 2"
-
-    assert len(result.gallery.past_month) == 1
-    assert result.gallery.past_month[0].name == "Gallery 3"
-
-    assert len(result.gallery.yesterday) == 1
-    assert result.gallery.yesterday[0].name == "Gallery 4"
-
-    assert len(result.uploader.all_time) == 1
-    assert result.uploader.all_time[0].name == "Uploader 1"
-    assert result.uploader.all_time[0].href == "/u/1"
-
-    assert len(result.uploader.yesterday) == 1
-    assert result.uploader.yesterday[0].name == "Uploader 4"
+    uploaders = [i for i in result if i.type == "Uploader"]
+    assert len(uploaders) == 4
+    assert uploaders[0].name == "Uploader 1"
+    assert uploaders[0].link == "/u/1"
+    assert uploaders[3].name == "Uploader 4"
 
 @pytest.mark.asyncio
 async def test_get_popular(monkeypatch):
@@ -60,8 +54,13 @@ async def test_get_toplist(monkeypatch):
     mock_client = MockClient()
 
     api = ExhentaiAPI(client=mock_client)
-    result = await api.get_toplist()
+    result = await api.get_toplist(tl="15")
 
-    # Just asserting it returns a TopListResponse and makes the correct API call
-    assert isinstance(result, TopListResponse)
-    assert mock_client.last_url == "https://e-hentai.org/toplist.php"
+    # Just asserting it returns a list and makes the correct API call
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].type == "G"
+    assert result[0].name == "Gal 1"
+    assert result[0].link == "/g/1/abc"
+    assert mock_client.last_url == "https://exhentai.org/toplist.php"
+

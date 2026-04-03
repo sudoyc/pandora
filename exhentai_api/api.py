@@ -9,7 +9,7 @@ from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from exhentai_api.models.image import ImageDetail
 from exhentai_api.models.search import SearchParams
 from exhentai_api.models.favorites import FavoritesResponse
-from exhentai_api.models.toplist import TopListResponse
+from exhentai_api.models.toplist import TopListItem
 from exhentai_api.constants import BASE_URL
 
 class ExhentaiAPI:
@@ -111,12 +111,13 @@ class ExhentaiAPI:
         html = await self.client.get_html(f"{BASE_URL}/popular")
         return parse_gallery_list(html)
 
-    async def get_toplist(self, tl: str = "") -> TopListResponse:
-        url = "https://e-hentai.org/toplist.php"
+    async def get_toplist(self, tl: str = "15") -> List[TopListItem]:
+        url = f"{BASE_URL}/toplist.php"
         params = {}
         if tl:
             params["tl"] = tl
 
-        # Note: Toplist is only supported on e-hentai.org
+        # Note: Toplist is only supported on e-hentai.org natively,
+        # but spec requires f"{BASE_URL}/toplist.php?tl={tl}"
         html = await self.client.get_html(url, params=params if params else None)
         return parse_toplist(html)
