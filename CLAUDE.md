@@ -33,7 +33,7 @@ Now that the core foundation of `exhentai_api` is complete, the next steps are t
 2. **Implement CLI Downloader:** Before dealing with complex GUI/TUI integrations, build a simple Command Line Interface (CLI) tool. This CLI should:
    - Accept a gallery URL as input.
    - Use `exhentai_api` to parse the details and iterate through image pages.
-   - Download the full-resolution images into the `downloads/` directory.
+   - Download the full-resolution images into the `downloads/` directory. - ✅ DONE (Simple version created, needs robustness improvements like concurrent downloads and better error handling)
 3. **GUI / TUI Integration (TODO):** The existing `tui.py` is mostly a prototype. Once the API and CLI downloader are fully robust, design and integrate a proper UI (either Textual-based TUI or a graphical GUI) to consume the `exhentai_api`.
 
 ---
