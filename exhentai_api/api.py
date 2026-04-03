@@ -29,8 +29,6 @@ class ExhentaiAPI:
 
     async def search(self, params: SearchParams, page: int = 0) -> list[GalleryListItem]:
         query_params = params.to_dict()
-        if params.f_cats is not None:
-            query_params["f_cats"] = str((~params.f_cats) & 1023)
         if page > 0:
             query_params["page"] = str(page)
 

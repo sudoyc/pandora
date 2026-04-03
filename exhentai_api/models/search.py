@@ -25,7 +25,7 @@ class SearchParams:
     f_spf: Optional[int] = None
     f_spt: Optional[int] = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str]:
         """Converts the dataclass to a dictionary suitable for httpx query parameters.
         Ignores None values and false booleans unless they are required.
         """
@@ -34,7 +34,10 @@ class SearchParams:
             params["f_search"] = self.f_search
 
         if self.f_cats is not None:
-            params["f_cats"] = str(self.f_cats)
+            # f_cats on ExHentai is a bitmask of categories to EXCLUDE.
+            # We assume self.f_cats is the bitmask of categories to INCLUDE.
+            inverted_cats = (~self.f_cats) & 1023
+            params["f_cats"] = str(inverted_cats)
 
         if self.advsearch:
             params["advsearch"] = "1"

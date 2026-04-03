@@ -26,7 +26,7 @@ def test_search_params_advanced():
     d = params.to_dict()
     assert d == {
         "f_search": "test",
-        "f_cats": "1",
+        "f_cats": "1022",
         "advsearch": "1",
         "f_sname": "on",
         "f_stags": "on",
