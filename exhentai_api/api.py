@@ -3,8 +3,9 @@ from exhentai_api.client import ExhentaiClient
 from exhentai_api.parsers.gallery import parse_gallery_list
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer, parse_image_api_response
-from exhentai_api.models.gallery import GalleryDetail
+from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from exhentai_api.models.image import ImageDetail
+from exhentai_api.models.search import SearchParams
 from exhentai_api.constants import BASE_URL
 
 class ExhentaiAPI:
@@ -24,6 +25,16 @@ class ExhentaiAPI:
 
     async def get_homepage(self):
         html = await self.client.get_html(f"{BASE_URL}/")
+        return parse_gallery_list(html)
+
+    async def search(self, params: SearchParams, page: int = 0) -> list[GalleryListItem]:
+        query_params = params.to_dict()
+        if params.f_cats is not None:
+            query_params["f_cats"] = str((~params.f_cats) & 1023)
+        if page > 0:
+            query_params["page"] = str(page)
+
+        html = await self.client.get_html(f"{BASE_URL}/", params=query_params)
         return parse_gallery_list(html)
 
     async def get_gallery_details(self, gid: str, token: str) -> GalleryDetail:
