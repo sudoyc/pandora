@@ -1,6 +1,6 @@
 import pytest
 import httpx
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 from exhentai_api.client import ExhentaiClient
 
 @pytest.mark.asyncio
@@ -81,13 +81,48 @@ async def test_get_html_retry_failure(mock_get):
 
 @pytest.mark.asyncio
 async def test_post_json():
-    client = ExhentaiClient()
-    with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
-        mock_response = AsyncMock(spec=httpx.Response)
-        mock_response.json.return_value = {"success": True}
-        mock_post.return_value = mock_response
+    async with ExhentaiClient() as client:
+        with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
+            mock_response = AsyncMock(spec=httpx.Response)
+            mock_response.json.return_value = {"success": True}
+            mock_post.return_value = mock_response
 
-        result = await client.post_json("https://example.com/api", json={"test": 123})
+            result = await client.post_json("https://example.com/api", json={"test": 123})
 
-        mock_post.assert_called_once_with("https://example.com/api", json={"test": 123})
-        assert result == {"success": True}
+            mock_post.assert_called_once_with("https://example.com/api", json={"test": 123})
+            assert result == {"success": True}
+
+@pytest.mark.asyncio
+async def test_post_json_retry_success():
+    url = "https://example.com/api"
+    payload = {"test": 123}
+
+    async with ExhentaiClient() as client:
+        with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
+            mock_response_success = AsyncMock(spec=httpx.Response)
+            mock_response_success.json.return_value = {"success": True}
+
+            mock_post.side_effect = [
+                httpx.ConnectError("Network error"),
+                httpx.ConnectError("Network error"),
+                mock_response_success
+            ]
+
+            result = await client.post_json(url, json=payload, retries=3, backoff_factor=0.01)
+
+            assert result == {"success": True}
+            assert mock_post.call_count == 3
+
+@pytest.mark.asyncio
+async def test_post_json_retry_failure():
+    url = "https://example.com/api"
+    payload = {"test": 123}
+
+    async with ExhentaiClient() as client:
+        with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
+            mock_post.side_effect = httpx.ConnectError("Network error")
+
+            with pytest.raises(httpx.ConnectError, match="Network error"):
+                await client.post_json(url, json=payload, retries=2, backoff_factor=0.01)
+
+            assert mock_post.call_count == 2
