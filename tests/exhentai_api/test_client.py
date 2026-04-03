@@ -126,3 +126,30 @@ async def test_post_json_retry_failure():
                 await client.post_json(url, json=payload, retries=2, backoff_factor=0.01)
 
             assert mock_post.call_count == 2
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient.get")
+async def test_get_html_with_params(mock_get):
+    mock_response = AsyncMock(spec=httpx.Response)
+    mock_response.status_code = 200
+    mock_response.headers = {}
+    mock_response.text = "<html>Params Success</html>"
+    mock_get.return_value = mock_response
+
+    async with ExhentaiClient() as client:
+        html = await client.get_html("https://ex.org", params={"f_search": "test"})
+        assert html == "<html>Params Success</html>"
+        mock_get.assert_called_once_with("https://ex.org", params={"f_search": "test"})
+
+@pytest.mark.asyncio
+async def test_post_form():
+    async with ExhentaiClient() as client:
+        with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
+            mock_response = AsyncMock(spec=httpx.Response)
+            mock_response.text = "Form OK"
+            mock_response.raise_for_status = list # Just needs to be callable
+            mock_post.return_value = mock_response
+
+            result = await client.post_form("https://ex.org/api", data={"favcat": "1"})
+            mock_post.assert_called_once_with("https://ex.org/api", data={"favcat": "1"})
+            assert result == "Form OK"

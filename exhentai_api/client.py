@@ -32,11 +32,11 @@ class ExhentaiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.aclose()
 
-    async def get_html(self, url: str, retries: int = 3, backoff_factor: float = 0.1) -> str:
+    async def get_html(self, url: str, params: Optional[dict] = None, retries: int = 3, backoff_factor: float = 0.1) -> str:
         last_exception = None
         for attempt in range(retries):
             try:
-                response = await self.session.get(url)
+                response = await self.session.get(url, params=params)
                 response.raise_for_status()
 
                 # Check for sad panda
@@ -72,3 +72,19 @@ class ExhentaiClient:
         if last_exception:
             raise last_exception
         return {}
+
+    async def post_form(self, url: str, data: dict, retries: int = 3, backoff_factor: float = 0.1) -> str:
+        last_exception = None
+        for attempt in range(retries):
+            try:
+                response = await self.session.post(url, data=data)
+                response.raise_for_status()
+                return response.text
+            except Exception as e:
+                last_exception = e
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff_factor * (2 ** attempt))
+
+        if last_exception:
+            raise last_exception
+        return ""
