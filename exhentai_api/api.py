@@ -4,10 +4,12 @@ from exhentai_api.parsers.gallery import parse_gallery_list
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer, parse_image_api_response
 from exhentai_api.parsers.favorites import parse_favorites_list
+from exhentai_api.parsers.toplist import parse_toplist
 from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from exhentai_api.models.image import ImageDetail
 from exhentai_api.models.search import SearchParams
 from exhentai_api.models.favorites import FavoritesResponse
+from exhentai_api.models.toplist import TopListResponse
 from exhentai_api.constants import BASE_URL
 
 class ExhentaiAPI:
@@ -104,3 +106,17 @@ class ExhentaiAPI:
             form_data.append(("modifygids[]", str(gid)))
 
         return await self.client.post_form(url, data=form_data)
+
+    async def get_popular(self) -> List[GalleryListItem]:
+        html = await self.client.get_html(f"{BASE_URL}/popular")
+        return parse_gallery_list(html)
+
+    async def get_toplist(self, tl: str = "") -> TopListResponse:
+        url = "https://e-hentai.org/toplist.php"
+        params = {}
+        if tl:
+            params["tl"] = tl
+
+        # Note: Toplist is only supported on e-hentai.org
+        html = await self.client.get_html(url, params=params if params else None)
+        return parse_toplist(html)
