@@ -74,7 +74,7 @@ class ExhentaiClient:
             raise last_exception
         return {}
 
-    async def post_form(self, url: str, data: typing.Any, retries: int = 3, backoff_factor: float = 0.1) -> str:
+    async def post_form(self, url: str, data: typing.Union[dict, typing.List[typing.Tuple[str, str]]], retries: int = 3, backoff_factor: float = 0.1) -> str:
         last_exception = None
         for attempt in range(retries):
             try:

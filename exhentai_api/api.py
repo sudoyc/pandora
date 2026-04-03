@@ -86,6 +86,10 @@ class ExhentaiAPI:
         return await self.client.post_form(url, data=payload)
 
     async def modify_favorites(self, gids: List[str], ddact: str) -> str:
+        import re
+        if ddact != "delete" and not re.match(r"^fav[0-9]$", ddact):
+            raise ValueError("ddact must be 'delete' or 'fav[0-9]'")
+
         url = f"{BASE_URL}/favorites.php"
 
         payload = {
