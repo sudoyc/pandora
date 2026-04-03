@@ -5,41 +5,52 @@
 ## Phase 1: Search Implementation
 
 1. **Model Updates:**
-   - Create a `SearchParams` or `SearchFilter` dataclass in `exhentai_api/models/search.py` to represent all the advanced search flags (categories, rating limits, text matching toggles, page limits) mapped from `f_cats`, `advsearch`, etc.
-   
+   - Create a `SearchParams` dataclass in `exhentai_api/models/search.py`.
+   - Fields should accurately mirror `ListUrlBuilder.java` parameters: `f_search` (str), `f_cats` (int), `advsearch` (bool).
+   - Advanced toggles (bool mapped to `"on"`/None): `f_sname`, `f_stags`, `f_sdesc`, `f_storr`, `f_sto`, `f_sdt1`, `f_sdt2`, `f_sh`, `f_sr`, `f_sp`.
+   - Advanced values: `f_srdd` (int for rating), `f_spf` (int, page from), `f_spt` (int, page to).
+
 2. **API Endpoint:**
-   - Implement `search(self, query: str = "", params: SearchParams = None, page: int = 0) -> List[GalleryListItem]` in `ExhentaiAPI`.
-   - The method will construct the complex query parameters and reuse the existing `parse_gallery_list` parser since the DOM structure of search results is identical to the homepage.
+   - Implement `search(self, params: SearchParams, page: int = 0) -> List[GalleryListItem]` in `ExhentaiAPI`.
+   - The method constructs the URL from params. Categories bitmask should follow `(~mCategory) & 1023` logic.
+   - Reuse the `parse_gallery_list` parser for DOM parsing.
    
 3. **Tests:**
-   - Write `test_search.py` to mock `httpx` GET requests, verifying that the constructed URL parameters are perfectly formatted and that the response correctly returns `GalleryListItem` objects.
+   - Write `test_search.py` checking the generated URL query string for accuracy based on `SearchParams` state.
 
 ## Phase 2: Favorites Implementation
 
 1. **Model Updates:**
-   - Create `FavoriteCategory` dataclass (name and count for slots 0-9).
+   - Create `FavoriteCategory` dataclass containing `slot` (int), `name` (str), and `count` (int).
+   - Create `FavoritesResponse` containing `categories` (List[FavoriteCategory]) and `galleries` (List[GalleryListItem]).
    
 2. **Parsers:**
-   - Implement `parse_favorites_list(html: str)` in `exhentai_api/parsers/favorites.py`. This must extract both the user's custom favorite categories (from `.ido`/`.fp`) and the list of favorited galleries (reusing `parse_gallery_list`).
+   - Implement `parse_favorites_list(html: str)` in `exhentai_api/parsers/favorites.py`. 
+   - Parse `.ido > .fp`. Extract `count` from `fp.child(0)` and `name` from `fp.child(2)`. Read slots 0-9.
+   - Use `parse_gallery_list` to parse the main gallery table.
 
 3. **API Endpoints:**
-   - `get_favorites(self, favcat: int = -1, page: int = 0)`: Fetches the favorites page.
-   - `add_favorite(self, gid: str, token: str, favcat: int = 0, favnote: str = "")`: Submits a POST request to `/gallerypopups.php` to add a gallery to a slot.
-   - `remove_favorite(self, gid: str)`: Submits a batch delete POST request to `/favorites.php`.
+   - `get_favorites(self, favcat: int = -1, page: int = 0) -> FavoritesResponse`: GET to `/favorites.php` (append `?favcat=X` if valid).
+   - `add_favorite(self, gid: str, token: str, favcat: int = 0, favnote: str = "")`: POST to `/gallerypopups.php?gid={gid}&t={token}&act=addfav`. Payload: `{"favcat": str(favcat) or "favdel", "favnote": favnote, "submit": "Apply Changes", "update": "1"}`.
+   - `modify_favorites(self, gids: List[str], ddact: str)`: POST batch update to `/favorites.php`. `ddact` is `"delete"` or `"fav0"`-`"fav9"`. Payload: `{"ddact": ddact, "apply": "Apply"}` + dynamically add `modifygids[]` for each gid.
    
 4. **Tests:**
-   - Write `test_favorites.py` ensuring GET and POST payloads are accurate and DOM parsing for favorites categories is robust.
+   - Write `test_favorites.py` mocking `httpx` and validating the correct form payload structures and category parser mapping.
 
 ## Phase 3: Popular & TopList Implementation
 
 1. **Popular API:**
    - Endpoint: `get_popular(self) -> List[GalleryListItem]`
-   - URL: `/popular`. Reuses `parse_gallery_list`.
+   - URL: `/popular`. Reuses the standard `parse_gallery_list`.
    
 2. **TopList API:**
-   - Endpoint: `get_toplist(self, category: str = "all", timeframe: str = "15")`
-   - Parser: Create `parse_toplist` to handle the `.ido` structure on `/toplist.php`.
-   - Tests: Ensure fetching and parsing logic for the toplist tables is covered.
+   - Model: Create `TopListItem` (type, name, link).
+   - Endpoint: `get_toplist(self, tl: str = "15") -> List[TopListItem]` (Timeframes: 15=All-Time, 11=Past Year, 12=Past Month, 13=Yesterday).
+   - URL: `/toplist.php?tl={tl}` (Note: Usually bound to e-hentai.org as exhentai lacks it, but we'll fetch from the active client host).
+   - Parser: Create `parse_toplist(html)` in `parsers/toplist.py`. Parses `.ido`, extracting `.tun` items.
+   
+3. **Tests:**
+   - Write `test_popular_toplist.py` to verify logic.
 
 ## Phase 4: CLI Downloader & Documentation Updates
 
