@@ -25,9 +25,9 @@ Now that the core foundation of `exhentai_api` is complete, the next steps are t
 1. **Expand `exhentai_api`:** Implement the remaining endpoints and parsers based on the reverse-engineered reference (See `plans/search_and_favorites_api.md` for execution steps):
    - Detail Pages (`get_gallery_details`) - ✅ DONE
    - Image Viewing (`get_image_url`) - ✅ DONE
-   - Search (`search`) - **TODO Next**
-   - Favorites (`get_favorites`, `add_favorite`) - **TODO Next**
-   - Popular / TopList
+   - Search (`search`) - ✅ DONE
+   - Favorites (`get_favorites`, `add_favorite`) - ✅ DONE
+   - Popular / TopList - ✅ DONE
    - **Important Source Code Reference:** You should look into the parent directory `../reference_project/` (especially its Java parsers and clients) to extract relevant details, logic, and constants to accurately implement the above remaining endpoints.
 
 2. **Implement CLI Downloader:** Before dealing with complex GUI/TUI integrations, build a simple Command Line Interface (CLI) tool. This CLI should:

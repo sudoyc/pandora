@@ -37,6 +37,45 @@ Fetches the full-resolution image URL for a specific page in a gallery. It suppo
   * `nl` (str, optional): The reload token. If provided, the API uses a POST request to dynamically reload the image URL (useful to bypass limits or broken images).
 * **Returns:** An `ImageDetail` instance containing the `image_url` and the next `nl` token.
 
+### `search(self, params: SearchParams, page: int = 0) -> List[GalleryListItem]`
+Searches for galleries using advanced filters and parameters.
+* **Parameters:**
+  * `params` (`SearchParams`): An object containing search configuration (query, category bitmask, advanced toggles).
+  * `page` (int): Page number (0-indexed).
+* **Returns:** A list of `GalleryListItem` instances.
+
+### `get_favorites(self, favcat: int = -1, page: int = 0) -> FavoritesResponse`
+Fetches a user's favorite galleries and the category list.
+* **Parameters:**
+  * `favcat` (int): The favorite slot (0-9) to filter by. Defaults to -1 (All).
+  * `page` (int): Page number (0-indexed).
+* **Returns:** A `FavoritesResponse` containing `categories` and `galleries`.
+
+### `add_favorite(self, gid: str, token: str, favcat: int = 0, favnote: str = "") -> str`
+Adds a gallery to a specific favorite slot.
+* **Parameters:**
+  * `gid`, `token`: Gallery identifiers.
+  * `favcat` (int): Slot (0-9). Passing `-1` removes the favorite.
+  * `favnote` (str): Optional note for the favorite.
+* **Returns:** The raw HTML response string.
+
+### `modify_favorites(self, gids: List[str], ddact: str) -> str`
+Batch applies an action to multiple favorited galleries.
+* **Parameters:**
+  * `gids` (List[str]): List of gallery IDs to modify.
+  * `ddact` (str): The action to apply (`"delete"` to remove, `"fav0"`-`"fav9"` to move).
+* **Returns:** The raw HTML response string.
+
+### `get_popular(self) -> List[GalleryListItem]`
+Fetches the current popular/what's hot galleries.
+* **Returns:** A list of `GalleryListItem` instances.
+
+### `get_toplist(self, tl: str = "15") -> List[TopListItem]`
+Fetches the toplist galleries (e.g. All-Time, Past Year).
+* **Parameters:**
+  * `tl` (str): Timeframe parameter (15=All-Time, 11=Past Year, 12=Past Month, 13=Yesterday).
+* **Returns:** A list of `TopListItem` instances.
+
 ---
 
 ## 2. Data Models (`exhentai_api.models`)
