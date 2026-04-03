@@ -22,18 +22,18 @@ This project is building a Python/Textual-based 3-pane TUI gallery browser and d
 
 Now that the core foundation of `exhentai_api` is complete, the next steps are to expand the API and integrate it with the frontend TUI:
 
-1. **Expand `exhentai_api`:** Implement the remaining endpoints and parsers based on the reverse-engineered reference:
+1. **Expand `exhentai_api`:** Implement the remaining endpoints and parsers based on the reverse-engineered reference (See `plans/search_and_favorites_api.md` for execution steps):
    - Detail Pages (`get_gallery_details`) - ✅ DONE
-   - Search (`search`)
-   - Favorites (`get_favorites`, `add_favorite`)
    - Image Viewing (`get_image_url`) - ✅ DONE
+   - Search (`search`) - **TODO Next**
+   - Favorites (`get_favorites`, `add_favorite`) - **TODO Next**
    - Popular / TopList
    - **Important Source Code Reference:** You should look into the parent directory `../reference_project/` (especially its Java parsers and clients) to extract relevant details, logic, and constants to accurately implement the above remaining endpoints.
 
 2. **Implement CLI Downloader:** Before dealing with complex GUI/TUI integrations, build a simple Command Line Interface (CLI) tool. This CLI should:
    - Accept a gallery URL as input.
    - Use `exhentai_api` to parse the details and iterate through image pages.
-   - Download the full-resolution images into the `downloads/` directory. - ✅ DONE (Simple version created, needs robustness improvements like concurrent downloads and better error handling)
+   - Download the full-resolution images into the `downloads/` directory. - ✅ DONE (Available as `downloader.py`)
 3. **GUI / TUI Integration (TODO):** The existing `tui.py` is mostly a prototype. Once the API and CLI downloader are fully robust, design and integrate a proper UI (either Textual-based TUI or a graphical GUI) to consume the `exhentai_api`.
 
 ---
