@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from pandora_daemon.dependencies import get_api, get_cache
+from pandora_daemon.dependencies import get_api, get_cache, get_image_service
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 
@@ -31,6 +32,10 @@ class RateBody(BaseModel):
 class VoteCommentBody(BaseModel):
     comment_id: int
     vote: int
+
+
+class PrefetchBody(BaseModel):
+    current_page: int
 
 
 # ---------------------------------------------------------------------------
@@ -189,3 +194,28 @@ async def get_archive(gid: str, token: str, api=Depends(get_api)):
     """Return the archive download options for a gallery."""
     archive = await api.get_archive_list(gid, token)
     return _archive_to_dict(archive)
+
+
+@router.get("/{gid}/{token}/page/{page}")
+async def get_page_image(gid: str, token: str, page: int, image_service=Depends(get_image_service)):
+    """Return full-size image bytes for a gallery page."""
+    try:
+        data = await image_service.get_page_image(gid, token, page)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return Response(content=data, media_type="image/jpeg")
+
+
+@router.post("/{gid}/{token}/prefetch")
+async def prefetch_pages(
+    gid: str,
+    token: str,
+    body: PrefetchBody,
+    api=Depends(get_api),
+    cache=Depends(get_cache),
+    image_service=Depends(get_image_service),
+):
+    """Report current page and trigger background prefetch."""
+    detail = await _get_detail(gid, token, api, cache)
+    await image_service.prefetch(gid, token, body.current_page, detail.pages)
+    return {"ok": True}

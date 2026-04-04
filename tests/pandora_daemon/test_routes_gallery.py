@@ -47,12 +47,13 @@ def _make_detail():
     return d
 
 
-def _make_app(mock_api, mock_cache=None):
+def _make_app(mock_api, mock_cache=None, mock_image_service=None):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
     state.api = mock_api
     state.cache = mock_cache or MagicMock()
+    state.image_service = mock_image_service or MagicMock()
     app.state.pandora = state
     return app
 
@@ -311,3 +312,73 @@ class TestVoteComment:
         data = response.json()
         assert data["ok"] is True
         mock_api.vote_comment.assert_called_once_with("uid1", "key1", 123, "abc", 1, 1)
+
+
+class TestPageImage:
+    def test_page_image_returns_bytes(self):
+        mock_api = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_page_image = AsyncMock(return_value=b"\xff\xd8page_image")
+
+        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/page/5")
+
+        assert response.status_code == 200
+        assert response.content == b"\xff\xd8page_image"
+        mock_image_service.get_page_image.assert_awaited_once_with("123", "abc", 5)
+
+    def test_page_image_invalid_page(self):
+        mock_api = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_page_image = AsyncMock(side_effect=ValueError("Page 99 out of range"))
+
+        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/page/99")
+
+        assert response.status_code == 400
+
+
+class TestPrefetch:
+    def test_prefetch_returns_ok(self):
+        mock_api = MagicMock()
+        mock_cache = MagicMock()
+        mock_cache.get_gallery = MagicMock(return_value=MagicMock(pages=20))
+        mock_image_service = MagicMock()
+        mock_image_service.prefetch = AsyncMock()
+
+        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/gallery/123/abc/prefetch",
+            json={"current_page": 5},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
+        mock_image_service.prefetch.assert_awaited_once()
+
+    def test_prefetch_fetches_detail_on_cache_miss(self):
+        mock_api = MagicMock()
+        detail = _make_detail()
+        detail.pages = 20
+        mock_api.get_gallery_details = AsyncMock(return_value=detail)
+        mock_cache = _make_cache_miss()
+        mock_image_service = MagicMock()
+        mock_image_service.prefetch = AsyncMock()
+
+        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/gallery/123/abc/prefetch",
+            json={"current_page": 3},
+        )
+
+        assert response.status_code == 200
