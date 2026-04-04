@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from exhentai_api.api import ExhentaiAPI
 from exhentai_api.client import ExhentaiClient
 from pandora_daemon.config import load_config
@@ -36,5 +37,16 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     from pandora_daemon.routes import router
     app = FastAPI(title="pandora-daemon", lifespan=lifespan)
+
+    @app.exception_handler(RuntimeError)
+    async def runtime_error_handler(request: Request, exc: RuntimeError):
+        if "Sad Panda" in str(exc):
+            return JSONResponse(status_code=401, content={"detail": str(exc)})
+        return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+    @app.exception_handler(Exception)
+    async def generic_error_handler(request: Request, exc: Exception):
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
+
     app.include_router(router)
     return app
