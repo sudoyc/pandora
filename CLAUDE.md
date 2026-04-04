@@ -22,7 +22,7 @@ This project is building a Python/Textual-based 3-pane TUI gallery browser and d
 
 Now that the core foundation of `exhentai_api` is complete, the next steps are to expand the API and integrate it with the frontend TUI:
 
-1. **Expand `exhentai_api`:** Implement the remaining endpoints and parsers based on the reverse-engineered reference (See `plans/search_and_favorites_api.md` for execution steps):
+1. **Expand `exhentai_api`:** Implement the remaining endpoints and parsers based on the reverse-engineered reference (See `~/code/project/Ehviewer_CN_SXJ/workspace/plans/search_and_favorites_api.md` for execution steps):
    - Detail Pages (`get_gallery_details`) - ✅ DONE
    - Image Viewing (`get_image_url`) - ✅ DONE
    - Search (`search`) - ✅ DONE
