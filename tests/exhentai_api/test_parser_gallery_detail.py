@@ -56,3 +56,16 @@ def test_parse_gallery_detail():
 
     # Comments has-more flag (fixture says "All 5 comments", not "click to show all")
     assert detail.comments_has_more is False
+
+
+def test_parse_gallery_detail_thumb_urls():
+    html_path = Path(__file__).parent / "data" / "gallery_detail.html"
+    html = html_path.read_text()
+
+    detail = parse_gallery_detail(html, "12345", "abcdef1234")
+
+    assert detail.thumb_urls == [
+        "https://exhentai.org/t/thumb1.jpg",
+        "https://exhentai.org/t/thumb2.jpg",
+        "https://exhentai.org/t/thumb3.jpg",
+    ]

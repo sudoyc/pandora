@@ -37,6 +37,7 @@ class GalleryDetail:
     favorite_slot: Optional[int]
     preview_pages: int = 1
     preview_urls: List[str] = field(default_factory=list)
+    thumb_urls: List[str] = field(default_factory=list)
     rating: float = 0.0
     rating_count: int = 0
     favorite_count: int = 0

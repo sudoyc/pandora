@@ -91,6 +91,21 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
                 if a_tag and a_tag.get("href") and "/s/" in a_tag.get("href"):
                     preview_urls.append(a_tag.get("href"))
 
+    thumb_urls = []
+    for gdt in soup.find_all(class_=["gdtm", "gdtl"]):
+        a_tag = gdt.find("a")
+        if a_tag:
+            img_tag = a_tag.find("img")
+            if img_tag and img_tag.get("src"):
+                thumb_urls.append(img_tag.get("src"))
+            elif "gdtm" in (gdt.get("class") or []):
+                inner_div = gdt.find("div")
+                if inner_div:
+                    style = inner_div.get("style", "")
+                    bg_match = re.search(r"url\((.+?)\)", style)
+                    if bg_match:
+                        thumb_urls.append(bg_match.group(1))
+
     # Rating from #rating_label
     rating = 0.0
     rating_label = soup.find(id="rating_label")
@@ -181,6 +196,7 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
         favorite_slot=favorite_slot,
         preview_pages=preview_pages,
         preview_urls=preview_urls,
+        thumb_urls=thumb_urls,
         rating=rating,
         rating_count=rating_count,
         favorite_count=favorite_count,
