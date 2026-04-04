@@ -244,9 +244,8 @@ class DownloadManager:
                 return
 
             page_num = idx + 1
-            dest_jpg = thumbs_dir / f"{page_num:04d}.jpg"
-            dest_png = thumbs_dir / f"{page_num:04d}.png"
-            if dest_jpg.exists() or dest_png.exists():
+            existing = list(thumbs_dir.glob(f"{page_num:04d}.*"))
+            if existing:
                 task.downloaded_thumbs = page_num
                 continue
 
@@ -257,13 +256,14 @@ class DownloadManager:
                     sprite_url = sprite["url"]
                     if sprite_url not in sprite_cache:
                         sprite_cache[sprite_url] = await self._fetch_image(sprite_url)
-                    cropped = self._crop_sprite(
+                    result = self._crop_sprite(
                         sprite_cache[sprite_url],
                         sprite["offset_x"], sprite["offset_y"],
                         sprite["width"], sprite["height"],
                     )
-                    if cropped:
-                        (thumbs_dir / f"{page_num:04d}.jpg").write_bytes(cropped)
+                    if result:
+                        data, ext = result
+                        (thumbs_dir / f"{page_num:04d}{ext}").write_bytes(data)
                 elif idx < len(task.thumb_urls):
                     # Direct image mode (gdtl)
                     thumb_url = task.thumb_urls[idx]
@@ -322,16 +322,26 @@ class DownloadManager:
             self._save_state()
 
     @staticmethod
-    def _crop_sprite(sprite_data: bytes, x: int, y: int, w: int, h: int) -> bytes | None:
-        """Crop a single thumbnail from a CSS sprite sheet."""
+    def _crop_sprite(sprite_data: bytes, x: int, y: int, w: int, h: int) -> tuple[bytes, str] | None:
+        """Crop a single thumbnail from a CSS sprite sheet. Returns (data, ext) or None."""
         try:
             from PIL import Image
             import io
             img = Image.open(io.BytesIO(sprite_data))
             cropped = img.crop((x, y, x + w, y + h))
             buf = io.BytesIO()
-            cropped.save(buf, format="JPEG", quality=90)
-            return buf.getvalue()
+            # Preserve original format
+            fmt = img.format or "JPEG"
+            if fmt == "WEBP":
+                cropped.save(buf, format="WEBP", quality=90)
+                ext = ".webp"
+            elif fmt == "PNG":
+                cropped.save(buf, format="PNG")
+                ext = ".png"
+            else:
+                cropped.save(buf, format="JPEG", quality=90)
+                ext = ".jpg"
+            return buf.getvalue(), ext
         except Exception:
             return None
 
