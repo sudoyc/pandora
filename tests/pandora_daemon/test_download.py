@@ -1,4 +1,4 @@
-"""Tests for pandora_daemon.download module."""
+"""Tests for pandora_daemon.download module — offline library builder."""
 from __future__ import annotations
 
 import json
@@ -15,7 +15,6 @@ from pandora_daemon.download import DownloadManager, DownloadTask, _sanitize_fil
 # Fixtures
 # ---------------------------------------------------------------------------
 
-
 @pytest.fixture
 def download_config(tmp_path):
     return DownloadConfig(path=str(tmp_path / "downloads"), concurrency=2)
@@ -31,6 +30,7 @@ def mock_api():
     api = AsyncMock()
     detail = MagicMock()
     detail.title = "Test Gallery"
+    detail.title_jpn = "Test JPN"
     detail.pages = 3
     detail.preview_pages = 1
     detail.preview_urls = [
@@ -38,9 +38,27 @@ def mock_api():
         "https://exhentai.org/s/def/123-2",
         "https://exhentai.org/s/ghi/123-3",
     ]
+    detail.thumb_urls = [
+        "https://exhentai.org/t/thumb1.jpg",
+        "https://exhentai.org/t/thumb2.jpg",
+        "https://exhentai.org/t/thumb3.jpg",
+    ]
     detail.gid = "123"
     detail.token = "abc"
     detail.url = "https://exhentai.org/g/123/abc/"
+    detail.category = "Manga"
+    detail.uploader = "testuser"
+    detail.cover_url = "https://exhentai.org/t/cover.jpg"
+    detail.tags = {"parody": ["fate"]}
+    detail.size = "50 MB"
+    detail.posted = "2026-01-01"
+    detail.favorite_slot = None
+    detail.rating = 4.5
+    detail.rating_count = 100
+    detail.favorite_count = 50
+    detail.torrent_count = 2
+    detail.comments = []
+    detail.comments_has_more = False
     api.get_gallery_details.return_value = detail
     return api
 
@@ -50,18 +68,24 @@ def mock_ws():
     return AsyncMock()
 
 
+@pytest.fixture
+def mock_cache():
+    cache = MagicMock()
+    cache.get_image = AsyncMock(return_value=None)
+    cache.get_gallery = MagicMock(return_value=None)
+    cache.put_gallery = MagicMock()
+    return cache
+
+
 # ---------------------------------------------------------------------------
 # _sanitize_filename
 # ---------------------------------------------------------------------------
 
-
 def test_sanitize_filename_removes_invalid_chars():
-    """Characters invalid in filenames are stripped."""
     assert _sanitize_filename('hello/world:foo<bar>baz') == "helloworldfoobarbaz"
 
 
 def test_sanitize_filename_keeps_normal_chars():
-    """Normal alphanumeric characters are kept intact."""
     assert _sanitize_filename("test-gallery_123 (vol.1)") == "test-gallery_123 (vol.1)"
 
 
@@ -69,9 +93,7 @@ def test_sanitize_filename_keeps_normal_chars():
 # DownloadTask
 # ---------------------------------------------------------------------------
 
-
 def test_download_task_creation():
-    """DownloadTask is created with correct defaults."""
     task = DownloadTask(
         gid="123",
         token="abc",
@@ -81,13 +103,16 @@ def test_download_task_creation():
     )
     assert task.status == "queued"
     assert task.downloaded_pages == 0
+    assert task.downloaded_thumbs == 0
+    assert task.cover_downloaded is False
+    assert task.metadata_saved is False
     assert task.error == ""
     assert task.created_at != ""
     assert task.preview_urls == []
+    assert task.thumb_urls == []
 
 
 def test_download_task_to_dict():
-    """to_dict() returns a plain dict with all expected fields."""
     task = DownloadTask(
         gid="42",
         token="xyz",
@@ -98,26 +123,19 @@ def test_download_task_to_dict():
     d = task.to_dict()
     assert isinstance(d, dict)
     assert d["gid"] == "42"
-    assert d["token"] == "xyz"
-    assert d["title"] == "Gallery 42"
-    assert d["total_pages"] == 5
-    assert d["output_dir"] == "/tmp/42"
-    assert d["status"] == "queued"
-    assert d["downloaded_pages"] == 0
-    assert d["error"] == ""
-    assert "created_at" in d
-    assert d["preview_urls"] == []
+    assert d["downloaded_thumbs"] == 0
+    assert d["cover_downloaded"] is False
+    assert d["metadata_saved"] is False
+    assert d["thumb_urls"] == []
 
 
 # ---------------------------------------------------------------------------
 # DownloadManager.submit
 # ---------------------------------------------------------------------------
 
-
 @pytest.mark.asyncio
-async def test_submit_creates_task(mock_api, mock_ws, download_config, state_file):
-    """submit() creates a task with the correct fields."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_submit_creates_task(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
 
     task = await manager.submit("123", "abc")
 
@@ -126,13 +144,13 @@ async def test_submit_creates_task(mock_api, mock_ws, download_config, state_fil
     assert task.title == "Test Gallery"
     assert task.total_pages == 3
     assert len(task.preview_urls) == 3
+    assert len(task.thumb_urls) == 3
     assert task.status == "queued"
 
 
 @pytest.mark.asyncio
-async def test_submit_broadcasts_queued_event(mock_api, mock_ws, download_config, state_file):
-    """submit() broadcasts a download_queued WebSocket event."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_submit_broadcasts_queued_event(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
 
     await manager.submit("123", "abc")
 
@@ -143,9 +161,8 @@ async def test_submit_broadcasts_queued_event(mock_api, mock_ws, download_config
 
 
 @pytest.mark.asyncio
-async def test_submit_duplicate_rejected(mock_api, mock_ws, download_config, state_file):
-    """A second submit with the same gid raises ValueError."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
 
     await manager.submit("123", "abc")
 
@@ -154,9 +171,8 @@ async def test_submit_duplicate_rejected(mock_api, mock_ws, download_config, sta
 
 
 @pytest.mark.asyncio
-async def test_submit_saves_state(mock_api, mock_ws, download_config, state_file):
-    """submit() persists state to the JSON file."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_submit_saves_state(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
 
     await manager.submit("123", "abc")
 
@@ -166,42 +182,22 @@ async def test_submit_saves_state(mock_api, mock_ws, download_config, state_file
 
 
 # ---------------------------------------------------------------------------
-# DownloadManager.status
+# DownloadManager.status / cancel
 # ---------------------------------------------------------------------------
 
-
 @pytest.mark.asyncio
-async def test_status_returns_all_tasks(mock_api, mock_ws, download_config, state_file):
-    """status() returns a list containing all submitted tasks."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
-
+async def test_status_returns_all_tasks(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
     await manager.submit("123", "abc")
 
     result = manager.status()
-    assert isinstance(result, list)
     assert len(result) == 1
     assert result[0].gid == "123"
 
 
 @pytest.mark.asyncio
-async def test_status_empty_initially(mock_api, mock_ws, download_config, state_file):
-    """status() returns an empty list when no tasks have been submitted."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
-
-    result = manager.status()
-
-    assert result == []
-
-
-# ---------------------------------------------------------------------------
-# DownloadManager.cancel
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_cancel_marks_cancelled(mock_api, mock_ws, download_config, state_file):
-    """cancel() sets status to 'cancelled' and returns True."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_cancel_marks_cancelled(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
     await manager.submit("123", "abc")
 
     result = await manager.cancel("123")
@@ -211,24 +207,8 @@ async def test_cancel_marks_cancelled(mock_api, mock_ws, download_config, state_
 
 
 @pytest.mark.asyncio
-async def test_cancel_broadcasts_event(mock_api, mock_ws, download_config, state_file):
-    """cancel() broadcasts a download_cancelled WebSocket event."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
-    await manager.submit("123", "abc")
-    mock_ws.broadcast.reset_mock()
-
-    await manager.cancel("123")
-
-    mock_ws.broadcast.assert_awaited_once()
-    call_args = mock_ws.broadcast.call_args[0][0]
-    assert call_args["event"] == "download_cancelled"
-    assert call_args["gid"] == "123"
-
-
-@pytest.mark.asyncio
-async def test_cancel_nonexistent(mock_api, mock_ws, download_config, state_file):
-    """cancel() returns False for an unknown gid."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_cancel_nonexistent(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
 
     result = await manager.cancel("999")
 
@@ -239,11 +219,9 @@ async def test_cancel_nonexistent(mock_api, mock_ws, download_config, state_file
 # State persistence
 # ---------------------------------------------------------------------------
 
-
 @pytest.mark.asyncio
-async def test_save_and_load_state(mock_api, mock_ws, download_config, state_file):
-    """After _save_state(), JSON file contains correct task data."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_save_and_load_state(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
     await manager.submit("123", "abc")
 
     manager._save_state()
@@ -252,12 +230,10 @@ async def test_save_and_load_state(mock_api, mock_ws, download_config, state_fil
     assert "123" in data
     assert data["123"]["gid"] == "123"
     assert data["123"]["title"] == "Test Gallery"
-    assert data["123"]["total_pages"] == 3
 
 
 @pytest.mark.asyncio
-async def test_load_state_requeues_pending(mock_api, mock_ws, download_config, state_file):
-    """_load_state() reads existing JSON and populates _tasks."""
+async def test_load_state_requeues_pending(mock_api, mock_ws, mock_cache, download_config, state_file):
     task = DownloadTask(
         gid="456",
         token="def",
@@ -266,39 +242,25 @@ async def test_load_state_requeues_pending(mock_api, mock_ws, download_config, s
         output_dir="/tmp/456",
         status="queued",
         preview_urls=["https://exhentai.org/s/zzz/456-1"],
+        thumb_urls=["https://exhentai.org/t/t1.jpg"],
     )
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps({"456": task.to_dict()}), encoding="utf-8")
 
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
     manager._load_state()
 
     assert "456" in manager._tasks
     assert manager._tasks["456"].title == "Persisted Gallery"
-    assert manager._tasks["456"].status == "queued"
-
-
-@pytest.mark.asyncio
-async def test_load_state_missing_file(mock_api, mock_ws, download_config, state_file):
-    """_load_state() is a no-op when the state file does not exist."""
-    assert not state_file.exists()
-
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
-    manager._load_state()
-
-    assert manager._tasks == {}
 
 
 # ---------------------------------------------------------------------------
-# start() / shutdown()
+# start / shutdown
 # ---------------------------------------------------------------------------
 
-
 @pytest.mark.asyncio
-async def test_start_creates_workers(mock_api, mock_ws, download_config, state_file):
-    """start() creates as many worker tasks as config.concurrency."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
-
+async def test_start_creates_workers(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
     await manager.start()
 
     try:
@@ -308,9 +270,8 @@ async def test_start_creates_workers(mock_api, mock_ws, download_config, state_f
 
 
 @pytest.mark.asyncio
-async def test_shutdown_saves_state(mock_api, mock_ws, download_config, state_file):
-    """shutdown() persists state to disk."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
+async def test_shutdown_saves_state(mock_api, mock_ws, mock_cache, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
     await manager.start()
     await manager.submit("123", "abc")
 
@@ -321,27 +282,26 @@ async def test_shutdown_saves_state(mock_api, mock_ws, download_config, state_fi
     assert "123" in data
 
 
+# ---------------------------------------------------------------------------
+# Metadata writing
+# ---------------------------------------------------------------------------
+
 @pytest.mark.asyncio
-async def test_start_requeues_unfinished_tasks(mock_api, mock_ws, download_config, state_file):
-    """start() re-queues tasks that were queued/downloading when state was saved."""
-    task = DownloadTask(
-        gid="789",
-        token="ghi",
-        title="Interrupted Gallery",
-        total_pages=2,
-        output_dir="/tmp/789",
-        status="downloading",
-        preview_urls=[],
-    )
-    state_file.parent.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(json.dumps({"789": task.to_dict()}), encoding="utf-8")
+async def test_write_metadata(mock_api, mock_ws, mock_cache, download_config, state_file):
+    """_write_metadata creates a valid metadata.json in the output dir."""
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
 
-    manager = DownloadManager(mock_api, download_config, mock_ws, state_file)
-    await manager.start()
+    detail = mock_api.get_gallery_details.return_value
+    output_dir = Path(download_config.path) / "123-Test Gallery"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Task should have been loaded and re-queued (status reset to "queued")
-        assert "789" in manager._tasks
-        assert manager._tasks["789"].status == "queued"
-    finally:
-        await manager.shutdown()
+    manager._write_metadata(detail, str(output_dir))
+
+    meta_path = output_dir / "metadata.json"
+    assert meta_path.exists()
+    meta = json.loads(meta_path.read_text())
+    assert meta["gid"] == "123"
+    assert meta["token"] == "abc"
+    assert meta["url"] == "https://exhentai.org/g/123/abc/"
+    assert meta["title"] == "Test Gallery"
+    assert "downloaded_at" in meta

@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     image_service = ImageService(api=api, cache=cache, config=config.cache)
     ws = WebSocketManager()
     state_file = config_path.parent / "downloads.json"
-    downloads = DownloadManager(api=api, config=config.download, ws=ws, state_file=state_file)
+    downloads = DownloadManager(api=api, config=config.download, ws=ws, cache=cache, state_file=state_file)
     state = AppState(
         config=config, config_path=config_path,
         client=client, api=api,

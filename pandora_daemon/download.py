@@ -1,7 +1,7 @@
 """Download manager for pandora-daemon.
 
-Manages a queue of gallery download tasks, persists state to disk, and
-broadcasts real-time progress events via WebSocket.
+Produces complete offline gallery clones in the library directory.
+Each gallery gets: metadata.json, cover, thumbs/, pages/.
 """
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from exhentai_api.parsers.image import parse_image_viewer
+
 if TYPE_CHECKING:
     pass
 
@@ -20,6 +22,15 @@ if TYPE_CHECKING:
 def _sanitize_filename(name: str) -> str:
     """Remove characters that are invalid in file/directory names."""
     return re.sub(r'[\\/*?:"<>|]', "", name)
+
+
+def _ext_from_url(url: str) -> str:
+    """Derive file extension from URL path. Falls back to 'jpg'."""
+    path = url.split("?")[0].split("#")[0]
+    match = re.search(r"\.([a-zA-Z]{3,4})$", path)
+    if match:
+        return match.group(1).lower()
+    return "jpg"
 
 
 @dataclass
@@ -31,11 +42,15 @@ class DownloadTask:
     title: str
     total_pages: int
     output_dir: str
-    status: str = "queued"  # "queued"|"downloading"|"completed"|"failed"|"cancelled"
+    status: str = "queued"
     downloaded_pages: int = 0
+    downloaded_thumbs: int = 0
+    cover_downloaded: bool = False
+    metadata_saved: bool = False
     error: str = ""
     created_at: str = ""
     preview_urls: list[str] = field(default_factory=list)
+    thumb_urls: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.created_at:
@@ -46,12 +61,13 @@ class DownloadTask:
 
 
 class DownloadManager:
-    """Manages queued gallery downloads with concurrency control and persistence."""
+    """Produces complete offline gallery clones with metadata, covers, thumbs, and pages."""
 
-    def __init__(self, api, config, ws, state_file: Path) -> None:
+    def __init__(self, api, config, ws, cache, state_file: Path) -> None:
         self._api = api
         self._config = config
         self._ws = ws
+        self._cache = cache
         self._state_file = state_file
         self._download_path = Path(config.path).expanduser()
         self._tasks: dict[str, DownloadTask] = {}
@@ -60,46 +76,35 @@ class DownloadManager:
         self._cancelled: set[str] = set()
 
     async def start(self) -> None:
-        """Start worker tasks and reload persisted state."""
         self._load_state()
-        # Re-queue tasks that were pending or downloading when daemon stopped
         for task in list(self._tasks.values()):
             if task.status in ("queued", "downloading"):
                 task.status = "queued"
-                task.downloaded_pages = 0
                 await self._queue.put(task.gid)
 
-        concurrency = self._config.concurrency
-        for _ in range(concurrency):
+        for _ in range(self._config.concurrency):
             worker = asyncio.create_task(self._worker())
             self._workers.append(worker)
 
     async def shutdown(self) -> None:
-        """Cancel all workers and persist current state."""
         for worker in self._workers:
             worker.cancel()
-        # Await cancellation without raising
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
         self._save_state()
 
     async def submit(self, gid: str, token: str) -> DownloadTask:
-        """Fetch gallery detail, create a download task, and enqueue it.
-
-        Raises ValueError if a task for the given gid is already
-        queued or downloading.
-        """
         existing = self._tasks.get(gid)
         if existing and existing.status in ("queued", "downloading"):
             raise ValueError(f"Gallery {gid} is already queued or downloading")
 
         detail = await self._api.get_gallery_details(gid, token)
 
-        # Collect preview URLs (page viewer URLs)
+        # Collect all preview URLs and thumb URLs across pages
         preview_urls = list(detail.preview_urls)
+        thumb_urls = list(detail.thumb_urls)
         if detail.preview_pages > 1:
             import bs4
-
             for p in range(1, detail.preview_pages):
                 page_url = f"{detail.url}?p={p}"
                 html = await self._api.client.get_html(page_url)
@@ -108,6 +113,11 @@ class DownloadManager:
                     a_tag = gdt.find("a")
                     if a_tag and a_tag.get("href"):
                         preview_urls.append(a_tag.get("href"))
+                    # Extract thumb URL
+                    if a_tag:
+                        img_tag = a_tag.find("img")
+                        if img_tag and img_tag.get("src"):
+                            thumb_urls.append(img_tag.get("src"))
 
         safe_title = _sanitize_filename(detail.title)
         output_dir = str(self._download_path / f"{gid}-{safe_title}")
@@ -119,6 +129,7 @@ class DownloadManager:
             total_pages=detail.pages,
             output_dir=output_dir,
             preview_urls=preview_urls,
+            thumb_urls=thumb_urls,
         )
         self._tasks[gid] = task
         await self._queue.put(gid)
@@ -128,10 +139,6 @@ class DownloadManager:
         return task
 
     async def cancel(self, gid: str) -> bool:
-        """Cancel a download task.
-
-        Returns True if the task was found and cancelled, False otherwise.
-        """
         task = self._tasks.get(gid)
         if task is None:
             return False
@@ -143,11 +150,39 @@ class DownloadManager:
         return True
 
     def status(self) -> list[DownloadTask]:
-        """Return all known download tasks."""
         return list(self._tasks.values())
 
+    def _write_metadata(self, detail, output_dir: str) -> None:
+        """Write metadata.json with complete gallery info."""
+        meta = {
+            "gid": detail.gid,
+            "token": detail.token,
+            "url": detail.url,
+            "title": detail.title,
+            "title_jpn": getattr(detail, "title_jpn", None),
+            "category": detail.category,
+            "uploader": detail.uploader,
+            "cover_url": detail.cover_url,
+            "tags": detail.tags,
+            "pages": detail.pages,
+            "size": detail.size,
+            "posted": detail.posted,
+            "rating": detail.rating,
+            "rating_count": detail.rating_count,
+            "favorite_count": detail.favorite_count,
+            "favorite_slot": detail.favorite_slot,
+            "torrent_count": detail.torrent_count,
+            "comments": [
+                {"id": c.id, "user": c.user, "comment": c.comment,
+                 "score": c.score, "time": c.time}
+                for c in detail.comments
+            ] if detail.comments else [],
+            "downloaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        path = Path(output_dir) / "metadata.json"
+        path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
     async def _worker(self) -> None:
-        """Worker coroutine: pull tasks from the queue and download them."""
         while True:
             try:
                 gid = await self._queue.get()
@@ -169,7 +204,6 @@ class DownloadManager:
             try:
                 await self._download_gallery(task)
             except asyncio.CancelledError:
-                # Worker was cancelled; put the task back as queued if not done
                 if task.status == "downloading":
                     task.status = "queued"
                     self._save_state()
@@ -186,12 +220,60 @@ class DownloadManager:
             self._queue.task_done()
 
     async def _download_gallery(self, task: DownloadTask) -> None:
-        """Download all pages for *task*."""
-        from exhentai_api.parsers.image import parse_image_viewer
-
+        """Download complete gallery: metadata, cover, thumbs, pages."""
         output_dir = Path(task.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+        thumbs_dir = output_dir / "thumbs"
+        thumbs_dir.mkdir(exist_ok=True)
+        pages_dir = output_dir / "pages"
+        pages_dir.mkdir(exist_ok=True)
 
+        # 1. Write metadata
+        if not task.metadata_saved:
+            detail = await self._api.get_gallery_details(task.gid, task.token)
+            self._write_metadata(detail, str(output_dir))
+            task.metadata_saved = True
+            self._save_state()
+
+        # 2. Download cover
+        if not task.cover_downloaded:
+            detail = await self._api.get_gallery_details(task.gid, task.token)
+            if detail.cover_url:
+                try:
+                    cover_data = await self._fetch_image(detail.cover_url)
+                    ext = _ext_from_url(detail.cover_url)
+                    (output_dir / f"cover.{ext}").write_bytes(cover_data)
+                except Exception:
+                    pass  # Cover failure is non-fatal
+            task.cover_downloaded = True
+            await self._ws.broadcast({"event": "download_progress", "gid": task.gid, "phase": "cover"})
+            self._save_state()
+
+        # 3. Download thumbnails
+        for idx, thumb_url in enumerate(task.thumb_urls):
+            if task.gid in self._cancelled:
+                task.status = "cancelled"
+                self._save_state()
+                return
+
+            page_num = idx + 1
+            ext = _ext_from_url(thumb_url)
+            dest = thumbs_dir / f"{page_num:04d}.{ext}"
+            if not dest.exists():
+                try:
+                    data = await self._fetch_image(thumb_url)
+                    dest.write_bytes(data)
+                except Exception:
+                    pass
+
+            task.downloaded_thumbs = page_num
+            await self._ws.broadcast({
+                "event": "download_progress", "gid": task.gid,
+                "phase": "thumbs", "page": page_num, "total": task.total_pages,
+            })
+            self._save_state()
+
+        # 4. Download full-size pages
         for idx, viewer_url in enumerate(task.preview_urls):
             if task.gid in self._cancelled:
                 task.status = "cancelled"
@@ -200,35 +282,29 @@ class DownloadManager:
 
             page_num = idx + 1
 
+            # Check if already downloaded (resume support)
+            existing = list(pages_dir.glob(f"{page_num:04d}.*"))
+            if existing:
+                task.downloaded_pages = page_num
+                continue
+
             try:
                 html = await self._api.client.get_html(viewer_url)
                 image_url, _ = parse_image_viewer(html)
-
                 if not image_url:
                     continue
 
-                ext = image_url.rsplit(".", 1)[-1].split("?")[0] or "jpg"
-                dest = output_dir / f"{page_num:04d}.{ext}"
-
-                async with self._api.client.session.stream("GET", image_url) as response:
-                    response.raise_for_status()
-                    with dest.open("wb") as f:
-                        async for chunk in response.aiter_bytes(chunk_size=65536):
-                            f.write(chunk)
-
+                data = await self._fetch_image(image_url)
+                ext = _ext_from_url(image_url)
+                (pages_dir / f"{page_num:04d}.{ext}").write_bytes(data)
             except Exception as exc:
-                # Log per-page error but continue with remaining pages
                 task.error = f"Page {page_num}: {exc}"
 
             task.downloaded_pages = page_num
-            await self._ws.broadcast(
-                {
-                    "event": "download_progress",
-                    "gid": task.gid,
-                    "page": page_num,
-                    "total": task.total_pages,
-                }
-            )
+            await self._ws.broadcast({
+                "event": "download_progress", "gid": task.gid,
+                "phase": "pages", "page": page_num, "total": task.total_pages,
+            })
             self._save_state()
 
         if task.gid not in self._cancelled:
@@ -238,27 +314,32 @@ class DownloadManager:
             )
             self._save_state()
 
+    async def _fetch_image(self, url: str) -> bytes:
+        """Fetch image bytes, checking cache first."""
+        cached = await self._cache.get_image(url)
+        if cached is not None:
+            return cached
+
+        resp = await self._api.client.session.get(url)
+        resp.raise_for_status()
+        return resp.content
+
     def _save_state(self) -> None:
-        """Write the current task list to the state file as JSON."""
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         data = {gid: task.to_dict() for gid, task in self._tasks.items()}
         self._state_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def _load_state(self) -> None:
-        """Read task list from the state file (if it exists)."""
         if not self._state_file.exists():
             return
-
         try:
             raw = self._state_file.read_text(encoding="utf-8")
             data = json.loads(raw)
         except Exception:
             return
-
         for gid, task_dict in data.items():
             try:
                 task = DownloadTask(**task_dict)
                 self._tasks[gid] = task
             except Exception:
-                # Skip malformed entries
                 continue
