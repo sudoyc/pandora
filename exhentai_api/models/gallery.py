@@ -11,6 +11,11 @@ class GalleryListItem:
     uploader: str
     thumb_url: str
     posted: str
+    rating: float = 0.0
+    pages: int = 0
+    rated: bool = False
+    thumb_width: int = 0
+    thumb_height: int = 0
 
     @property
     def url(self) -> str:
