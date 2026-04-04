@@ -14,6 +14,7 @@ from pandora_daemon.config import PandoraConfig
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
+from pandora_daemon.image_service import ImageService
 
 
 def _make_gallery_item(
@@ -62,11 +63,12 @@ def mock_state(tmp_path):
     ws = WebSocketManager()
     state_file = tmp_path / "downloads.json"
     downloads = DownloadManager(api=mock_api, config=config.download, ws=ws, state_file=state_file)
+    image_service = ImageService(api=mock_api, cache=cache, config=cache_config)
 
     state = AppState(
         config=config, config_path=config_path,
         client=mock_client, api=mock_api,
-        downloads=downloads, cache=cache, ws=ws,
+        downloads=downloads, cache=cache, image_service=image_service, ws=ws,
     )
     return state, mock_api
 

@@ -6,6 +6,7 @@ from pandora_daemon.config import PandoraConfig
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
+from pandora_daemon.image_service import ImageService
 
 @dataclass
 class AppState:
@@ -15,4 +16,5 @@ class AppState:
     api: ExhentaiAPI
     downloads: DownloadManager
     cache: CacheManager
+    image_service: ImageService
     ws: WebSocketManager

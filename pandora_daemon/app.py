@@ -9,6 +9,7 @@ from pandora_daemon.state import AppState
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
+from pandora_daemon.image_service import ImageService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,18 +21,20 @@ async def lifespan(app: FastAPI):
     )
     api = ExhentaiAPI(client=client)
     cache = CacheManager(config.cache)
+    image_service = ImageService(api=api, cache=cache, config=config.cache)
     ws = WebSocketManager()
     state_file = config_path.parent / "downloads.json"
     downloads = DownloadManager(api=api, config=config.download, ws=ws, state_file=state_file)
     state = AppState(
         config=config, config_path=config_path,
         client=client, api=api,
-        downloads=downloads, cache=cache, ws=ws,
+        downloads=downloads, cache=cache, image_service=image_service, ws=ws,
     )
     app.state.pandora = state
     await downloads.start()
     yield
     await downloads.shutdown()
+    await image_service.shutdown()
     await api.aclose()
 
 def create_app() -> FastAPI:

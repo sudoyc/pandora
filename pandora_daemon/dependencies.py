@@ -4,6 +4,7 @@ from exhentai_api.api import ExhentaiAPI
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
+from pandora_daemon.image_service import ImageService
 
 def get_state(request: Request) -> AppState:
     return request.app.state.pandora
@@ -19,3 +20,6 @@ def get_cache(state: AppState = Depends(get_state)) -> CacheManager:
 
 def get_ws(state: AppState = Depends(get_state)) -> WebSocketManager:
     return state.ws
+
+def get_image_service(state: AppState = Depends(get_state)) -> ImageService:
+    return state.image_service
