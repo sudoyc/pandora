@@ -139,7 +139,8 @@ Full gallery metadata.
 - `newer_versions` (List[dict]): Each has `gid`, `token`, `title`, `posted`.
 - `comments` (list[GalleryComment])
 - `comments_has_more` (bool)
-- `preview_urls` (List[str])
+- `preview_urls` (List[str]): Viewer page URLs (`/s/{imgkey}/{gid}-{page}`).
+- `thumb_urls` (List[str]): Page thumbnail image URLs (extracted from `.gdtm`/`.gdtl` elements).
 
 ### `ImageDetail`
 Image viewer result.

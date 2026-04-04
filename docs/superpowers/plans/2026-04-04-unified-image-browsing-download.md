@@ -1871,9 +1871,9 @@ git commit -m "fix: update all tests for unified image cache and library system"
 
 ## Verification
 
-After all tasks:
+After all tasks: - ALL DONE (203 tests passing, 2026-04-04)
 
-1. `uv run pytest tests/ -v` — ALL PASS
+1. `uv run pytest tests/ -v` — ALL PASS (203 tests)
 2. New API endpoints available:
    - `GET /api/image/proxy?url=...` — unified image proxy
    - `GET /api/gallery/{gid}/{token}/page/{page}` — full-size page image

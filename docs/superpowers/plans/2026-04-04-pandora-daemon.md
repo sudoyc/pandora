@@ -1,6 +1,6 @@
-# pandora-daemon Implementation Plan
+# pandora-daemon Implementation Plan -- COMPLETE
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> All 12 tasks implemented and passing. Extended by unified image browsing & download plan (2026-04-04). Total: 203 tests.
 
 **Goal:** Build a FastAPI daemon that wraps `exhentai_api` as a REST + WebSocket service with download management, caching, and configuration.
 
