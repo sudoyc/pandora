@@ -1,7 +1,7 @@
 [project]
-name = "workspace"
-version = "0.1.0"
-description = "Add your description here"
+name = "pandora"
+version = "0.2.0"
+description = "Open the box. Browse, search, and download from ExHentai — daemon + multi-frontend."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,14 +9,14 @@ dependencies = [
     "fastapi>=0.115",
     "httpx>=0.28.1",
     "rich>=14.3.3",
-    "textual>=8.2.1",
     "tomli-w>=1.0",
     "uvicorn>=0.34",
     "websockets>=16.0",
 ]
 
 [project.scripts]
-exhentai-dl = "cli:main"
+pandora = "pandora_daemon.cli:main"
+pandora-daemon = "pandora_daemon.__main__:main"
 
 [dependency-groups]
 dev = [

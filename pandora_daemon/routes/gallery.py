@@ -212,7 +212,11 @@ async def get_page_image(gid: str, token: str, page: int, image_service=Depends(
         media_type = "image/webp"
     else:
         media_type = "image/jpeg"
-    return Response(content=data, media_type=media_type)
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Length": str(len(data))},
+    )
 
 
 @router.post("/{gid}/{token}/prefetch")
