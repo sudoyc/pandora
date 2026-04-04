@@ -1,6 +1,6 @@
 import re
 from bs4 import BeautifulSoup
-from exhentai_api.models.gallery import GalleryDetail
+from exhentai_api.models.gallery import GalleryDetail, ThumbSprite
 from exhentai_api.parsers.comments import parse_comments
 
 
@@ -92,18 +92,30 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
                     preview_urls.append(a_tag.get("href"))
 
     thumb_urls = []
+    thumb_sprites = []
     for gdt in soup.find_all(class_=["gdtm", "gdtl"]):
         classes = gdt.get("class") or []
-        # gdtm: thumbnail is CSS background-image on inner div (not the blank.gif spacer)
+        # gdtm: CSS sprite — parse url + offset + dimensions from style
         if "gdtm" in classes:
             inner_div = gdt.find("div")
             if inner_div:
                 style = inner_div.get("style", "")
                 bg_match = re.search(r"url\((.+?)\)", style)
                 if bg_match:
-                    thumb_urls.append(bg_match.group(1))
+                    sprite_url = bg_match.group(1)
+                    thumb_urls.append(sprite_url)
+                    # Parse: "width:100px; height:143px; background:... -Xpx -Ypx"
+                    w_match = re.search(r"width\s*:\s*(\d+)px", style)
+                    h_match = re.search(r"height\s*:\s*(\d+)px", style)
+                    # Offsets are negative in CSS (e.g., -200px 0), abs() for crop
+                    pos_match = re.search(r"(-?\d+)px\s+(-?\d+)(?:px)?", style.split("url(")[1] if "url(" in style else "")
+                    w = int(w_match.group(1)) if w_match else 100
+                    h = int(h_match.group(1)) if h_match else 144
+                    ox = abs(int(pos_match.group(1))) if pos_match else 0
+                    oy = abs(int(pos_match.group(2))) if pos_match else 0
+                    thumb_sprites.append(ThumbSprite(url=sprite_url, offset_x=ox, offset_y=oy, width=w, height=h))
                     continue
-        # gdtl: thumbnail is direct <img src="..."> (not blank.gif)
+        # gdtl: individual thumbnail image
         a_tag = gdt.find("a")
         if a_tag:
             img_tag = a_tag.find("img")
@@ -111,7 +123,8 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
                 src = img_tag.get("src") or img_tag.get("data-src") or ""
                 if src and "blank.gif" not in src and "placeholder" not in src:
                     thumb_urls.append(src)
-    # Fallback: extract from #gdt container if no thumb_urls found
+                    thumb_sprites.append(ThumbSprite(url=src, offset_x=0, offset_y=0, width=0, height=0))
+    # Fallback: extract from #gdt container
     if not thumb_urls:
         gdt_elem = soup.find(id="gdt")
         if gdt_elem:
@@ -123,12 +136,7 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
                     src = img_tag.get("src") or img_tag.get("data-src") or ""
                     if src and "blank.gif" not in src and "placeholder" not in src:
                         thumb_urls.append(src)
-            # Still empty? Try CSS background-image on any div inside #gdt
-            if not thumb_urls:
-                for div in gdt_elem.find_all("div", style=True):
-                    bg_match = re.search(r"url\((.+?)\)", div.get("style", ""))
-                    if bg_match:
-                        thumb_urls.append(bg_match.group(1))
+                        thumb_sprites.append(ThumbSprite(url=src, offset_x=0, offset_y=0, width=0, height=0))
 
     # Rating from #rating_label
     rating = 0.0
@@ -221,6 +229,7 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
         preview_pages=preview_pages,
         preview_urls=preview_urls,
         thumb_urls=thumb_urls,
+        thumb_sprites=thumb_sprites,
         rating=rating,
         rating_count=rating_count,
         favorite_count=favorite_count,

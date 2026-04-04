@@ -40,6 +40,7 @@ class DownloadTask:
     created_at: str = ""
     preview_urls: list[str] = field(default_factory=list)
     thumb_urls: list[str] = field(default_factory=list)
+    thumb_sprites: list[dict] = field(default_factory=list)  # [{url, offset_x, offset_y, width, height}]
 
     def __post_init__(self) -> None:
         if not self.created_at:
@@ -89,9 +90,10 @@ class DownloadManager:
 
         detail = await self._api.get_gallery_details(gid, token)
 
-        # Collect all preview URLs and thumb URLs across ALL preview pages
+        # Collect all preview URLs, thumb URLs, and sprite info across ALL preview pages
         preview_urls = list(detail.preview_urls)
         thumb_urls = list(detail.thumb_urls)
+        thumb_sprites = [asdict(s) for s in detail.thumb_sprites]
         if detail.preview_pages > 1:
             for p in range(1, detail.preview_pages):
                 page_url = f"{detail.url}?p={p}"
@@ -99,6 +101,7 @@ class DownloadManager:
                 page_detail = parse_gallery_detail(html, gid, token)
                 preview_urls.extend(page_detail.preview_urls)
                 thumb_urls.extend(page_detail.thumb_urls)
+                thumb_sprites.extend(asdict(s) for s in page_detail.thumb_sprites)
 
         safe_title = _sanitize_filename(detail.title)
         output_dir = str(self._download_path / f"{gid}-{safe_title}")
@@ -111,6 +114,7 @@ class DownloadManager:
             output_dir=output_dir,
             preview_urls=preview_urls,
             thumb_urls=thumb_urls,
+            thumb_sprites=thumb_sprites,
         )
         self._tasks[gid] = task
         await self._queue.put(gid)
@@ -231,22 +235,43 @@ class DownloadManager:
             await self._ws.broadcast({"event": "download_progress", "gid": task.gid, "phase": "cover"})
             self._save_state()
 
-        # 3. Download thumbnails
-        for idx, thumb_url in enumerate(task.thumb_urls):
+        # 3. Download thumbnails (with sprite cropping for gdtm mode)
+        sprite_cache: dict[str, bytes] = {}  # url → downloaded sprite bytes
+        for idx in range(len(task.thumb_sprites or task.thumb_urls)):
             if task.gid in self._cancelled:
                 task.status = "cancelled"
                 self._save_state()
                 return
 
             page_num = idx + 1
-            ext = _ext_from_url(thumb_url)
-            dest = thumbs_dir / f"{page_num:04d}{ext}"
-            if not dest.exists():
-                try:
+            dest_jpg = thumbs_dir / f"{page_num:04d}.jpg"
+            dest_png = thumbs_dir / f"{page_num:04d}.png"
+            if dest_jpg.exists() or dest_png.exists():
+                task.downloaded_thumbs = page_num
+                continue
+
+            try:
+                sprite = task.thumb_sprites[idx] if task.thumb_sprites else None
+                if sprite and sprite.get("width", 0) > 0:
+                    # Sprite mode: download sprite once, crop individual thumbnail
+                    sprite_url = sprite["url"]
+                    if sprite_url not in sprite_cache:
+                        sprite_cache[sprite_url] = await self._fetch_image(sprite_url)
+                    cropped = self._crop_sprite(
+                        sprite_cache[sprite_url],
+                        sprite["offset_x"], sprite["offset_y"],
+                        sprite["width"], sprite["height"],
+                    )
+                    if cropped:
+                        (thumbs_dir / f"{page_num:04d}.jpg").write_bytes(cropped)
+                elif idx < len(task.thumb_urls):
+                    # Direct image mode (gdtl)
+                    thumb_url = task.thumb_urls[idx]
                     data = await self._fetch_image(thumb_url)
-                    dest.write_bytes(data)
-                except Exception:
-                    pass
+                    ext = _ext_from_url(thumb_url)
+                    (thumbs_dir / f"{page_num:04d}{ext}").write_bytes(data)
+            except Exception:
+                pass
 
             task.downloaded_thumbs = page_num
             await self._ws.broadcast({
@@ -295,6 +320,20 @@ class DownloadManager:
                 {"event": "download_complete", "gid": task.gid, "path": task.output_dir}
             )
             self._save_state()
+
+    @staticmethod
+    def _crop_sprite(sprite_data: bytes, x: int, y: int, w: int, h: int) -> bytes | None:
+        """Crop a single thumbnail from a CSS sprite sheet."""
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(sprite_data))
+            cropped = img.crop((x, y, x + w, y + h))
+            buf = io.BytesIO()
+            cropped.save(buf, format="JPEG", quality=90)
+            return buf.getvalue()
+        except Exception:
+            return None
 
     async def _fetch_image(self, url: str) -> bytes:
         """Fetch image bytes, checking cache first."""

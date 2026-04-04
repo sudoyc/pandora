@@ -71,11 +71,13 @@ async def download_command(url: str, daemon_url: str) -> int:
             with Progress(
                 TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
+                TextColumn("{task.completed}/{task.total}"),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeRemainingColumn(),
                 console=console,
             ) as progress:
-                task_id = progress.add_task("Waiting...", total=None)
+                current_phase = ""
+                task_id = progress.add_task("Waiting...", total=0, visible=True)
 
                 async for message in ws:
                     event = json.loads(message)
@@ -87,19 +89,27 @@ async def download_command(url: str, daemon_url: str) -> int:
                         phase = event.get("phase", "")
                         page = event.get("page", 0)
                         total = event.get("total", 0)
+
+                        # Phase changed — reset progress bar for new phase
+                        if phase != current_phase:
+                            if current_phase:
+                                progress.update(task_id, visible=False)
+                            task_id = progress.add_task(phase, total=total if total > 0 else 0)
+                            current_phase = phase
+
                         if total > 0:
-                            progress.update(task_id, description=f"{phase}", completed=page, total=total)
+                            progress.update(task_id, description=phase, completed=page, total=total)
                         else:
                             progress.update(task_id, description=f"{phase}...")
                     elif ev_type == "download_complete":
-                        progress.update(task_id, description="Done", completed=100, total=100)
-                        console.print(f"\n[bold green]Download complete:[/bold green] {event.get('path', '')}")
+                        progress.update(task_id, visible=False)
+                        console.print(f"[bold green]Download complete:[/bold green] {event.get('path', '')}")
                         return 0
                     elif ev_type == "download_error":
-                        console.print(f"\n[bold red]Download error:[/bold red] {event.get('error', 'unknown')}")
+                        console.print(f"[bold red]Download error:[/bold red] {event.get('error', 'unknown')}")
                         return 1
                     elif ev_type == "download_cancelled":
-                        console.print("\n[yellow]Download cancelled[/yellow]")
+                        console.print("[yellow]Download cancelled[/yellow]")
                         return 1
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted[/yellow]")
