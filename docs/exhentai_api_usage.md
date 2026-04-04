@@ -1,86 +1,146 @@
-# Exhentai API (`exhentai_api`) 使用说明文档
+# Exhentai API 使用说明
 
 ## 概述
-`exhentai_api` 是一个专为 Exhentai/E-Hentai 设计的数据抓取与解析层，由之前的单体 `parser.py` 和 `client.py` 重构而来。此包旨在提供清晰、强类型、且易于维护的高层级 API，供 TUI 界面或其他前端调用。它底层依赖于 `httpx` (异步) 进行网络请求，以及 `BeautifulSoup4` 进行 HTML 解析。
+
+`exhentai_api` 是一个 Python 异步库，提供对 Exhentai/E-Hentai 的完整数据访问能力。底层依赖 `httpx` (异步 HTTP) 和 `BeautifulSoup4` (HTML 解析)。
 
 ## 包结构
-```text
+
+```
 exhentai_api/
-├── __init__.py        # 暴露核心类：ExhentaiAPI, ExhentaiClient, GalleryListItem
-├── api.py             # 高层 API 封装 (目前实现: get_homepage)
-├── client.py          # 核心异步 HTTP 客户端 (负责请求头、Cookies、Sad Panda 处理、重试机制)
-├── constants.py       # 全局常量 (URL、分类枚举)
-├── utils.py           # 辅助工具 (例如解析图库 url 提取 gid 和 token)
-├── models/            # Pydantic/Dataclass 数据模型 (强类型数据)
-│   ├── gallery.py     # GalleryListItem, GalleryDetail
-│   ├── image.py       # ImageDetail
-│   └── tags.py        # Tag, WatchedTag
-└── parsers/           # 纯函数 HTML 解析器
-    └── gallery.py     # 解析画廊列表
+├── __init__.py          # 导出: ExhentaiAPI, ExhentaiClient, 17 个模型类
+├── api.py               # ExhentaiAPI: 22 个异步方法
+├── client.py            # ExhentaiClient: cookies, headers, Sad Panda 检测, 重试
+├── constants.py         # BASE_URL, 分类常量
+├── utils.py             # extract_gallery_token
+├── models/
+│   ├── gallery.py       # GalleryListItem, GalleryDetail
+│   ├── image.py         # ImageDetail
+│   ├── search.py        # SearchParams
+│   ├── favorites.py     # FavoriteCategory, FavoritesResponse
+│   ├── toplist.py       # TopListItem
+│   ├── comment.py       # GalleryComment
+│   ├── torrent.py       # TorrentItem
+│   ├── archive.py       # ArchiveOption, ArchiverData
+│   ├── home.py          # HomeDetail
+│   ├── profile.py       # ProfileResult
+│   ├── vote.py          # RateResult, VoteCommentResult
+│   └── tags.py          # Tag, WatchedTag
+└── parsers/
+    ├── gallery.py       # 画廊列表解析 (含评分/页数/缩略图尺寸)
+    ├── gallery_detail.py # 画廊详情解析 (完整元数据+评论)
+    ├── image.py         # 图片查看器 + API 响应解析
+    ├── favorites.py     # 收藏列表解析
+    ├── toplist.py       # TopList 解析
+    ├── comments.py      # 评论解析
+    ├── torrent.py       # 种子列表解析
+    ├── archive.py       # 归档选项解析
+    ├── home.py          # 用户主页解析
+    ├── profile.py       # 用户资料解析
+    └── mytags.py        # 标签管理解析
 ```
 
-## 核心功能与使用示例
+## 使用示例
 
-### 1. 初始化客户端与高层 API
-为了使用该包，通常我们只需要初始化 `ExhentaiAPI`。可以传入自定义的 Cookie（如 `igneous`, `ipb_member_id`）来避免访客限制或访问 Exhentai (表站限制)。
+### 初始化
 
 ```python
 import asyncio
 from exhentai_api import ExhentaiAPI, ExhentaiClient
 
 async def main():
-    # 方式一：默认初始化 (适用于公开访问)
-    api = ExhentaiAPI()
-
-    # 方式二：传入带有凭证的 Client (适用于 ExHentai 或 避免被Ban)
+    # 带凭证初始化 (访问 ExHentai 必须)
     client = ExhentaiClient(
         igneous="your_igneous_cookie",
         ipb_member_id="your_member_id"
     )
-    api = ExhentaiAPI(client=client)
-
-    # ... 执行其他操作
-
-    # 务必在程序结束时关闭资源
-    await api.aclose()
-
-# 更好的方式：使用异步上下文管理器 (自动处理资源关闭)
-async def main_with_context():
-    async with ExhentaiAPI() as api:
-        # 获取主页画廊列表
+    async with ExhentaiAPI(client=client) as api:
         galleries = await api.get_homepage()
-        for gallery in galleries:
-            print(f"Title: {gallery.title}")
-            print(f"URL: {gallery.url}")
+        for g in galleries:
+            print(f"{g.title} - {g.rating}* - {g.pages}p")
 
-if __name__ == "__main__":
-    asyncio.run(main_with_context())
+asyncio.run(main())
 ```
 
-### 2. 获取主页画廊列表 (get_homepage)
-该方法将访问主页并将 HTML 转换成强类型的 `GalleryListItem` 对象列表。
+### 搜索
 
 ```python
-async with ExhentaiAPI() as api:
-    items = await api.get_homepage()
-    
-    first_item = items[0]
-    print(first_item.gid)         # 画廊 ID，例如 "1234567"
-    print(first_item.token)       # 画廊 Token，例如 "abcdef1234"
-    print(first_item.title)       # 标题
-    print(first_item.category)    # 分类，例如 "Doujinshi"
-    print(first_item.uploader)    # 上传者
-    print(first_item.thumb_url)   # 封面图 URL
-    print(first_item.posted)      # 上传时间
+from exhentai_api.models.search import SearchParams
+
+params = SearchParams(keyword="fate", min_rating=4, show_expunged=False)
+results = await api.search(params, page=0)
 ```
 
-### 3. 底层机制与错误处理 (Sad Panda)
-在 `ExhentaiClient` 的实现中，包含了两项关键的保护机制：
-1. **重试逻辑**: 如果因网络波动或服务端短暂异常导致请求失败，系统会自动重试 (`get_html(..., retries=3, backoff_factor=1.0)`)。
-2. **Sad Panda 检测**: 访问 ExHentai 需要正确的账号状态和 Cookies。如果没有正确配置或 Cookie 失效，网站可能返回一张哭泣的熊猫图。`client.get_html` 会检查 HTTP Headers 中的 `Content-Disposition`，一旦发现 `inline; filename="sadpanda.jpg"`，将抛出 `RuntimeError("Sad Panda: You do not have permission to view ExHentai.")`，并中断重试。
+### 画廊详情与图片下载
 
-## 未来待开发项 (Todo)
-依据整体重构规划，目前只完成了 `get_homepage`。接下来的开发应继续扩展：
-1. **`api.py` 扩展**: 实现 `search()`, `get_gallery_details()`, `get_image_url()`, `get_favorites()`。
-2. **`parsers/` 扩展**: 添加 `favorites.py`, `popular.py`, `user.py`, `image.py` 等解析器。
-3. 将现有的 `tui.py` 与新的 `exhentai_api` 模块进行对接整合。
+```python
+detail = await api.get_gallery_details("12345", "abcdef1234")
+print(detail.title, detail.tags, detail.pages)
+
+# 获取第 1 页图片 URL
+image = await api.get_image_url("12345", "imgkey", 1)
+print(image.image_url)
+
+# 使用 nl token 重载图片
+image2 = await api.get_image_url("12345", "imgkey", 1, nl=image.nl)
+```
+
+### 收藏管理
+
+```python
+# 获取收藏 (支持关键字搜索)
+favs = await api.get_favorites(favcat=0, keyword="artist:name", sn=True)
+for cat in favs.categories:
+    print(f"[{cat.slot}] {cat.name}: {cat.count}")
+
+# 添加收藏
+await api.add_favorite("12345", "abcdef", favcat=2, favnote="good")
+
+# 批量操作
+await api.modify_favorites(["12345", "67890"], ddact="fav3")
+```
+
+### 评论与评分
+
+```python
+# 发表评论
+comments = await api.comment_gallery("12345", "abcdef", "Great gallery!")
+
+# 评论投票 (api_uid/api_key 来自 GalleryDetail)
+result = await api.vote_comment(detail.api_uid, detail.api_key, 12345, "abcdef", 100, vote=1)
+
+# 评分 (2-10 对应 1.0-5.0 星)
+rate = await api.rate_gallery(detail.api_uid, detail.api_key, 12345, "abcdef", rating=8)
+```
+
+### 种子与归档
+
+```python
+torrents = await api.get_torrent_list("12345", "abcdef")
+archives = await api.get_archive_list("12345", "abcdef")
+download_url = await api.download_archive(archives.original.url, resolution="org")
+```
+
+### 用户信息
+
+```python
+home = await api.get_home_detail()
+print(f"图片配额: {home.image_used}/{home.image_total}")
+
+profile = await api.get_profile()
+print(profile.display_name)
+```
+
+## 错误处理
+
+### Sad Panda 检测
+
+`ExhentaiClient.get_html` 会检测 HTTP 响应头中的 `Content-Disposition: inline; filename="sadpanda.jpg"`。一旦检测到，立即抛出 `RuntimeError("Sad Panda: You do not have permission to view ExHentai.")`，不再重试。
+
+### 自动重试
+
+所有 HTTP 请求默认重试 3 次，指数退避 (`backoff_factor=0.1`)。适用于 `get_html`、`post_json`、`post_form`。
+
+## 详细 API 文档
+
+完整方法签名和模型字段参见 `docs/api_reference.md`。

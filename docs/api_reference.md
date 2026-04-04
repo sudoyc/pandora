@@ -1,116 +1,194 @@
 # Exhentai API Reference
 
-This document describes the core endpoints and models currently implemented in the `exhentai_api` package.
+Complete reference for the `exhentai_api` package. All methods are async and require `await`.
 
-## 1. High-Level API: `ExhentaiAPI`
-
-The primary interface for interacting with the website is the `ExhentaiAPI` class. It orchestrates the HTTP client and the HTML parsers.
+## Initialization
 
 ```python
-from exhentai_api.api import ExhentaiAPI
-from exhentai_api.client import ExhentaiClient
+from exhentai_api import ExhentaiAPI, ExhentaiClient
 
-# Initialize with credentials for exhentai.org
 client = ExhentaiClient(igneous="...", ipb_member_id="...")
 api = ExhentaiAPI(client=client)
+
+# Or with context manager (auto-closes):
+async with ExhentaiAPI(client=client) as api:
+    ...
 ```
-
-### `get_homepage(self, page: int = 0) -> List[GalleryListItem]`
-Fetches the main gallery list (homepage).
-* **Parameters:**
-  * `page` (int): The page number to fetch (0-indexed). Defaults to 0.
-* **Returns:** A list of `GalleryListItem` instances.
-
-### `get_gallery_details(self, gid: str, token: str) -> GalleryDetail`
-Fetches the complete metadata and preview image URLs for a specific gallery.
-* **Parameters:**
-  * `gid` (str): The Gallery ID.
-  * `token` (str): The Gallery Token.
-* **Returns:** A `GalleryDetail` instance containing title, tags, uploader, size, pagination info, and preview image URLs.
-
-### `get_image_url(self, gid: str, imgkey: str, page: int, nl: str = None) -> ImageDetail`
-Fetches the full-resolution image URL for a specific page in a gallery. It supports the dynamic "reload" mechanism via the `nl` token.
-* **Parameters:**
-  * `gid` (str): The Gallery ID.
-  * `imgkey` (str): The unique image key (found in the URL of the preview image).
-  * `page` (int): The image page number (1-indexed).
-  * `nl` (str, optional): The reload token. If provided, the API uses a POST request to dynamically reload the image URL (useful to bypass limits or broken images).
-* **Returns:** An `ImageDetail` instance containing the `image_url` and the next `nl` token.
-
-### `search(self, params: SearchParams, page: int = 0) -> List[GalleryListItem]`
-Searches for galleries using advanced filters and parameters.
-* **Parameters:**
-  * `params` (`SearchParams`): An object containing search configuration (query, category bitmask, advanced toggles).
-  * `page` (int): Page number (0-indexed).
-* **Returns:** A list of `GalleryListItem` instances.
-
-### `get_favorites(self, favcat: int = -1, page: int = 0) -> FavoritesResponse`
-Fetches a user's favorite galleries and the category list.
-* **Parameters:**
-  * `favcat` (int): The favorite slot (0-9) to filter by. Defaults to -1 (All).
-  * `page` (int): Page number (0-indexed).
-* **Returns:** A `FavoritesResponse` containing `categories` and `galleries`.
-
-### `add_favorite(self, gid: str, token: str, favcat: int = 0, favnote: str = "") -> str`
-Adds a gallery to a specific favorite slot.
-* **Parameters:**
-  * `gid`, `token`: Gallery identifiers.
-  * `favcat` (int): Slot (0-9). Passing `-1` removes the favorite.
-  * `favnote` (str): Optional note for the favorite.
-* **Returns:** The raw HTML response string.
-
-### `modify_favorites(self, gids: List[str], ddact: str) -> str`
-Batch applies an action to multiple favorited galleries.
-* **Parameters:**
-  * `gids` (List[str]): List of gallery IDs to modify.
-  * `ddact` (str): The action to apply (`"delete"` to remove, `"fav0"`-`"fav9"` to move).
-* **Returns:** The raw HTML response string.
-
-### `get_popular(self) -> List[GalleryListItem]`
-Fetches the current popular/what's hot galleries.
-* **Returns:** A list of `GalleryListItem` instances.
-
-### `get_toplist(self, tl: str = "15") -> List[TopListItem]`
-Fetches the toplist galleries (e.g. All-Time, Past Year).
-* **Parameters:**
-  * `tl` (str): Timeframe parameter (15=All-Time, 11=Past Year, 12=Past Month, 13=Yesterday).
-* **Returns:** A list of `TopListItem` instances.
 
 ---
 
-## 2. Data Models (`exhentai_api.models`)
+## 1. Browse
+
+### `get_homepage(page: int = 0) -> list[GalleryListItem]`
+Fetches the main gallery list.
+
+### `search(params: SearchParams, page: int = 0) -> list[GalleryListItem]`
+Searches galleries with advanced filters. See `SearchParams` model below.
+
+### `get_popular() -> list[GalleryListItem]`
+Fetches the current "What's Hot" popular galleries.
+
+### `get_toplist(tl: str = "15") -> list[TopListItem]`
+Fetches toplist rankings. `tl`: `"15"` All-Time, `"11"` Past Year, `"12"` Past Month, `"13"` Yesterday. E-Hentai only.
+
+### `get_watched(page: int = 0) -> list[GalleryListItem]`
+Fetches galleries matching the user's watched tags.
+
+### `image_search(file_path: str, similar: bool = True, covers: bool = True, exp: bool = True) -> list[GalleryListItem]`
+Searches galleries by image file using SHA1 hash.
+
+---
+
+## 2. Gallery Details
+
+### `get_gallery_details(gid: str, token: str) -> GalleryDetail`
+Fetches complete gallery metadata including tags, comments, rating, torrent/archive URLs, api_uid/api_key.
+
+### `get_image_url(gid: str, imgkey: str, page: int, nl: str = None) -> ImageDetail`
+Fetches full-resolution image URL.
+- Without `nl`: GET viewer page `/s/{imgkey}/{gid}-{page}`.
+- With `nl`: POST to `api.php` showpage method (reload/next image).
+
+### `get_gallery_token(gid: int, imgkey: str, page: int) -> str`
+Fetches gallery token via `api.php` gtoken method.
+
+---
+
+## 3. Comments & Rating
+
+### `comment_gallery(gid: str, token: str, comment: str, edit_id: int = None) -> list[GalleryComment]`
+Posts or edits a comment. Pass `edit_id` to edit an existing comment. Returns updated comment list.
+
+### `vote_comment(api_uid: str, api_key: str, gid: int, token: str, comment_id: int, vote: int) -> VoteCommentResult`
+Votes on a comment. `vote`: `1` (up) or `-1` (down). `api_uid`/`api_key` from `GalleryDetail`.
+
+### `rate_gallery(api_uid: str, api_key: str, gid: int, token: str, rating: int) -> RateResult`
+Rates a gallery. `rating`: integer 2-10 (representing 1.0-5.0 stars in 0.5 steps).
+
+---
+
+## 4. Favorites
+
+### `get_favorites(favcat: int = -1, page: int = 0, keyword: str = "", sn: bool = False, st: bool = False, sf: bool = False) -> FavoritesResponse`
+Fetches user's favorites. `favcat`: slot 0-9 or -1 for all. Supports keyword search with `sn` (name), `st` (tags), `sf` (note) toggles.
+
+### `add_favorite(gid: str, token: str, favcat: int = 0, favnote: str = "") -> str`
+Adds gallery to favorite slot 0-9. Pass `favcat=-1` to remove.
+
+### `modify_favorites(gids: list[str], ddact: str) -> str`
+Batch action on favorites. `ddact`: `"delete"` or `"fav0"`-`"fav9"`.
+
+---
+
+## 5. Torrents & Archives
+
+### `get_torrent_list(gid: str, token: str) -> list[TorrentItem]`
+Fetches available torrents for a gallery.
+
+### `get_archive_list(gid: str, token: str) -> ArchiverData`
+Fetches archive download options (Original/Resample) with cost and size info.
+
+### `download_archive(archive_url: str, resolution: str = "org") -> str`
+Initiates archive download. `resolution`: `"org"` (original) or `"res"` (resample). Returns download URL.
+
+---
+
+## 6. Tag Management
+
+### `get_mytags() -> list[WatchedTag]`
+Fetches user's watched/hidden tag configuration.
+
+### `add_tag(tag_name: str, watched: bool = False, hidden: bool = False, color: str = "", weight: int = 0) -> list[WatchedTag]`
+Adds a new tag config. Returns updated list.
+
+### `delete_tag(tag_id: int) -> list[WatchedTag]`
+Deletes a tag config by ID. Returns updated list.
+
+---
+
+## 7. User Info
+
+### `get_home_detail() -> HomeDetail`
+Fetches home page with image limits and GP statistics.
+
+### `reset_image_limit() -> HomeDetail`
+Resets image viewing limit by spending GP. Returns updated home detail.
+
+### `get_profile() -> ProfileResult`
+Fetches current user's display name and avatar URL.
+
+---
+
+## Data Models
 
 ### `GalleryListItem`
-Represents a single gallery card in a list view (like the homepage or search results).
-* `gid` (str): Gallery ID.
-* `token` (str): Gallery Token.
-* `title` (str): Gallery Title.
-* `category` (str): Category (e.g., "Doujinshi", "Manga").
-* `uploader` (str): Uploader name.
-* `thumb_url` (str): URL to the thumbnail image.
-* `posted` (str): Timestamp/Date posted.
-* `url` (property -> str): The full Exhentai URL for this gallery.
+Gallery card in list views.
+- `gid`, `token`, `title`, `category`, `uploader`, `thumb_url`, `posted` (str)
+- `rating` (float), `pages` (int), `rated` (bool), `thumb_width`, `thumb_height` (int)
+- `url` (property): Full gallery URL.
 
 ### `GalleryDetail`
-Represents the full metadata parsed from a gallery's detail page.
-* `gid` (str)
-* `token` (str)
-* `title` (str): English/Romanized title.
-* `title_jpn` (Optional[str]): Original Japanese title.
-* `category` (str)
-* `uploader` (str)
-* `cover_url` (str): High-res cover image URL.
-* `tags` (Dict[str, List[str]]): A dictionary of tags grouped by namespace (e.g., `{"artist": ["name"], "parody": ["game"]}`).
-* `pages` (int): Total number of images in the gallery.
-* `size` (str): File size string (e.g., "100 MB").
-* `posted` (str)
-* `favorite_slot` (Optional[int]): The favorite slot index (0-9) if favorited, else `None`.
-* `preview_pages` (int): Total number of pages of thumbnails.
-* `preview_urls` (List[str]): Extracted URLs to the image viewer pages.
+Full gallery metadata.
+- `gid`, `token`, `title`, `title_jpn`, `category`, `uploader`, `cover_url`, `posted`, `size` (str)
+- `tags` (Dict[str, List[str]]): Tags grouped by namespace.
+- `pages`, `preview_pages`, `rating_count`, `favorite_count`, `torrent_count` (int)
+- `rating` (float)
+- `favorite_slot` (Optional[int]): Slot 0-9 if favorited, else None.
+- `torrent_url`, `archive_url`, `api_uid`, `api_key` (str)
+- `parent_url` (Optional[str])
+- `newer_versions` (List[dict]): Each has `gid`, `token`, `title`, `posted`.
+- `comments` (list[GalleryComment])
+- `comments_has_more` (bool)
+- `preview_urls` (List[str])
 
 ### `ImageDetail`
-Represents the result of an image viewer page or an API reload request.
-* `gid` (str)
-* `page` (int)
-* `image_url` (str): The direct URL to the full-resolution image.
-* `nl` (str): The token required to reload this image or navigate securely in the future.
+Image viewer result.
+- `gid` (str), `page` (int), `image_url` (str), `nl` (str): Reload token.
+
+### `SearchParams`
+Search query builder.
+- `keyword` (str), `category_mask` (int)
+- `advanced` (bool), `search_name`/`search_tags`/`search_desc`/`search_torrent` (bool)
+- `min_rating` (int), `show_expunged` (bool)
+- `page_from`/`page_to` (int)
+- `to_dict() -> dict`: Converts to URL query parameters.
+
+### `FavoritesResponse`
+- `categories` (list[FavoriteCategory]): Slots with name and count.
+- `galleries` (list[GalleryListItem])
+
+### `FavoriteCategory`
+- `slot` (int), `name` (str), `count` (int)
+
+### `GalleryComment`
+- `id` (int), `score` (int), `user` (str), `comment` (str), `time` (str)
+- `is_uploader`, `vote_up_able`, `vote_down_able`, `vote_up_ed`, `vote_down_ed`, `editable` (bool)
+- `last_edited` (str)
+
+### `TorrentItem`
+- `url` (str), `name` (str)
+
+### `ArchiveOption`
+- `cost` (str), `size` (str), `url` (str)
+
+### `ArchiverData`
+- `original`, `resample` (Optional[ArchiveOption]), `funds` (str)
+
+### `HomeDetail`
+- `image_used`, `image_total`, `reset_cost` (int)
+- `gp_from_gallery`, `gp_from_torrent`, `gp_from_archive`, `gp_from_hath`, `moderation_power` (int)
+
+### `ProfileResult`
+- `display_name` (str), `avatar_url` (str)
+
+### `RateResult`
+- `rating` (float), `rating_count` (int)
+
+### `VoteCommentResult`
+- `comment_id` (int), `comment_score` (int), `comment_vote` (int)
+
+### `TopListItem`
+- `type` (str), `name` (str), `link` (str)
+
+### `WatchedTag`
+- `tag_id` (int), `name` (str), `watched` (bool), `hidden` (bool), `color` (str), `weight` (int)
