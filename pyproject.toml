@@ -12,6 +12,7 @@ dependencies = [
     "textual>=8.2.1",
     "tomli-w>=1.0",
     "uvicorn>=0.34",
+    "websockets>=16.0",
 ]
 
 [project.scripts]
