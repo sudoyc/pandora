@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from exhentai_api.api import ExhentaiAPI
 from exhentai_api.client import ExhentaiClient
@@ -7,6 +7,7 @@ from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
+from pandora_daemon.tag_database import TagDatabase
 
 @dataclass
 class AppState:
@@ -18,3 +19,4 @@ class AppState:
     cache: CacheManager
     image_service: ImageService
     ws: WebSocketManager
+    tag_database: TagDatabase = field(default_factory=TagDatabase)

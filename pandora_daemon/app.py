@@ -10,6 +10,7 @@ from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
+from pandora_daemon.tag_database import TagDatabase
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,12 +24,18 @@ async def lifespan(app: FastAPI):
     cache = CacheManager(config.cache)
     image_service = ImageService(api=api, cache=cache, config=config.cache)
     ws = WebSocketManager()
+    tag_database = TagDatabase()
+    try:
+        await tag_database.download_and_load()
+    except Exception:
+        pass  # Non-fatal: suggest will return empty results
     state_file = config_path.parent / "downloads.json"
     downloads = DownloadManager(api=api, config=config.download, ws=ws, cache=cache, state_file=state_file)
     state = AppState(
         config=config, config_path=config_path,
         client=client, api=api,
         downloads=downloads, cache=cache, image_service=image_service, ws=ws,
+        tag_database=tag_database,
     )
     app.state.pandora = state
     await downloads.start()
