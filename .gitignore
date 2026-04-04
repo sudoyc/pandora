@@ -6,3 +6,9 @@ credentials.txt~
 downloads/
 .env
 *~
+*.egg-info/
+CLAUDE.md
+homepage.html
+implementer-prompt.md
+spec-reviewer-prompt.md
+code-quality-reviewer-prompt.md
