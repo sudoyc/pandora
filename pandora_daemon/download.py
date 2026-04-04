@@ -12,8 +12,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-import bs4
-
+from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import _ext_from_url
 
@@ -90,23 +89,16 @@ class DownloadManager:
 
         detail = await self._api.get_gallery_details(gid, token)
 
-        # Collect all preview URLs and thumb URLs across pages
+        # Collect all preview URLs and thumb URLs across ALL preview pages
         preview_urls = list(detail.preview_urls)
         thumb_urls = list(detail.thumb_urls)
         if detail.preview_pages > 1:
             for p in range(1, detail.preview_pages):
                 page_url = f"{detail.url}?p={p}"
                 html = await self._api.client.get_html(page_url)
-                soup = bs4.BeautifulSoup(html, "html.parser")
-                for gdt in soup.find_all(class_=["gdtm", "gdtl"]):
-                    a_tag = gdt.find("a")
-                    if a_tag and a_tag.get("href"):
-                        preview_urls.append(a_tag.get("href"))
-                    # Extract thumb URL
-                    if a_tag:
-                        img_tag = a_tag.find("img")
-                        if img_tag and img_tag.get("src"):
-                            thumb_urls.append(img_tag.get("src"))
+                page_detail = parse_gallery_detail(html, gid, token)
+                preview_urls.extend(page_detail.preview_urls)
+                thumb_urls.extend(page_detail.thumb_urls)
 
         safe_title = _sanitize_filename(detail.title)
         output_dir = str(self._download_path / f"{gid}-{safe_title}")

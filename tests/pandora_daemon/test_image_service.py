@@ -80,6 +80,7 @@ class TestGetPageImage:
     async def test_page_image_not_cached(self, mock_api, mock_cache, cache_config):
         detail = MagicMock()
         detail.preview_urls = ["https://exhentai.org/s/imgkey1/123-1"]
+        detail.pages = 1
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
         viewer_html = '<html><body><img id="img" src="https://cdn.example.com/full.jpg" /><script>nl(\'nltoken\')</script></body></html>'

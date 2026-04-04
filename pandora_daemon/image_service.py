@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 
+from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.config import CacheConfig
@@ -51,8 +52,15 @@ class ImageService:
             self._cache.put_gallery(detail)
 
         page_idx = page - 1
-        if page_idx < 0 or page_idx >= len(detail.preview_urls):
-            raise ValueError(f"Page {page} out of range (1-{len(detail.preview_urls)})")
+        if page_idx < 0 or page_idx >= detail.pages:
+            raise ValueError(f"Page {page} out of range (1-{detail.pages})")
+
+        # If page is beyond currently loaded preview_urls, fetch the needed preview page
+        if page_idx >= len(detail.preview_urls):
+            await self._load_preview_page(detail, page_idx)
+
+        if page_idx >= len(detail.preview_urls):
+            raise ValueError(f"Could not resolve viewer URL for page {page}")
 
         viewer_url = detail.preview_urls[page_idx]
 
@@ -77,6 +85,23 @@ class ImageService:
         data = resp.content
         await self._cache.put_image(image_url, data)
         return data
+
+    async def _load_preview_page(self, detail, target_page_idx: int) -> None:
+        """Fetch additional gallery preview pages to resolve viewer URLs beyond page 1."""
+        items_per_page = len(detail.preview_urls) if detail.preview_urls else 20
+        if items_per_page == 0:
+            return
+        # Which preview page do we need?
+        needed_preview_page = target_page_idx // items_per_page
+        # Fetch all missing preview pages up to the needed one
+        for p in range(1, needed_preview_page + 1):
+            if len(detail.preview_urls) > target_page_idx:
+                break  # Already have enough
+            page_url = f"{detail.url}?p={p}"
+            html = await self._api.client.get_html(page_url)
+            page_detail = parse_gallery_detail(html, detail.gid, detail.token)
+            detail.preview_urls.extend(page_detail.preview_urls)
+            detail.thumb_urls.extend(page_detail.thumb_urls)
 
     async def prefetch(self, gid: str, token: str, current_page: int, total_pages: int) -> None:
         """Schedule background prefetch for pages around current_page."""

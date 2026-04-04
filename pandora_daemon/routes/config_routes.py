@@ -35,7 +35,8 @@ async def update_config(body: dict, state: AppState = Depends(get_state)):
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket, state: AppState = Depends(get_state)):
+async def websocket_endpoint(ws: WebSocket):
+    state: AppState = ws.app.state.pandora
     await state.ws.connect(ws)
     try:
         while True:
