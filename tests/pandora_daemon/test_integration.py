@@ -58,7 +58,7 @@ def mock_state(tmp_path):
     mock_api.client = mock_client
 
     cache_config = config.cache
-    cache_config.thumb_dir = str(tmp_path / "thumbs")
+    cache_config.image_dir = str(tmp_path / "images")
     cache = CacheManager(cache_config)
     ws = WebSocketManager()
     state_file = tmp_path / "downloads.json"
@@ -148,3 +148,23 @@ class TestIntegrationSearch:
         assert search_params.advsearch is True
         assert search_params.f_sr is True
         assert search_params.f_srdd == 4
+
+
+@pytest.mark.asyncio
+async def test_image_service_and_download_share_cache(tmp_path):
+    """Images cached by ImageService are reused by DownloadManager."""
+    from pandora_daemon.config import CacheConfig
+
+    cache_config = CacheConfig(
+        image_dir=str(tmp_path / "images"),
+        image_max_size_mb=100,
+    )
+    cache = CacheManager(cache_config)
+
+    # Simulate ImageService caching an image
+    url = "https://cdn.example.com/full.jpg"
+    await cache.put_image(url, b"image_bytes")
+
+    # DownloadManager's _fetch_image should find it
+    result = await cache.get_image(url)
+    assert result == b"image_bytes"

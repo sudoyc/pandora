@@ -11,26 +11,16 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+import bs4
 
 from exhentai_api.parsers.image import parse_image_viewer
-
-if TYPE_CHECKING:
-    pass
+from pandora_daemon.cache import _ext_from_url
 
 
 def _sanitize_filename(name: str) -> str:
     """Remove characters that are invalid in file/directory names."""
     return re.sub(r'[\\/*?:"<>|]', "", name)
-
-
-def _ext_from_url(url: str) -> str:
-    """Derive file extension from URL path. Falls back to 'jpg'."""
-    path = url.split("?")[0].split("#")[0]
-    match = re.search(r"\.([a-zA-Z]{3,4})$", path)
-    if match:
-        return match.group(1).lower()
-    return "jpg"
 
 
 @dataclass
@@ -104,7 +94,6 @@ class DownloadManager:
         preview_urls = list(detail.preview_urls)
         thumb_urls = list(detail.thumb_urls)
         if detail.preview_pages > 1:
-            import bs4
             for p in range(1, detail.preview_pages):
                 page_url = f"{detail.url}?p={p}"
                 html = await self._api.client.get_html(page_url)
@@ -228,21 +217,22 @@ class DownloadManager:
         pages_dir = output_dir / "pages"
         pages_dir.mkdir(exist_ok=True)
 
+        # Fetch gallery detail once for metadata and cover
+        detail = await self._api.get_gallery_details(task.gid, task.token)
+
         # 1. Write metadata
         if not task.metadata_saved:
-            detail = await self._api.get_gallery_details(task.gid, task.token)
             self._write_metadata(detail, str(output_dir))
             task.metadata_saved = True
             self._save_state()
 
         # 2. Download cover
         if not task.cover_downloaded:
-            detail = await self._api.get_gallery_details(task.gid, task.token)
             if detail.cover_url:
                 try:
                     cover_data = await self._fetch_image(detail.cover_url)
                     ext = _ext_from_url(detail.cover_url)
-                    (output_dir / f"cover.{ext}").write_bytes(cover_data)
+                    (output_dir / f"cover{ext}").write_bytes(cover_data)
                 except Exception:
                     pass  # Cover failure is non-fatal
             task.cover_downloaded = True
@@ -258,7 +248,7 @@ class DownloadManager:
 
             page_num = idx + 1
             ext = _ext_from_url(thumb_url)
-            dest = thumbs_dir / f"{page_num:04d}.{ext}"
+            dest = thumbs_dir / f"{page_num:04d}{ext}"
             if not dest.exists():
                 try:
                     data = await self._fetch_image(thumb_url)
@@ -296,7 +286,7 @@ class DownloadManager:
 
                 data = await self._fetch_image(image_url)
                 ext = _ext_from_url(image_url)
-                (pages_dir / f"{page_num:04d}.{ext}").write_bytes(data)
+                (pages_dir / f"{page_num:04d}{ext}").write_bytes(data)
             except Exception as exc:
                 task.error = f"Page {page_num}: {exc}"
 
@@ -322,7 +312,9 @@ class DownloadManager:
 
         resp = await self._api.client.session.get(url)
         resp.raise_for_status()
-        return resp.content
+        data = resp.content
+        await self._cache.put_image(url, data)
+        return data
 
     def _save_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)

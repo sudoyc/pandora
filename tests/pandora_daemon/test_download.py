@@ -72,6 +72,7 @@ def mock_ws():
 def mock_cache():
     cache = MagicMock()
     cache.get_image = AsyncMock(return_value=None)
+    cache.put_image = AsyncMock()
     cache.get_gallery = MagicMock(return_value=None)
     cache.put_gallery = MagicMock()
     return cache
