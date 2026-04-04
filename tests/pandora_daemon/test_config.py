@@ -36,9 +36,11 @@ class TestDefaultConfig:
 
     def test_default_cache_config(self):
         cache = CacheConfig()
-        assert cache.thumb_dir == "~/.cache/pandora/thumbs"
-        assert cache.thumb_max_size_mb == 500
+        assert cache.image_dir == "~/.cache/pandora/images"
+        assert cache.image_max_size_mb == 2048
         assert cache.gallery_ttl_seconds == 300
+        assert cache.prefetch_ahead == 3
+        assert cache.prefetch_behind == 1
 
     def test_default_pandora_config(self):
         cfg = PandoraConfig()
@@ -71,8 +73,8 @@ class TestLoadConfig:
             "server": {"host": "0.0.0.0", "port": 9999},
             "download": {"path": "/custom/path", "concurrency": 5},
             "cache": {
-                "thumb_dir": "/custom/cache",
-                "thumb_max_size_mb": 1000,
+                "image_dir": "/custom/cache",
+                "image_max_size_mb": 1000,
                 "gallery_ttl_seconds": 600,
             },
         }
@@ -86,8 +88,8 @@ class TestLoadConfig:
         assert cfg.server.port == 9999
         assert cfg.download.path == "/custom/path"
         assert cfg.download.concurrency == 5
-        assert cfg.cache.thumb_dir == "/custom/cache"
-        assert cfg.cache.thumb_max_size_mb == 1000
+        assert cfg.cache.image_dir == "/custom/cache"
+        assert cfg.cache.image_max_size_mb == 1000
         assert cfg.cache.gallery_ttl_seconds == 600
 
     def test_load_config_partial_toml(self, tmp_path):
@@ -107,7 +109,7 @@ class TestLoadConfig:
         # Entirely missing sections fall back to defaults
         assert cfg.credentials.igneous == ""
         assert cfg.download.path == "~/Downloads/pandora"
-        assert cfg.cache.thumb_max_size_mb == 500
+        assert cfg.cache.image_max_size_mb == 2048
 
 
 class TestSaveConfig:
@@ -120,8 +122,8 @@ class TestSaveConfig:
             server=ServerConfig(host="0.0.0.0", port=1234),
             download=DownloadConfig(path="/dl", concurrency=2),
             cache=CacheConfig(
-                thumb_dir="/cache",
-                thumb_max_size_mb=100,
+                image_dir="/cache",
+                image_max_size_mb=100,
                 gallery_ttl_seconds=60,
             ),
         )
@@ -138,8 +140,8 @@ class TestSaveConfig:
         assert data["server"]["port"] == 1234
         assert data["download"]["path"] == "/dl"
         assert data["download"]["concurrency"] == 2
-        assert data["cache"]["thumb_dir"] == "/cache"
-        assert data["cache"]["thumb_max_size_mb"] == 100
+        assert data["cache"]["image_dir"] == "/cache"
+        assert data["cache"]["image_max_size_mb"] == 100
         assert data["cache"]["gallery_ttl_seconds"] == 60
 
     def test_save_and_reload(self, tmp_path):

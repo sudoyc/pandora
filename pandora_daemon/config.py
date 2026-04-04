@@ -43,9 +43,11 @@ class DownloadConfig:
 class CacheConfig:
     """Cache settings."""
 
-    thumb_dir: str = "~/.cache/pandora/thumbs"
-    thumb_max_size_mb: int = 500
+    image_dir: str = "~/.cache/pandora/images"
+    image_max_size_mb: int = 2048
     gallery_ttl_seconds: int = 300
+    prefetch_ahead: int = 3
+    prefetch_behind: int = 1
 
 
 @dataclass
@@ -80,9 +82,11 @@ class PandoraConfig:
                 "concurrency": self.download.concurrency,
             },
             "cache": {
-                "thumb_dir": self.cache.thumb_dir,
-                "thumb_max_size_mb": self.cache.thumb_max_size_mb,
+                "image_dir": self.cache.image_dir,
+                "image_max_size_mb": self.cache.image_max_size_mb,
                 "gallery_ttl_seconds": self.cache.gallery_ttl_seconds,
+                "prefetch_ahead": self.cache.prefetch_ahead,
+                "prefetch_behind": self.cache.prefetch_behind,
             },
         }
 
@@ -133,9 +137,11 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
 
     cache_data = data.get("cache", {})
     cache = CacheConfig(
-        thumb_dir=cache_data.get("thumb_dir", "~/.cache/pandora/thumbs"),
-        thumb_max_size_mb=cache_data.get("thumb_max_size_mb", 500),
+        image_dir=cache_data.get("image_dir", "~/.cache/pandora/images"),
+        image_max_size_mb=cache_data.get("image_max_size_mb", 2048),
         gallery_ttl_seconds=cache_data.get("gallery_ttl_seconds", 300),
+        prefetch_ahead=cache_data.get("prefetch_ahead", 3),
+        prefetch_behind=cache_data.get("prefetch_behind", 1),
     )
 
     return PandoraConfig(
