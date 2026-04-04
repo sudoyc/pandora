@@ -93,16 +93,40 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
 
     thumb_urls = []
     for gdt in soup.find_all(class_=["gdtm", "gdtl"]):
+        classes = gdt.get("class") or []
+        # gdtm: thumbnail is CSS background-image on inner div (not the blank.gif spacer)
+        if "gdtm" in classes:
+            inner_div = gdt.find("div")
+            if inner_div:
+                style = inner_div.get("style", "")
+                bg_match = re.search(r"url\((.+?)\)", style)
+                if bg_match:
+                    thumb_urls.append(bg_match.group(1))
+                    continue
+        # gdtl: thumbnail is direct <img src="..."> (not blank.gif)
         a_tag = gdt.find("a")
         if a_tag:
             img_tag = a_tag.find("img")
-            if img_tag and img_tag.get("src"):
-                thumb_urls.append(img_tag.get("src"))
-            elif "gdtm" in (gdt.get("class") or []):
-                inner_div = gdt.find("div")
-                if inner_div:
-                    style = inner_div.get("style", "")
-                    bg_match = re.search(r"url\((.+?)\)", style)
+            if img_tag:
+                src = img_tag.get("src") or img_tag.get("data-src") or ""
+                if src and "blank.gif" not in src and "placeholder" not in src:
+                    thumb_urls.append(src)
+    # Fallback: extract from #gdt container if no thumb_urls found
+    if not thumb_urls:
+        gdt_elem = soup.find(id="gdt")
+        if gdt_elem:
+            for a_tag in gdt_elem.find_all("a"):
+                if not a_tag.get("href") or "/s/" not in a_tag.get("href", ""):
+                    continue
+                img_tag = a_tag.find("img")
+                if img_tag:
+                    src = img_tag.get("src") or img_tag.get("data-src") or ""
+                    if src and "blank.gif" not in src and "placeholder" not in src:
+                        thumb_urls.append(src)
+            # Still empty? Try CSS background-image on any div inside #gdt
+            if not thumb_urls:
+                for div in gdt_elem.find_all("div", style=True):
+                    bg_match = re.search(r"url\((.+?)\)", div.get("style", ""))
                     if bg_match:
                         thumb_urls.append(bg_match.group(1))
 
