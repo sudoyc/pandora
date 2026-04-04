@@ -1,0 +1,21 @@
+from fastapi import Request, Depends
+from pandora_daemon.state import AppState
+from exhentai_api.api import ExhentaiAPI
+from pandora_daemon.download import DownloadManager
+from pandora_daemon.cache import CacheManager
+from pandora_daemon.ws import WebSocketManager
+
+def get_state(request: Request) -> AppState:
+    return request.app.state.pandora
+
+def get_api(state: AppState = Depends(get_state)) -> ExhentaiAPI:
+    return state.api
+
+def get_downloads(state: AppState = Depends(get_state)) -> DownloadManager:
+    return state.downloads
+
+def get_cache(state: AppState = Depends(get_state)) -> CacheManager:
+    return state.cache
+
+def get_ws(state: AppState = Depends(get_state)) -> WebSocketManager:
+    return state.ws
