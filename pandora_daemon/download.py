@@ -79,7 +79,7 @@ class DownloadManager:
         for worker in self._workers:
             worker.cancel()
         # Await cancellation without raising
-        results = await asyncio.gather(*self._workers, return_exceptions=True)
+        await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
         self._save_state()
 
