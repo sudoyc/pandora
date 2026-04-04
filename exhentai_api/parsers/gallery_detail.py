@@ -100,7 +100,7 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
             inner_div = gdt.find("div")
             if inner_div:
                 style = inner_div.get("style", "")
-                bg_match = re.search(r"url\((.+?)\)", style)
+                bg_match = re.search(r"url\(([^)]+)\)", style)
                 if bg_match:
                     sprite_url = bg_match.group(1)
                     thumb_urls.append(sprite_url)
@@ -124,13 +124,34 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
                 if src and "blank.gif" not in src and "placeholder" not in src:
                     thumb_urls.append(src)
                     thumb_sprites.append(ThumbSprite(url=src, offset_x=0, offset_y=0, width=0, height=0))
-    # Fallback: extract from #gdt container
+    # Fallback: extract from #gdt container (no gdtm/gdtl wrappers)
+    # Structure: <div id="gdt"><a href="/s/..."><div style="background:url(...)"></div></a>...</div>
     if not thumb_urls:
         gdt_elem = soup.find(id="gdt")
         if gdt_elem:
             for a_tag in gdt_elem.find_all("a"):
                 if not a_tag.get("href") or "/s/" not in a_tag.get("href", ""):
                     continue
+                # Check for CSS background sprite in child div
+                inner_div = a_tag.find("div", style=True)
+                if inner_div:
+                    style = inner_div.get("style", "")
+                    bg_match = re.search(r"url\(([^)]+)\)", style)
+                    if bg_match:
+                        sprite_url = bg_match.group(1).strip("'\"")
+                        thumb_urls.append(sprite_url)
+                        w_match = re.search(r"width\s*:\s*(\d+)px", style)
+                        h_match = re.search(r"height\s*:\s*(\d+)px", style)
+                        w = int(w_match.group(1)) if w_match else 100
+                        h = int(h_match.group(1)) if h_match else 144
+                        # Parse offset after the URL in background shorthand
+                        after_url = style.split(")", 1)[-1] if ")" in style else ""
+                        pos_match = re.search(r"(-?\d+)px\s+(-?\d+)", after_url)
+                        ox = abs(int(pos_match.group(1))) if pos_match else 0
+                        oy = abs(int(pos_match.group(2))) if pos_match else 0
+                        thumb_sprites.append(ThumbSprite(url=sprite_url, offset_x=ox, offset_y=oy, width=w, height=h))
+                        continue
+                # Check for direct <img> (non-blank)
                 img_tag = a_tag.find("img")
                 if img_tag:
                     src = img_tag.get("src") or img_tag.get("data-src") or ""
