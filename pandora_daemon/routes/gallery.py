@@ -203,7 +203,16 @@ async def get_page_image(gid: str, token: str, page: int, image_service=Depends(
         data = await image_service.get_page_image(gid, token, page)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return Response(content=data, media_type="image/jpeg")
+    # Detect media type from magic bytes
+    if data[:4] == b"\x89PNG":
+        media_type = "image/png"
+    elif data[:4] == b"GIF8":
+        media_type = "image/gif"
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        media_type = "image/webp"
+    else:
+        media_type = "image/jpeg"
+    return Response(content=data, media_type=media_type)
 
 
 @router.post("/{gid}/{token}/prefetch")
