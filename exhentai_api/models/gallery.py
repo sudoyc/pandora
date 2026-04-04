@@ -37,6 +37,18 @@ class GalleryDetail:
     favorite_slot: Optional[int]
     preview_pages: int = 1
     preview_urls: List[str] = field(default_factory=list)
+    rating: float = 0.0
+    rating_count: int = 0
+    favorite_count: int = 0
+    torrent_count: int = 0
+    torrent_url: str = ""
+    archive_url: str = ""
+    parent_url: Optional[str] = None
+    newer_versions: List[dict] = field(default_factory=list)
+    comments: list = field(default_factory=list)
+    comments_has_more: bool = False
+    api_uid: str = ""
+    api_key: str = ""
 
     @property
     def url(self) -> str:
