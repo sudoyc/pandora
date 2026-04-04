@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Response
 
 from exhentai_api.models.search import SearchParams
-from pandora_daemon.dependencies import get_api, get_cache
+from pandora_daemon.dependencies import get_api, get_image_service
 
 router = APIRouter(prefix="/api", tags=["browse"])
 
@@ -90,13 +90,17 @@ async def get_watched(page: int = 0, api=Depends(get_api)):
     return [_gallery_item_to_dict(item) for item in items]
 
 
-@router.get("/thumb")
-async def thumb_proxy(url: str, api=Depends(get_api), cache=Depends(get_cache)):
-    """Proxy a thumbnail URL through the local cache."""
-    data = await cache.get_thumb(url)
-    if data is None:
-        resp = await api.client.session.get(url)
-        resp.raise_for_status()
-        data = resp.content
-        await cache.put_thumb(url, data)
-    return Response(content=data, media_type="image/jpeg")
+@router.get("/image/proxy")
+async def image_proxy(url: str, image_service=Depends(get_image_service)):
+    """Proxy any image URL through the local cache."""
+    data = await image_service.proxy_image(url)
+    lower_url = url.lower()
+    if lower_url.endswith(".png"):
+        media_type = "image/png"
+    elif lower_url.endswith(".gif"):
+        media_type = "image/gif"
+    elif lower_url.endswith(".webp"):
+        media_type = "image/webp"
+    else:
+        media_type = "image/jpeg"
+    return Response(content=data, media_type=media_type)

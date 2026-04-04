@@ -43,12 +43,13 @@ def _make_gallery_item(
     return item
 
 
-def _make_app(mock_api, mock_cache=None):
+def _make_app(mock_api, mock_cache=None, mock_image_service=None):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
     state.api = mock_api
     state.cache = mock_cache or MagicMock()
+    state.image_service = mock_image_service or MagicMock()
     app.state.pandora = state
     return app
 
@@ -233,46 +234,28 @@ class TestWatched:
         mock_api.get_watched.assert_called_once_with(page=0)
 
 
-class TestThumbProxy:
-    def test_thumb_proxy_cached(self):
-        """When cache has the thumb, return it without fetching."""
+class TestImageProxy:
+    def test_image_proxy_cached(self):
+        """When cache has the image, return it without fetching."""
         mock_api = MagicMock()
-        mock_cache = MagicMock()
-        mock_cache.get_thumb = AsyncMock(return_value=b"\xff\xd8\xff\xe0fake_jpeg")
+        mock_image_service = MagicMock()
+        mock_image_service.proxy_image = AsyncMock(return_value=b"\xff\xd8\xff\xe0cached")
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_api, mock_image_service=mock_image_service)
         client = TestClient(app)
 
-        response = client.get("/api/thumb?url=https://example.com/thumb.jpg")
+        response = client.get("/api/image/proxy?url=https://example.com/img.jpg")
 
         assert response.status_code == 200
-        assert response.content == b"\xff\xd8\xff\xe0fake_jpeg"
-        mock_cache.get_thumb.assert_called_once_with("https://example.com/thumb.jpg")
-        # Should NOT call put_thumb or session.get when cache hit
-        mock_cache.put_thumb.assert_not_called()
+        assert response.content == b"\xff\xd8\xff\xe0cached"
+        mock_image_service.proxy_image.assert_awaited_once_with("https://example.com/img.jpg")
 
-    def test_thumb_proxy_fetches_on_miss(self):
-        """When cache misses, fetch from remote, cache it, and return bytes."""
+    def test_image_proxy_missing_url(self):
+        """Request without url parameter returns 422."""
         mock_api = MagicMock()
-        mock_cache = MagicMock()
-        mock_cache.get_thumb = AsyncMock(return_value=None)
-        mock_cache.put_thumb = AsyncMock(return_value=None)
-
-        # Mock the HTTP response from api.client.session.get
-        fake_response = MagicMock()
-        fake_response.raise_for_status = MagicMock()
-        fake_response.content = b"\xff\xd8\xff\xe0fetched_jpeg"
-        mock_api.client.session.get = AsyncMock(return_value=fake_response)
-
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_api)
         client = TestClient(app)
 
-        url = "https://example.com/missing.jpg"
-        response = client.get(f"/api/thumb?url={url}")
+        response = client.get("/api/image/proxy")
 
-        assert response.status_code == 200
-        assert response.content == b"\xff\xd8\xff\xe0fetched_jpeg"
-
-        mock_cache.get_thumb.assert_called_once_with(url)
-        mock_api.client.session.get.assert_called_once_with(url)
-        mock_cache.put_thumb.assert_called_once_with(url, b"\xff\xd8\xff\xe0fetched_jpeg")
+        assert response.status_code == 422
