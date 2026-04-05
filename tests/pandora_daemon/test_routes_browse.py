@@ -171,7 +171,7 @@ class TestToplist:
         toplist_item = MagicMock()
         toplist_item.type = "Doujinshi"
         toplist_item.name = "Test Doujin"
-        toplist_item.link = "https://exhentai.org/g/999/zzz/"
+        toplist_item.link = "https://exhentai.org/g/999/aabbccddee/"
 
         mock_api.get_toplist = AsyncMock(return_value=[toplist_item])
 
@@ -183,28 +183,26 @@ class TestToplist:
         assert response.status_code == 200
         mock_api.get_toplist.assert_called_once_with("15")
 
-    def test_toplist_returns_correct_fields(self):
-        mock_api = MagicMock()
-
-        toplist_item = MagicMock()
-        toplist_item.type = "Manga"
-        toplist_item.name = "Some Manga"
-        toplist_item.link = "https://exhentai.org/g/777/xxx/"
-
-        mock_api.get_toplist = AsyncMock(return_value=[toplist_item])
-
+    def test_toplist_returns_gallery_item_format(self):
+        mock_api = AsyncMock()
+        from exhentai_api.models.toplist import TopListItem
+        mock_api.get_toplist.return_value = [
+            TopListItem(type="All-Time", name="Gallery A", link="https://exhentai.org/g/111/aaa1111111/"),
+            TopListItem(type="All-Time", name="Gallery B", link="https://exhentai.org/g/222/bbb2222222/"),
+        ]
         app = _make_app(mock_api)
         client = TestClient(app)
 
-        response = client.get("/api/toplist?tl=11")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 1
-        assert data[0]["type"] == "Manga"
-        assert data[0]["name"] == "Some Manga"
-        assert data[0]["link"] == "https://exhentai.org/g/777/xxx/"
-        mock_api.get_toplist.assert_called_once_with("11")
+        resp = client.get("/api/toplist?tl=15")
+        data = resp.json()
+        assert len(data) == 2
+        assert data[0]["gid"] == "111"
+        assert data[0]["token"] == "aaa1111111"
+        assert data[0]["title"] == "Gallery A"
+        assert "category" in data[0]
+        assert "thumb_url" in data[0]
+        assert "url" in data[0]
+        assert data[1]["gid"] == "222"
 
 
 class TestWatched:

@@ -5,6 +5,7 @@ toplist, watched galleries, and thumbnail proxy.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Response
@@ -38,6 +39,30 @@ def _toplist_item_to_dict(item) -> dict:
         "type": item.type,
         "name": item.name,
         "link": item.link,
+    }
+
+
+def _toplist_to_gallery_item(item) -> dict | None:
+    """Convert TopListItem to GalleryItem-compatible dict by parsing link URL."""
+    match = re.search(r"/g/(\d+)/([0-9a-f]+)", item.link)
+    if not match:
+        return None
+    gid = match.group(1)
+    token = match.group(2)
+    return {
+        "gid": gid,
+        "token": token,
+        "title": item.name,
+        "category": "",
+        "uploader": "",
+        "thumb_url": "",
+        "posted": "",
+        "rating": 0.0,
+        "pages": 0,
+        "rated": False,
+        "thumb_width": 0,
+        "thumb_height": 0,
+        "url": item.link,
     }
 
 
@@ -78,9 +103,14 @@ async def get_popular(api=Depends(get_api)):
 
 @router.get("/toplist")
 async def get_toplist(tl: str = "15", api=Depends(get_api)):
-    """Return toplist entries for the given toplist type."""
+    """Return toplist entries as GalleryItem-compatible dicts."""
     items = await api.get_toplist(tl)
-    return [_toplist_item_to_dict(item) for item in items]
+    result = []
+    for item in items:
+        converted = _toplist_to_gallery_item(item)
+        if converted:
+            result.append(converted)
+    return result
 
 
 @router.get("/watched")
