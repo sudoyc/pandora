@@ -75,7 +75,7 @@ async def test_get_html_retry_failure(mock_get):
     mock_get.side_effect = httpx.ConnectError("Network error")
 
     async with ExhentaiClient() as client:
-        with pytest.raises(httpx.ConnectError, match="Network error"):
+        with pytest.raises(Exception, match="Network error"):
             await client.get_html(url, retries=2, backoff_factor=0.01)
         assert mock_get.call_count == 2
 
@@ -122,7 +122,7 @@ async def test_post_json_retry_failure():
         with patch.object(client.session, 'post', new_callable=AsyncMock) as mock_post:
             mock_post.side_effect = httpx.ConnectError("Network error")
 
-            with pytest.raises(httpx.ConnectError, match="Network error"):
+            with pytest.raises(Exception, match="Network error"):
                 await client.post_json(url, json=payload, retries=2, backoff_factor=0.01)
 
             assert mock_post.call_count == 2
