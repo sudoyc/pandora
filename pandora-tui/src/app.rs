@@ -8,6 +8,7 @@ use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc;
 use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
 
 use crate::client::DaemonClient;
 use crate::event::AppEvent;
@@ -78,6 +79,8 @@ pub struct App {
     pub suggest_pending: bool,
 
     pub preload_semaphore: Arc<Semaphore>,
+    pub page_load_cancel: CancellationToken,
+    pub preload_cancel: CancellationToken,
 
     pub client: DaemonClient,
     pub tx: mpsc::UnboundedSender<AppEvent>,
@@ -109,6 +112,8 @@ impl App {
             pending_pages: std::collections::HashSet::new(),
             suggest_pending: false,
             preload_semaphore: Arc::new(Semaphore::new(3)),
+            page_load_cancel: CancellationToken::new(),
+            preload_cancel: CancellationToken::new(),
             client,
             tx,
         }
