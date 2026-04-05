@@ -62,6 +62,7 @@ pub struct App {
     pub image_states: HashMap<String, StatefulProtocol>,
     pub page_image_state: Option<StatefulProtocol>,
     pub failed_images: std::collections::HashSet<String>,
+    pub pending_images: std::collections::HashSet<String>,
 
     pub client: DaemonClient,
     pub tx: mpsc::UnboundedSender<AppEvent>,
@@ -87,6 +88,7 @@ impl App {
             image_states: HashMap::new(),
             page_image_state: None,
             failed_images: std::collections::HashSet::new(),
+            pending_images: std::collections::HashSet::new(),
             client,
             tx,
         }
@@ -181,9 +183,13 @@ impl App {
     }
 
     pub fn request_thumbnail(&mut self, url: String) {
-        if self.image_cache.contains(&url) || self.failed_images.contains(&url) {
+        if self.image_cache.contains(&url)
+            || self.failed_images.contains(&url)
+            || self.pending_images.contains(&url)
+        {
             return;
         }
+        self.pending_images.insert(url.clone());
         let tx = self.tx.clone();
         let client = self.client.clone();
         tokio::spawn(async move {
@@ -210,9 +216,13 @@ impl App {
     /// Uses "thumb:{gid}:{page}" as cache key.
     pub fn request_gallery_thumb(&mut self, gid: String, token: String, page: u32) {
         let cache_key = format!("thumb:{}:{}", gid, page);
-        if self.image_cache.contains(&cache_key) || self.failed_images.contains(&cache_key) {
+        if self.image_cache.contains(&cache_key)
+            || self.failed_images.contains(&cache_key)
+            || self.pending_images.contains(&cache_key)
+        {
             return;
         }
+        self.pending_images.insert(cache_key.clone());
         let tx = self.tx.clone();
         let client = self.client.clone();
         tokio::spawn(async move {

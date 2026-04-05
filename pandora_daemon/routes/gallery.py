@@ -244,7 +244,10 @@ async def get_thumb_image(
 
     # Load additional preview pages if we don't have enough sprites/thumbs
     if page_idx >= len(detail.thumb_sprites) and page_idx >= len(detail.thumb_urls):
-        await image_service._load_preview_page(detail, page_idx)
+        try:
+            await image_service._load_preview_page(detail, page_idx)
+        except Exception:
+            raise HTTPException(status_code=502, detail=f"Failed to load preview page for thumb {page}")
 
     # Try sprite-based cropping first
     if page_idx < len(detail.thumb_sprites):

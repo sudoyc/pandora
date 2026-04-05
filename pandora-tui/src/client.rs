@@ -9,8 +9,12 @@ pub struct DaemonClient {
 
 impl DaemonClient {
     pub fn new(base_url: &str) -> Self {
+        let http = Client::builder()
+            .pool_max_idle_per_host(10)
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
-            http: Client::new(),
+            http,
             base_url: base_url.trim_end_matches('/').to_string(),
         }
     }

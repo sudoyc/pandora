@@ -500,6 +500,7 @@ fn switch_page_source(app: &mut App, source: PageSource) {
     app.page_source = source;
     app.gallery_list.clear();
     app.failed_images.clear();
+    app.pending_images.clear();
     app.load_current_page();
 }
 
@@ -535,6 +536,7 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             app.search.suggestions.clear();
         }
         AppEvent::ThumbnailLoaded { url, image } => {
+            app.pending_images.remove(&url);
             app.image_states.remove(&url);
             app.image_cache.put(url, image);
         }
@@ -556,6 +558,7 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             }
         }
         AppEvent::ImageError { url, error } => {
+            app.pending_images.remove(&url);
             app.failed_images.insert(url.clone());
             if url.starts_with("page:") {
                 app.reader.loading = false;
