@@ -153,3 +153,23 @@ async def test_post_form():
             result = await client.post_form("https://ex.org/api", data={"favcat": "1"})
             mock_post.assert_called_once_with("https://ex.org/api", data={"favcat": "1"})
             assert result == "Form OK"
+
+
+@pytest.mark.asyncio
+async def test_client_default_timeout():
+    client = ExhentaiClient()
+    assert client.session.timeout.connect == 30.0
+    await client.aclose()
+
+@pytest.mark.asyncio
+async def test_client_custom_timeout():
+    client = ExhentaiClient(timeout=60)
+    assert client.session.timeout.connect == 60.0
+    await client.aclose()
+
+@pytest.mark.asyncio
+async def test_client_no_proxy_by_default():
+    client = ExhentaiClient()
+    # httpx stores proxy as _transport_for_url mapping; no proxy means default transport
+    assert client.session._mounts == {}  # no custom mounts when no proxy
+    await client.aclose()

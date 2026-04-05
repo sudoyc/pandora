@@ -17,7 +17,8 @@ _NO_RETRY = (AuthenticationError, ImageLimitError, GalleryNotFoundError, Gallery
 
 
 class ExhentaiClient:
-    def __init__(self, igneous: str = "", ipb_member_id: str = ""):
+    def __init__(self, igneous: str = "", ipb_member_id: str = "",
+                 proxy: str = "", timeout: int = 30):
         self.cookies = {}
         if igneous:
             self.cookies["igneous"] = igneous
@@ -30,12 +31,15 @@ class ExhentaiClient:
             "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
         }
 
-        self.session = httpx.AsyncClient(
-            cookies=self.cookies,
-            headers=self.headers,
-            timeout=30.0,
-            follow_redirects=True
-        )
+        client_kwargs: dict = {
+            "cookies": self.cookies,
+            "headers": self.headers,
+            "timeout": float(timeout),
+            "follow_redirects": True,
+        }
+        if proxy:
+            client_kwargs["proxy"] = proxy
+        self.session = httpx.AsyncClient(**client_kwargs)
 
     async def aclose(self):
         await self.session.aclose()

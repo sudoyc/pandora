@@ -9,6 +9,7 @@ from pandora_daemon.config import (
     CacheConfig,
     CredentialsConfig,
     DownloadConfig,
+    NetworkConfig,
     PandoraConfig,
     ServerConfig,
     load_config,
@@ -240,3 +241,56 @@ class TestToPublicDict:
         assert "max_retry" in dl
         assert "retry_base_delay" in dl
         assert "concurrency" not in dl
+
+
+class TestNetworkConfig:
+    def test_default_network_config(self):
+        net = NetworkConfig()
+        assert net.proxy == ""
+        assert net.timeout == 30
+
+    def test_pandora_config_has_network(self):
+        cfg = PandoraConfig()
+        assert isinstance(cfg.network, NetworkConfig)
+
+    def test_pandora_config_network_none_gets_default(self):
+        cfg = PandoraConfig(network=None)
+        assert isinstance(cfg.network, NetworkConfig)
+
+
+class TestLoadConfigNetwork:
+    def test_load_config_with_network_section(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        import tomli_w
+        data = {
+            "credentials": {"igneous": "", "ipb_member_id": ""},
+            "server": {"host": "127.0.0.1", "port": 7860},
+            "download": {"path": "~/Downloads/pandora", "gallery_concurrency": 2, "page_concurrency": 4, "max_retry": 3, "retry_base_delay": 2.0},
+            "cache": {"image_dir": "~/.cache/pandora/images", "image_max_size_mb": 2048, "gallery_ttl_seconds": 300, "prefetch_ahead": 3, "prefetch_behind": 1, "eviction_interval_seconds": 600},
+            "network": {"proxy": "socks5://127.0.0.1:1080", "timeout": 60},
+        }
+        config_path.write_bytes(tomli_w.dumps(data).encode())
+        cfg = load_config(config_path)
+        assert cfg.network.proxy == "socks5://127.0.0.1:1080"
+        assert cfg.network.timeout == 60
+
+    def test_load_config_without_network_section(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        import tomli_w
+        data = {
+            "credentials": {"igneous": "", "ipb_member_id": ""},
+            "server": {"host": "127.0.0.1", "port": 7860},
+            "download": {"path": "~/Downloads/pandora", "gallery_concurrency": 2, "page_concurrency": 4, "max_retry": 3, "retry_base_delay": 2.0},
+            "cache": {"image_dir": "~/.cache/pandora/images", "image_max_size_mb": 2048, "gallery_ttl_seconds": 300, "prefetch_ahead": 3, "prefetch_behind": 1, "eviction_interval_seconds": 600},
+        }
+        config_path.write_bytes(tomli_w.dumps(data).encode())
+        cfg = load_config(config_path)
+        assert cfg.network.proxy == ""
+        assert cfg.network.timeout == 30
+
+    def test_to_public_dict_includes_network(self):
+        cfg = PandoraConfig(network=NetworkConfig(proxy="http://proxy:8080", timeout=45))
+        d = cfg.to_public_dict()
+        assert "network" in d
+        assert d["network"]["proxy"] == "http://proxy:8080"
+        assert d["network"]["timeout"] == 45

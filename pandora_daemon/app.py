@@ -48,6 +48,8 @@ async def _build_state() -> AppState:
     client = ExhentaiClient(
         igneous=config.credentials.igneous,
         ipb_member_id=config.credentials.ipb_member_id,
+        proxy=config.network.proxy,
+        timeout=config.network.timeout,
     )
     api = ExhentaiAPI(client=client)
     cache = CacheManager(config.cache)

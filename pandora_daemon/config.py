@@ -55,6 +55,14 @@ class CacheConfig:
 
 
 @dataclass
+class NetworkConfig:
+    """Network settings (proxy, timeout)."""
+
+    proxy: str = ""
+    timeout: int = 30
+
+
+@dataclass
 class PandoraConfig:
     """Top-level pandora daemon configuration."""
 
@@ -62,6 +70,7 @@ class PandoraConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     download: DownloadConfig = field(default_factory=DownloadConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
+    network: NetworkConfig = field(default_factory=NetworkConfig)
 
     def __post_init__(self) -> None:
         # Allow callers to pass None for sub-configs; replace with defaults.
@@ -73,6 +82,8 @@ class PandoraConfig:
             self.download = DownloadConfig()
         if self.cache is None:
             self.cache = CacheConfig()
+        if self.network is None:
+            self.network = NetworkConfig()
 
     def to_public_dict(self) -> dict[str, Any]:
         """Return config as a dict with credentials stripped out."""
@@ -95,6 +106,10 @@ class PandoraConfig:
                 "prefetch_ahead": self.cache.prefetch_ahead,
                 "prefetch_behind": self.cache.prefetch_behind,
                 "eviction_interval_seconds": self.cache.eviction_interval_seconds,
+            },
+            "network": {
+                "proxy": self.network.proxy,
+                "timeout": self.network.timeout,
             },
         }
 
@@ -158,11 +173,18 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
         eviction_interval_seconds=cache_data.get("eviction_interval_seconds", 600),
     )
 
+    net_data = data.get("network", {})
+    network = NetworkConfig(
+        proxy=net_data.get("proxy", ""),
+        timeout=net_data.get("timeout", 30),
+    )
+
     return PandoraConfig(
         credentials=credentials,
         server=server,
         download=download,
         cache=cache,
+        network=network,
     )
 
 

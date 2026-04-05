@@ -44,6 +44,44 @@ class TestBuildState:
             mock_db.initialize.assert_awaited_once()
             mock_tag.download_and_load.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_build_state_passes_network_config(self):
+        """_build_state passes proxy and timeout from config to ExhentaiClient."""
+        with (
+            patch("pandora_daemon.app.load_config") as mock_load,
+            patch("pandora_daemon.app.PandoraDB") as mock_db_cls,
+            patch("pandora_daemon.app.ExhentaiClient") as mock_client_cls,
+            patch("pandora_daemon.app.ExhentaiAPI") as mock_api_cls,
+            patch("pandora_daemon.app.CacheManager") as mock_cache_cls,
+            patch("pandora_daemon.app.ImageService") as mock_img_cls,
+            patch("pandora_daemon.app.WebSocketManager") as mock_ws_cls,
+            patch("pandora_daemon.app.TagDatabase") as mock_tag_cls,
+            patch("pandora_daemon.app.DownloadManager") as mock_dl_cls,
+        ):
+            mock_config = MagicMock()
+            mock_config.credentials.igneous = "test"
+            mock_config.credentials.ipb_member_id = "test"
+            mock_config.network.proxy = "socks5://127.0.0.1:1080"
+            mock_config.network.timeout = 60
+            mock_load.return_value = mock_config
+
+            mock_db = AsyncMock()
+            mock_db.initialize = AsyncMock()
+            mock_db_cls.return_value = mock_db
+
+            mock_tag = MagicMock()
+            mock_tag.download_and_load = AsyncMock()
+            mock_tag_cls.return_value = mock_tag
+
+            await _build_state()
+
+            mock_client_cls.assert_called_once_with(
+                igneous="test",
+                ipb_member_id="test",
+                proxy="socks5://127.0.0.1:1080",
+                timeout=60,
+            )
+
 
 class TestLifespan:
     @pytest.mark.asyncio
