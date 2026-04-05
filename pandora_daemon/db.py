@@ -25,7 +25,7 @@ SCHEMA_VERSION = 1
 
 _MIGRATIONS: dict[int, list[str]] = {
     0: [
-        """CREATE TABLE history (
+        """CREATE TABLE IF NOT EXISTS history (
             gid        TEXT PRIMARY KEY,
             token      TEXT NOT NULL,
             title      TEXT NOT NULL,
@@ -39,8 +39,8 @@ _MIGRATIONS: dict[int, list[str]] = {
             read_page  INTEGER NOT NULL DEFAULT 0,
             time       INTEGER NOT NULL
         )""",
-        "CREATE INDEX idx_history_time ON history(time DESC)",
-        """CREATE TABLE local_favorites (
+        "CREATE INDEX IF NOT EXISTS idx_history_time ON history(time DESC)",
+        """CREATE TABLE IF NOT EXISTS local_favorites (
             gid        TEXT PRIMARY KEY,
             token      TEXT NOT NULL,
             title      TEXT NOT NULL,
@@ -53,8 +53,8 @@ _MIGRATIONS: dict[int, list[str]] = {
             pages      INTEGER NOT NULL DEFAULT 0,
             time       INTEGER NOT NULL
         )""",
-        "CREATE INDEX idx_local_fav_time ON local_favorites(time DESC)",
-        """CREATE TABLE bookmarks (
+        "CREATE INDEX IF NOT EXISTS idx_local_fav_time ON local_favorites(time DESC)",
+        """CREATE TABLE IF NOT EXISTS bookmarks (
             gid        TEXT PRIMARY KEY,
             token      TEXT NOT NULL,
             title      TEXT NOT NULL,
@@ -63,8 +63,8 @@ _MIGRATIONS: dict[int, list[str]] = {
             total      INTEGER NOT NULL DEFAULT 0,
             time       INTEGER NOT NULL
         )""",
-        "CREATE INDEX idx_bookmarks_time ON bookmarks(time DESC)",
-        """CREATE TABLE quick_search (
+        "CREATE INDEX IF NOT EXISTS idx_bookmarks_time ON bookmarks(time DESC)",
+        """CREATE TABLE IF NOT EXISTS quick_search (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             name       TEXT NOT NULL,
             keyword    TEXT NOT NULL DEFAULT '',
@@ -74,13 +74,13 @@ _MIGRATIONS: dict[int, list[str]] = {
             page_to    INTEGER,
             time       INTEGER NOT NULL
         )""",
-        """CREATE TABLE filter (
+        """CREATE TABLE IF NOT EXISTS filter (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             mode       INTEGER NOT NULL,
             text       TEXT NOT NULL,
             enabled    INTEGER NOT NULL DEFAULT 1
         )""",
-        """CREATE TABLE gallery_tags_cache (
+        """CREATE TABLE IF NOT EXISTS gallery_tags_cache (
             gid         TEXT PRIMARY KEY,
             tags_json   TEXT NOT NULL,
             created_at  INTEGER NOT NULL,
@@ -107,6 +107,7 @@ class PandoraDB:
         """Open connection and run migrations."""
         self._db = await aiosqlite.connect(str(self._db_path))
         self._db.row_factory = aiosqlite.Row
+        await self._db.execute("PRAGMA journal_mode=WAL")
         async with self._db.execute("PRAGMA user_version") as cur:
             row = await cur.fetchone()
         current_version = row[0]
@@ -122,10 +123,15 @@ class PandoraDB:
 
     async def _migrate(self, current_version: int) -> None:
         for version in range(current_version, SCHEMA_VERSION):
-            for sql in _MIGRATIONS[version]:
-                await self._db.execute(sql)
-        await self._db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        await self._db.commit()
+            await self._db.execute("BEGIN")
+            try:
+                for sql in _MIGRATIONS[version]:
+                    await self._db.execute(sql)
+                await self._db.execute(f"PRAGMA user_version = {version + 1}")
+                await self._db.execute("COMMIT")
+            except Exception:
+                await self._db.execute("ROLLBACK")
+                raise
 
     # ── history ───────────────────────────────────────────────────────────────
 
@@ -271,8 +277,8 @@ class PandoraDB:
             rows = await cur.fetchall()
         return [_row_to_dict(r) for r in rows]
 
-    async def delete_quick_search(self, id: int) -> None:
-        await self._db.execute("DELETE FROM quick_search WHERE id = ?", (id,))
+    async def delete_quick_search(self, search_id: int) -> None:
+        await self._db.execute("DELETE FROM quick_search WHERE id = ?", (search_id,))
         await self._db.commit()
 
     # ── filter ────────────────────────────────────────────────────────────────
@@ -287,18 +293,18 @@ class PandoraDB:
         return row_id
 
     async def get_filters(self) -> list[dict]:
-        async with self._db.execute("SELECT * FROM filter") as cur:
+        async with self._db.execute("SELECT * FROM filter ORDER BY id") as cur:
             rows = await cur.fetchall()
         return [_row_to_dict(r) for r in rows]
 
-    async def toggle_filter(self, id: int) -> None:
+    async def toggle_filter(self, filter_id: int) -> None:
         await self._db.execute(
-            "UPDATE filter SET enabled = 1 - enabled WHERE id = ?", (id,)
+            "UPDATE filter SET enabled = 1 - enabled WHERE id = ?", (filter_id,)
         )
         await self._db.commit()
 
-    async def delete_filter(self, id: int) -> None:
-        await self._db.execute("DELETE FROM filter WHERE id = ?", (id,))
+    async def delete_filter(self, filter_id: int) -> None:
+        await self._db.execute("DELETE FROM filter WHERE id = ?", (filter_id,))
         await self._db.commit()
 
     async def apply_filters(self, galleries: list[dict]) -> list[dict]:
@@ -307,6 +313,20 @@ class PandoraDB:
         enabled = [f for f in filters if f["enabled"]]
         if not enabled:
             return galleries
+
+        # Check whether any tag filters are present to decide if we need a batch fetch
+        needs_tags = any(f["mode"] in (FILTER_TAG, FILTER_TAG_NAMESPACE) for f in enabled)
+        tags_by_gid: dict[str, dict] = {}
+        if needs_tags and galleries:
+            gids = [g.get("gid", "") for g in galleries if g.get("gid")]
+            if gids:
+                placeholders = ",".join("?" * len(gids))
+                async with self._db.execute(
+                    f"SELECT gid, tags_json FROM gallery_tags_cache WHERE gid IN ({placeholders})",
+                    gids,
+                ) as cur:
+                    rows = await cur.fetchall()
+                tags_by_gid = {row[0]: json.loads(row[1]) for row in rows}
 
         result = []
         for gallery in galleries:
@@ -323,7 +343,7 @@ class PandoraDB:
                         excluded = True
                         break
                 elif mode == FILTER_TAG:
-                    tags = await self.get_cached_tags(gallery.get("gid", ""))
+                    tags = tags_by_gid.get(gallery.get("gid", ""))
                     if tags:
                         for tag_list in tags.values():
                             if text in tag_list:
@@ -332,7 +352,7 @@ class PandoraDB:
                     if excluded:
                         break
                 elif mode == FILTER_TAG_NAMESPACE:
-                    tags = await self.get_cached_tags(gallery.get("gid", ""))
+                    tags = tags_by_gid.get(gallery.get("gid", ""))
                     if tags and text in tags:
                         excluded = True
                         break
