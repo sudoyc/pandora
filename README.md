@@ -20,7 +20,7 @@ pandora-daemon (FastAPI)          -- session, cache, download, image proxy
 
 ### exhentai_api
 
-Async Python library. 22 API methods, 17 model types, 11 parsers, 77 tests. Fully aligned with the Android EhViewer reference project.
+Async Python library. 22 API methods, 17 model types, 11 parsers, 110 tests. Fully aligned with the Android EhViewer reference project.
 
 | Category | Methods |
 |----------|---------|
@@ -35,7 +35,7 @@ Async Python library. 22 API methods, 17 model types, 11 parsers, 77 tests. Full
 
 ### pandora-daemon
 
-FastAPI service wrapping `exhentai_api`. 341 tests.
+FastAPI service wrapping `exhentai_api`. 297 tests.
 
 - **Image proxy** — all image types cached with SHA256 keys, LRU eviction (2 GB default)
 - **SQLite database** — browsing history, local favorites, reading bookmarks, saved searches, gallery filters, tag cache. Auto-triggers on gallery view and page prefetch
@@ -99,7 +99,7 @@ uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abctoken/"
 ## Development
 
 ```bash
-# Python tests (341)
+# Python tests (407)
 uv run pytest tests/ -v
 
 # Rust TUI tests (16)
