@@ -40,6 +40,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json::<Vec<GalleryItem>>().await.map_err(|e| e.to_string())
     }
 
@@ -63,6 +64,7 @@ impl DaemonClient {
             url.push_str(&format!("&min_rating={}", rating));
         }
         let resp = self.http.get(&url).send().await.map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -72,6 +74,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -81,6 +84,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -90,6 +94,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -101,10 +106,11 @@ impl DaemonClient {
         token: &str,
     ) -> Result<GalleryDetail, String> {
         let resp = self.http
-            .get(format!("{}/api/gallery/{}/{}", self.base_url, gid, token))
+            .get(format!("{}/api/gallery/{}/{}", self.base_url, urlencoding::encode(gid), urlencoding::encode(token)))
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -117,7 +123,7 @@ impl DaemonClient {
         self.http
             .get(format!(
                 "{}/api/gallery/{}/{}/page/{}",
-                self.base_url, gid, token, page
+                self.base_url, urlencoding::encode(gid), urlencoding::encode(token), page
             ))
             .send()
             .await
@@ -133,7 +139,7 @@ impl DaemonClient {
         let resp = self.http
             .get(format!(
                 "{}/api/gallery/{}/{}/thumb/{}",
-                self.base_url, gid, token, page
+                self.base_url, urlencoding::encode(gid), urlencoding::encode(token), page
             ))
             .send()
             .await
@@ -151,15 +157,16 @@ impl DaemonClient {
         token: &str,
         current_page: u32,
     ) -> Result<(), String> {
-        self.http
+        let resp = self.http
             .post(format!(
                 "{}/api/gallery/{}/{}/prefetch",
-                self.base_url, gid, token
+                self.base_url, urlencoding::encode(gid), urlencoding::encode(token)
             ))
             .json(&serde_json::json!({"current_page": current_page}))
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        resp.error_for_status().map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -178,16 +185,18 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
     pub async fn add_favorite(&self, gid: &str, token: &str, slot: i32) -> Result<(), String> {
-        self.http
+        let resp = self.http
             .post(format!("{}/api/favorites", self.base_url))
             .json(&serde_json::json!({"gid": gid, "token": token, "slot": slot}))
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        resp.error_for_status().map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -200,6 +209,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -209,6 +219,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -230,6 +241,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -241,6 +253,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
 
@@ -274,6 +287,7 @@ impl DaemonClient {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        let resp = resp.error_for_status().map_err(|e| e.to_string())?;
         let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
         Ok(bytes.to_vec())
     }
