@@ -1,5 +1,6 @@
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
+use unicode_width::UnicodeWidthStr;
 
 use crate::app::{App, AppMode, PageSource};
 
@@ -41,7 +42,7 @@ pub fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let right = format!("{}{} ", app.status_msg, dl_indicator);
 
     let width = area.width as usize;
-    let padding = width.saturating_sub(left.len() + right.len());
+    let padding = width.saturating_sub(UnicodeWidthStr::width(left.as_str()) + UnicodeWidthStr::width(right.as_str()));
     let line = format!("{}{:padding$}{}", left, "", right, padding = padding);
 
     let bar =
