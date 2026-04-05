@@ -201,9 +201,6 @@ class DownloadManager:
                 self._queue.task_done()
                 continue
 
-            task.status = "downloading"
-            self._save_state()
-
             try:
                 await self._download_gallery(task)
             except asyncio.CancelledError:
@@ -212,13 +209,6 @@ class DownloadManager:
                     self._save_state()
                 self._queue.task_done()
                 return
-            except Exception as exc:
-                task.status = "failed"
-                task.error = str(exc)
-                await self._ws.broadcast(
-                    {"event": "download_error", "gid": gid, "error": str(exc)}
-                )
-                self._save_state()
 
             self._queue.task_done()
 
@@ -316,120 +306,135 @@ class DownloadManager:
 
     async def _download_gallery(self, task: DownloadTask) -> None:
         """Download complete gallery: metadata, cover, thumbs, pages."""
+        is_retry = bool(task.failed_pages) and task.downloaded_pages > 0
         output_dir = Path(task.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        thumbs_dir = output_dir / "thumbs"
-        thumbs_dir.mkdir(exist_ok=True)
-        pages_dir = output_dir / "pages"
-        pages_dir.mkdir(exist_ok=True)
 
-        # Fetch gallery detail once for metadata and cover
-        detail = await self._api.get_gallery_details(task.gid, task.token)
+        try:
+            if not is_retry:
+                detail = await self._api.get_gallery_details(task.gid, task.token)
 
-        # 1. Write metadata
-        if not task.metadata_saved:
-            self._write_metadata(detail, str(output_dir))
-            task.metadata_saved = True
-            self._save_state()
+                if not task.metadata_saved:
+                    self._write_metadata(detail, str(output_dir))
+                    task.metadata_saved = True
+                    self._save_state()
 
-        # 2. Download cover
-        if not task.cover_downloaded:
-            if detail.cover_url:
-                try:
-                    cover_data = await self._fetch_image(detail.cover_url)
-                    ext = _ext_from_url(detail.cover_url)
-                    (output_dir / f"cover{ext}").write_bytes(cover_data)
-                except Exception:
-                    pass  # Cover failure is non-fatal
-            task.cover_downloaded = True
-            await self._ws.broadcast({"event": "download_progress", "gid": task.gid, "phase": "cover"})
-            self._save_state()
+                if not task.cover_downloaded:
+                    if detail.cover_url:
+                        try:
+                            cover_data = await self._fetch_image(detail.cover_url)
+                            ext = _ext_from_url(detail.cover_url)
+                            _atomic_write(output_dir / f"cover{ext}", cover_data)
+                        except Exception:
+                            pass
+                    task.cover_downloaded = True
+                    await self._ws.broadcast({"event": "download_progress", "gid": task.gid, "phase": "cover"})
+                    self._save_state()
 
-        # 3. Download thumbnails (with sprite cropping for gdtm mode)
-        sprite_cache: dict[str, bytes] = {}  # url → downloaded sprite bytes
-        for idx in range(len(task.thumb_sprites or task.thumb_urls)):
-            if task.gid in self._cancelled:
-                task.status = "cancelled"
-                self._save_state()
-                return
+                thumbs_dir = output_dir / "thumbs"
+                thumbs_dir.mkdir(exist_ok=True)
+                sprite_cache: dict[str, bytes] = {}
+                for idx in range(len(task.thumb_sprites or task.thumb_urls)):
+                    if task.gid in self._cancelled:
+                        task.status = "cancelled"
+                        self._save_state()
+                        return
 
-            page_num = idx + 1
-            existing = list(thumbs_dir.glob(f"{page_num:04d}.*"))
-            if existing:
-                task.downloaded_thumbs = page_num
-                continue
+                    page_num = idx + 1
+                    existing = [f for f in thumbs_dir.glob(f"{page_num:04d}.*")
+                                if not f.name.endswith(".tmp")]
+                    if existing:
+                        task.downloaded_thumbs = page_num
+                        continue
 
-            try:
-                sprite = task.thumb_sprites[idx] if task.thumb_sprites else None
-                if sprite and sprite.get("width", 0) > 0:
-                    # Sprite mode: download sprite once, crop individual thumbnail
-                    sprite_url = sprite["url"]
-                    if sprite_url not in sprite_cache:
-                        sprite_cache[sprite_url] = await self._fetch_image(sprite_url)
-                    result = self._crop_sprite(
-                        sprite_cache[sprite_url],
-                        sprite["offset_x"], sprite["offset_y"],
-                        sprite["width"], sprite["height"],
-                    )
-                    if result:
-                        data, ext = result
-                        (thumbs_dir / f"{page_num:04d}{ext}").write_bytes(data)
-                elif idx < len(task.thumb_urls):
-                    # Direct image mode (gdtl)
-                    thumb_url = task.thumb_urls[idx]
-                    data = await self._fetch_image(thumb_url)
-                    ext = _ext_from_url(thumb_url)
-                    (thumbs_dir / f"{page_num:04d}{ext}").write_bytes(data)
-            except Exception:
-                pass
+                    try:
+                        sprite = task.thumb_sprites[idx] if task.thumb_sprites else None
+                        if sprite and sprite.get("width", 0) > 0:
+                            sprite_url = sprite["url"]
+                            if sprite_url not in sprite_cache:
+                                sprite_cache[sprite_url] = await self._fetch_image(sprite_url)
+                            result = self._crop_sprite(
+                                sprite_cache[sprite_url],
+                                sprite["offset_x"], sprite["offset_y"],
+                                sprite["width"], sprite["height"],
+                            )
+                            if result:
+                                data, ext = result
+                                _atomic_write(thumbs_dir / f"{page_num:04d}{ext}", data)
+                        elif idx < len(task.thumb_urls):
+                            thumb_url = task.thumb_urls[idx]
+                            data = await self._fetch_image(thumb_url)
+                            ext = _ext_from_url(thumb_url)
+                            _atomic_write(thumbs_dir / f"{page_num:04d}{ext}", data)
+                    except Exception:
+                        pass
 
-            task.downloaded_thumbs = page_num
-            await self._ws.broadcast({
-                "event": "download_progress", "gid": task.gid,
-                "phase": "thumbs", "page": page_num, "total": task.total_pages,
-            })
-            self._save_state()
+                    task.downloaded_thumbs = page_num
+                    await self._ws.broadcast({
+                        "event": "download_progress", "gid": task.gid,
+                        "phase": "thumbs", "page": page_num, "total": task.total_pages,
+                    })
+                    self._mark_dirty()
+            else:
+                # Retry mode: clear failed_pages for re-download
+                task.failed_pages.clear()
 
-        # 4. Download full-size pages
-        for idx, viewer_url in enumerate(task.preview_urls):
-            if task.gid in self._cancelled:
-                task.status = "cancelled"
-                self._save_state()
-                return
+            # Phase 4: Download pages (concurrent)
+            await self._download_pages(task)
 
-            page_num = idx + 1
+            if task.failed_pages:
+                task.status = "completed_with_errors"
+                task.error = f"{len(task.failed_pages)} pages failed"
+                await self._ws.broadcast(
+                    {"event": "download_complete_with_errors", "gid": task.gid,
+                     "failed_pages": task.failed_pages}
+                )
+            elif task.gid not in self._cancelled:
+                task.status = "completed"
+                await self._ws.broadcast(
+                    {"event": "download_complete", "gid": task.gid, "path": task.output_dir}
+                )
 
-            # Check if already downloaded (resume support)
-            existing = list(pages_dir.glob(f"{page_num:04d}.*"))
-            if existing:
-                task.downloaded_pages = page_num
-                continue
-
-            try:
-                html = await self._api.client.get_html(viewer_url)
-                image_url, _ = parse_image_viewer(html)
-                if not image_url:
-                    continue
-
-                data = await self._fetch_image(image_url)
-                ext = _ext_from_url(image_url)
-                (pages_dir / f"{page_num:04d}{ext}").write_bytes(data)
-            except Exception as exc:
-                task.error = f"Page {page_num}: {exc}"
-
-            task.downloaded_pages = page_num
-            await self._ws.broadcast({
-                "event": "download_progress", "gid": task.gid,
-                "phase": "pages", "page": page_num, "total": task.total_pages,
-            })
-            self._save_state()
-
-        if task.gid not in self._cancelled:
-            task.status = "completed"
+        except AuthenticationError as e:
+            task.status = "failed"
+            task.error = str(e)
             await self._ws.broadcast(
-                {"event": "download_complete", "gid": task.gid, "path": task.output_dir}
+                {"event": "download_auth_failed", "gid": task.gid, "error": str(e)}
             )
-            self._save_state()
+            await self._pause_all_tasks()
+
+        except ImageLimitError as e:
+            task.status = "paused"
+            task.error = str(e)
+            await self._ws.broadcast(
+                {"event": "download_paused", "gid": task.gid, "reason": "image_limit"}
+            )
+
+        except GalleryNotFoundError as e:
+            task.status = "failed"
+            task.error = str(e)
+            await self._ws.broadcast(
+                {"event": "download_error", "gid": task.gid, "error": str(e)}
+            )
+
+        except Exception as e:
+            task.status = "failed"
+            task.error = str(e)
+            await self._ws.broadcast(
+                {"event": "download_error", "gid": task.gid, "error": str(e)}
+            )
+
+        self._save_state()
+
+    async def _pause_all_tasks(self) -> None:
+        """Pause all queued/downloading tasks when authentication fails."""
+        for t in self._tasks.values():
+            if t.status in ("queued", "downloading"):
+                t.status = "paused"
+                await self._ws.broadcast(
+                    {"event": "download_paused", "gid": t.gid, "reason": "auth_failed"}
+                )
+        self._save_state()
 
     @staticmethod
     def _crop_sprite(sprite_data: bytes, x: int, y: int, w: int, h: int) -> tuple[bytes, str] | None:
