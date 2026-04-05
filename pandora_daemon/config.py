@@ -51,6 +51,7 @@ class CacheConfig:
     gallery_ttl_seconds: int = 300
     prefetch_ahead: int = 3
     prefetch_behind: int = 1
+    eviction_interval_seconds: int = 600
 
 
 @dataclass
@@ -93,6 +94,7 @@ class PandoraConfig:
                 "gallery_ttl_seconds": self.cache.gallery_ttl_seconds,
                 "prefetch_ahead": self.cache.prefetch_ahead,
                 "prefetch_behind": self.cache.prefetch_behind,
+                "eviction_interval_seconds": self.cache.eviction_interval_seconds,
             },
         }
 
@@ -153,6 +155,7 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
         gallery_ttl_seconds=cache_data.get("gallery_ttl_seconds", 300),
         prefetch_ahead=cache_data.get("prefetch_ahead", 3),
         prefetch_behind=cache_data.get("prefetch_behind", 1),
+        eviction_interval_seconds=cache_data.get("eviction_interval_seconds", 600),
     )
 
     return PandoraConfig(

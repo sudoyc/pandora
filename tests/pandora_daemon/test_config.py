@@ -45,6 +45,10 @@ class TestDefaultConfig:
         assert cache.prefetch_ahead == 3
         assert cache.prefetch_behind == 1
 
+    def test_default_cache_eviction_interval(self):
+        cache = CacheConfig()
+        assert cache.eviction_interval_seconds == 600
+
     def test_default_pandora_config(self):
         cfg = PandoraConfig()
         assert isinstance(cfg.credentials, CredentialsConfig)
@@ -123,6 +127,13 @@ class TestLoadConfig:
         cfg = load_config(config_path)
         assert cfg.download.gallery_concurrency == 5
         assert cfg.download.page_concurrency == 4
+
+    def test_load_config_custom_eviction_interval(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        data = {"cache": {"eviction_interval_seconds": 120}}
+        config_path.write_bytes(tomli_w.dumps(data).encode())
+        cfg = load_config(config_path)
+        assert cfg.cache.eviction_interval_seconds == 120
 
     def test_load_config_new_fields(self, tmp_path):
         """New fields load correctly."""
@@ -213,6 +224,12 @@ class TestToPublicDict:
         assert public["server"]["port"] == 7860
         assert public["download"]["path"] == "~/Downloads/pandora"
         assert public["download"]["gallery_concurrency"] == 2
+
+    def test_to_public_dict_contains_eviction_interval(self):
+        cfg = PandoraConfig()
+        d = cfg.to_public_dict()
+        assert "eviction_interval_seconds" in d["cache"]
+        assert d["cache"]["eviction_interval_seconds"] == 600
 
     def test_to_public_dict_contains_new_download_fields(self):
         cfg = PandoraConfig()
