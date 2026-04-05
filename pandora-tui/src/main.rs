@@ -499,6 +499,7 @@ fn switch_page_source(app: &mut App, source: PageSource) {
     }
     app.page_source = source;
     app.gallery_list.clear();
+    app.failed_images.clear();
     app.load_current_page();
 }
 
@@ -555,6 +556,7 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             }
         }
         AppEvent::ImageError { url, error } => {
+            app.failed_images.insert(url.clone());
             if url.starts_with("page:") {
                 app.reader.loading = false;
                 app.reader.error = Some(error);

@@ -235,11 +235,16 @@ async def get_thumb_image(
 
     If thumb_sprites are available (gdtm mode), downloads the sprite and crops.
     Otherwise falls back to direct thumb_url proxy.
+    Loads additional preview pages on demand if needed.
     """
     detail = await _get_detail(gid, token, api, cache)
     page_idx = page - 1
     if page_idx < 0 or page_idx >= detail.pages:
         raise HTTPException(status_code=400, detail=f"Page {page} out of range")
+
+    # Load additional preview pages if we don't have enough sprites/thumbs
+    if page_idx >= len(detail.thumb_sprites) and page_idx >= len(detail.thumb_urls):
+        await image_service._load_preview_page(detail, page_idx)
 
     # Try sprite-based cropping first
     if page_idx < len(detail.thumb_sprites):
