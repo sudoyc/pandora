@@ -5,20 +5,22 @@ Open the box. Browse, search, and download from ExHentai — daemon + multi-fron
 ## Architecture
 
 ```
-exhentai_api (Python library)     ── stateless, reusable
-        │
-pandora-daemon (FastAPI)          ── session, cache, download, image proxy
-        │ REST + WebSocket (localhost:7860)
-        ├── Rust TUI (ratatui)    ── terminal with image preview
-        ├── Web frontend          ── browser, deployable to server
-        └── CLI                   ── scripts & automation
+exhentai_api (Python library)     -- stateless, reusable
+        |
+pandora-daemon (FastAPI)          -- session, cache, download, image proxy
+        | REST + WebSocket (localhost:7860)
+        |-- Rust TUI (ratatui)    -- terminal with image preview
+        |-- Web frontend          -- browser, planned
+        +-- CLI                   -- download + status
 ```
 
-## Current Status
+**Design principle:** frontends never access ExHentai directly. All requests go through the daemon, which handles session, caching, and rate limiting.
 
-### `exhentai_api` -- Complete
+## Components
 
-Fully aligned with the Android reference project. 22 API methods, 17 model types, 11 parsers, 77 tests.
+### exhentai_api
+
+Async Python library. 22 API methods, 17 model types, 11 parsers, 77 tests. Fully aligned with the Android EhViewer reference project.
 
 | Category | Methods |
 |----------|---------|
@@ -31,119 +33,85 @@ Fully aligned with the Android reference project. 22 API methods, 17 model types
 | User | `get_home_detail`, `reset_image_limit`, `get_profile` |
 | Search | `image_search` (SHA1-based) |
 
-### `pandora-daemon` -- Complete
+### pandora-daemon
 
-FastAPI daemon wrapping `exhentai_api` as a local service. 228 tests.
+FastAPI service wrapping `exhentai_api`. 228 tests.
 
-- **Unified image cache** -- all image types cached with LRU eviction (2GB default)
-- **Image proxy** -- daemon proxies all image requests, frontends never access exhentai directly
-- **Server-side prefetch** -- background prefetch of surrounding pages during browsing
-- **Complete offline library** -- downloads produce self-contained gallery clones (metadata + cover + thumbs + pages)
-- **Library API** -- browse downloaded galleries, serve local files (cover/thumb/page)
-- **Thumb cropping** -- daemon-side CSS sprite cropping with on-demand preview page loading
-- **WebSocket events** -- real-time download progress, phase-based tracking
-- **Config system** -- TOML-based (`~/.config/pandora/config.toml`)
-- **REST API** -- 30+ endpoints covering browse, gallery, favorites, downloads, library, user, config
+- **Image proxy** — all image types cached with SHA256 keys, LRU eviction (2 GB default)
+- **Server-side prefetch** — background prefetch of surrounding pages during reading
+- **Thumb cropping** — CSS sprite cropping for gdtm-mode thumbnails, on-demand preview page loading
+- **Download manager** — complete offline gallery clones (metadata + cover + thumbs + pages), resume support, WebSocket progress events
+- **Library API** — browse downloaded galleries, serve local files
+- **Tag suggest** — EhTagTranslation database (~15K tags), substring search with prefix-first ranking
+- **Config** — TOML-based (`~/.config/pandora/config.toml`)
 
-### CLI -- Complete
+30+ REST endpoints, WebSocket real-time events.
 
-Minimal daemon client for downloading galleries.
+### Rust TUI
+
+Terminal frontend built with ratatui + ratatui-image. 21 source files, 16 tests.
+
+- Three-pane layout: gallery list with covers | thumbnail grid | metadata panel
+- Reader mode with full-size page viewing (kitty/sixel/halfblocks protocol)
+- Event-driven rendering — `tokio::select!` main loop, zero CPU when idle
+- In-memory page cache with sliding-window preload (LRU, ±10 local / ±3 online)
+- vim-style navigation, search with category filter + tag autocomplete (debounced)
+- Downloaded gallery browsing via Library API (local file serving)
+- WebSocket real-time download progress
+
+### CLI
 
 ```bash
-pandora download <url>   # or: pandora dl <url>
+pandora dl <url>    # submit download, monitor progress with rich progress bars
+pandora status      # check download queue (active/completed/failed)
 ```
-
-- Parses gallery URL, submits to daemon, monitors WebSocket progress with `rich` progress bars
-- Phase-based progress tracking (metadata → cover → thumbs → pages)
-
-### Tag Suggest API -- Complete
-
-EhTagTranslation database (~15K tags) with substring search for tag autocomplete.
-
-```
-GET /api/tags/suggest?q=fate&limit=10
-```
-
-### Rust TUI -- In Progress
-
-Terminal frontend (ratatui + ratatui-image) with vim-style navigation. 16 tests passing, 21 source files.
-
-- Three-pane layout: gallery list (with cover images) | thumbnail grid | metadata/cover
-- Reader mode with full-size page viewing via kitty/sixel/halfblocks protocol
-- Browse, search (category filter + tag autocomplete), gallery detail
-- WebSocket real-time download progress
-- Downloaded gallery browsing via Library API
-- Unicode-width aware CJK text handling
-
-### Web Frontend -- Planned
-
-See CLAUDE.md for architecture details and next steps.
 
 ## Quick Start
 
-### Using the API library directly
-
-```python
-import asyncio
-from exhentai_api import ExhentaiAPI, ExhentaiClient
-
-async def main():
-    client = ExhentaiClient(igneous="...", ipb_member_id="...")
-    async with ExhentaiAPI(client=client) as api:
-        # Browse
-        galleries = await api.get_homepage()
-        for g in galleries:
-            print(f"{g.title} ({g.rating}*) - {g.pages}p")
-
-        # Search
-        from exhentai_api.models.search import SearchParams
-        results = await api.search(SearchParams(keyword="fate"))
-
-        # Gallery details
-        detail = await api.get_gallery_details("12345", "abcdef1234")
-        print(detail.tags, detail.comments)
-
-        # Favorites
-        favs = await api.get_favorites(favcat=0, keyword="artist:name")
-
-asyncio.run(main())
-```
-
-### Running the daemon
+### 1. Configure credentials
 
 ```bash
-# Configure credentials first
 # Edit ~/.config/pandora/config.toml
+# Set your ExHentai session cookies:
+#   [credentials]
+#   igneous = "..."
+#   ipb_member_id = "..."
+```
 
-# Start daemon on localhost:7860
+### 2. Start daemon
+
+```bash
 uv run python -m pandora_daemon
+# Listening on http://127.0.0.1:7860
+```
+
+### 3. Use a frontend
+
+```bash
+# TUI
+cd pandora-tui && cargo run --release
+
+# CLI
+uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abctoken/"
 ```
 
 ## Development
 
 ```bash
-# Run Python tests (203 total)
+# Python tests (228)
 uv run pytest tests/ -v
 
-# Run Rust TUI tests
+# Rust TUI tests (16)
 cd pandora-tui && cargo test
 
-# Start daemon
-uv run python -m pandora_daemon
-
-# Download a gallery via CLI
-uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abctoken/"
-# Or with installed entry point:
-pandora dl "https://exhentai.org/g/12345/abctoken/"
-
-# Build Rust TUI
+# Build optimized TUI binary
 cd pandora-tui && cargo build --release
 ```
 
-## Documentation
+## API Reference
 
-- `docs/api_reference.md` -- Full exhentai_api method reference
-- `docs/exhentai_api_usage.md` -- Detailed usage guide
-- `docs/superpowers/specs/` -- Design specifications
-- `docs/superpowers/plans/` -- Implementation plans
-- `CLAUDE.md` -- Architecture, daemon API endpoints, development roadmap
+Full daemon REST API and `exhentai_api` method reference in [`docs/`](docs/).
+
+## License
+
+Private project.
