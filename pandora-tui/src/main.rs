@@ -47,6 +47,42 @@ async fn main() -> io::Result<()> {
     // Load initial page
     app.load_current_page();
 
+    // WebSocket background connection
+    {
+        let ws_url = app.client.ws_url();
+        let tx_ws = tx.clone();
+        tokio::spawn(async move {
+            use futures_util::StreamExt;
+            use tokio_tungstenite::connect_async;
+
+            loop {
+                match connect_async(&ws_url).await {
+                    Ok((ws_stream, _)) => {
+                        let (_, mut read) = ws_stream.split();
+                        while let Some(msg) = read.next().await {
+                            match msg {
+                                Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
+                                    if let Ok(ev) = serde_json::from_str::<crate::models::WsEvent>(&text) {
+                                        let _ = tx_ws.send(crate::event::AppEvent::WsEvent(ev));
+                                    }
+                                }
+                                Err(_) => break,
+                                _ => {}
+                            }
+                        }
+                        let _ = tx_ws.send(crate::event::AppEvent::WsDisconnected);
+                    }
+                    Err(_) => {
+                        let _ = tx_ws.send(crate::event::AppEvent::WsDisconnected);
+                    }
+                }
+                // Reconnect after 3 seconds
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                let _ = tx_ws.send(crate::event::AppEvent::WsReconnected);
+            }
+        });
+    }
+
     // Terminal setup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
