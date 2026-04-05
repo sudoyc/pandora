@@ -8,6 +8,7 @@ from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
 from pandora_daemon.tag_database import TagDatabase
+from pandora_daemon.db import PandoraDB
 
 @dataclass
 class AppState:
@@ -19,4 +20,5 @@ class AppState:
     cache: CacheManager
     image_service: ImageService
     ws: WebSocketManager
+    db: PandoraDB
     tag_database: TagDatabase = field(default_factory=TagDatabase)

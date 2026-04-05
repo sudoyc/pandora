@@ -4,6 +4,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from exhentai_api.api import ExhentaiAPI
 from exhentai_api.client import ExhentaiClient
+from exhentai_api.exceptions import (
+    ExhentaiError,
+    AuthenticationError,
+    ImageLimitError,
+    GalleryNotFoundError,
+    GalleryOffensiveError,
+    ParseError,
+    NetworkError,
+)
 from pandora_daemon.config import load_config
 from pandora_daemon.state import AppState
 from pandora_daemon.download import DownloadManager
@@ -11,11 +20,15 @@ from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
 from pandora_daemon.tag_database import TagDatabase
+from pandora_daemon.db import PandoraDB
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config_path = Path("~/.config/pandora/config.toml").expanduser()
     config = load_config(config_path)
+    db_path = config_path.parent / "pandora.db"
+    db = PandoraDB(db_path)
+    await db.initialize()
     client = ExhentaiClient(
         igneous=config.credentials.igneous,
         ipb_member_id=config.credentials.ipb_member_id,
@@ -35,11 +48,12 @@ async def lifespan(app: FastAPI):
         config=config, config_path=config_path,
         client=client, api=api,
         downloads=downloads, cache=cache, image_service=image_service, ws=ws,
-        tag_database=tag_database,
+        db=db, tag_database=tag_database,
     )
     app.state.pandora = state
     await downloads.start()
     yield
+    await db.close()
     await downloads.shutdown()
     await image_service.shutdown()
     await api.aclose()
@@ -48,10 +62,36 @@ def create_app() -> FastAPI:
     from pandora_daemon.routes import router
     app = FastAPI(title="pandora-daemon", lifespan=lifespan)
 
+    @app.exception_handler(AuthenticationError)
+    async def auth_error_handler(request: Request, exc: AuthenticationError):
+        return JSONResponse(status_code=401, content={"error": "auth", "detail": str(exc)})
+
+    @app.exception_handler(GalleryNotFoundError)
+    async def gallery_not_found_handler(request: Request, exc: GalleryNotFoundError):
+        return JSONResponse(status_code=404, content={"error": "gallery_not_found", "detail": str(exc)})
+
+    @app.exception_handler(ImageLimitError)
+    async def image_limit_handler(request: Request, exc: ImageLimitError):
+        return JSONResponse(status_code=429, content={"error": "image_limit", "detail": str(exc)})
+
+    @app.exception_handler(GalleryOffensiveError)
+    async def offensive_handler(request: Request, exc: GalleryOffensiveError):
+        return JSONResponse(status_code=451, content={"error": "offensive", "detail": str(exc)})
+
+    @app.exception_handler(ParseError)
+    async def parse_error_handler(request: Request, exc: ParseError):
+        return JSONResponse(status_code=502, content={"error": "parse", "detail": str(exc)})
+
+    @app.exception_handler(NetworkError)
+    async def network_error_handler(request: Request, exc: NetworkError):
+        return JSONResponse(status_code=502, content={"error": "network", "detail": str(exc)})
+
+    @app.exception_handler(ExhentaiError)
+    async def exhentai_error_handler(request: Request, exc: ExhentaiError):
+        return JSONResponse(status_code=500, content={"error": "exhentai", "detail": str(exc)})
+
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, exc: RuntimeError):
-        if "Sad Panda" in str(exc):
-            return JSONResponse(status_code=401, content={"detail": str(exc)})
         return JSONResponse(status_code=500, content={"detail": str(exc)})
 
     @app.exception_handler(Exception)

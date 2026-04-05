@@ -54,6 +54,10 @@ def _make_app(mock_api, mock_cache=None, mock_image_service=None):
     state.api = mock_api
     state.cache = mock_cache or MagicMock()
     state.image_service = mock_image_service or MagicMock()
+    mock_db = MagicMock()
+    mock_db.put_history = AsyncMock()
+    mock_db.update_bookmark = AsyncMock()
+    state.db = mock_db
     app.state.pandora = state
     return app
 

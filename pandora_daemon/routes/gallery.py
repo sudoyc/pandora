@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from pandora_daemon.dependencies import get_api, get_cache, get_image_service
+from pandora_daemon.dependencies import get_api, get_cache, get_image_service, get_db
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 
@@ -130,9 +130,10 @@ async def _get_detail(gid: str, token: str, api, cache):
 # ---------------------------------------------------------------------------
 
 @router.get("/{gid}/{token}")
-async def get_gallery_detail(gid: str, token: str, api=Depends(get_api), cache=Depends(get_cache)):
+async def get_gallery_detail(gid: str, token: str, api=Depends(get_api), cache=Depends(get_cache), db=Depends(get_db)):
     """Return gallery detail. Checks cache first; fetches and caches on miss."""
     detail = await _get_detail(gid, token, api, cache)
+    await db.put_history(detail)
     return _detail_to_dict(detail)
 
 
@@ -298,8 +299,13 @@ async def prefetch_pages(
     api=Depends(get_api),
     cache=Depends(get_cache),
     image_service=Depends(get_image_service),
+    db=Depends(get_db),
 ):
     """Report current page and trigger background prefetch."""
     detail = await _get_detail(gid, token, api, cache)
+    await db.update_bookmark(
+        gid=gid, token=token, title=detail.title,
+        thumb_url=detail.cover_url, page=body.current_page, total=detail.pages,
+    )
     await image_service.prefetch(gid, token, body.current_page, detail.pages)
     return {"ok": True}

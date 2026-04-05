@@ -69,6 +69,7 @@ def mock_state(tmp_path):
         config=config, config_path=config_path,
         client=mock_client, api=mock_api,
         downloads=downloads, cache=cache, image_service=image_service, ws=ws,
+        db=MagicMock(),
     )
     return state, mock_api
 
