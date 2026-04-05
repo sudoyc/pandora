@@ -19,7 +19,7 @@ pub const CATEGORIES: &[(&str, u32)] = &[
 pub struct SearchState {
     pub active: bool,
     pub input: String,
-    pub cursor_pos: usize,
+    pub(crate) cursor_pos: usize,
     pub suggestions: Vec<TagSuggestion>,
     pub selected_suggestion: Option<usize>,
     pub suggestion_scroll: usize,
@@ -28,6 +28,7 @@ pub struct SearchState {
     pub excluded_categories: u32,
     pub min_rating: u32,
     pub min_pages: u32,
+    pub suggest_generation: u64,
 }
 
 impl SearchState {

@@ -53,5 +53,6 @@ impl GalleryListState {
         } else if self.selected >= self.scroll_offset + visible_count {
             self.scroll_offset = self.selected - visible_count + 1;
         }
+        self.scroll_offset = self.scroll_offset.min(self.items.len().saturating_sub(1));
     }
 }

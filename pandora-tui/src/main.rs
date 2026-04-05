@@ -169,7 +169,7 @@ async fn main() -> io::Result<()> {
                 }
             }, if suggest_deadline.is_some() => {
                 suggest_deadline = None;
-                request_suggestions(&app);
+                request_suggestions(&mut app);
                 dirty = true;
             }
         }
@@ -461,20 +461,22 @@ fn handle_key_search(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     }
 }
 
-fn request_suggestions(app: &App) {
+fn request_suggestions(app: &mut App) {
     let keyword = app.search.extract_last_keyword().to_string();
     if keyword.is_empty() {
         return;
     }
+    app.search.suggest_generation += 1;
+    let generation = app.search.suggest_generation;
     let tx = app.tx.clone();
     let client = app.client.clone();
     tokio::spawn(async move {
         match client.suggest_tags(&keyword, 10).await {
             Ok(resp) => {
-                let _ = tx.send(AppEvent::SuggestionsLoaded(Ok(resp.suggestions), 0));
+                let _ = tx.send(AppEvent::SuggestionsLoaded(Ok(resp.suggestions), generation));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::SuggestionsLoaded(Err(e), 0));
+                let _ = tx.send(AppEvent::SuggestionsLoaded(Err(e), generation));
             }
         }
     });
@@ -755,19 +757,23 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
                 app.status_msg = format!("Detail load failed: {}", e);
             }
         }
-        AppEvent::SuggestionsLoaded(Ok(suggestions), _generation) => {
-            app.search.suggestions = suggestions;
-            app.search.selected_suggestion = None;
+        AppEvent::SuggestionsLoaded(Ok(suggestions), generation) => {
+            if generation == app.search.suggest_generation {
+                app.search.suggestions = suggestions;
+                app.search.selected_suggestion = None;
+            }
         }
-        AppEvent::SuggestionsLoaded(Err(_), _) => {
-            app.search.suggestions.clear();
+        AppEvent::SuggestionsLoaded(Err(_), generation) => {
+            if generation == app.search.suggest_generation {
+                app.search.suggestions.clear();
+            }
         }
         AppEvent::ThumbnailLoaded { url, image } => {
             app.pending_images.remove(&url);
             app.image_states.remove(&url);
             app.image_cache.put(url, image);
             // Prune image_states for keys no longer in cache
-            if app.image_states.len() > 300 {
+            if app.image_states.len() > 220 {
                 let cached_keys: std::collections::HashSet<String> =
                     app.image_cache.iter().map(|(k, _)| k.clone()).collect();
                 app.image_states.retain(|k, _| cached_keys.contains(k));

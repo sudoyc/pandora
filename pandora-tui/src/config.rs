@@ -49,7 +49,10 @@ pub fn load_config() -> TuiConfig {
 fn dirs_home() -> PathBuf {
     std::env::var("HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
+        .unwrap_or_else(|_| {
+            eprintln!("WARNING: HOME not set, using current directory for config");
+            PathBuf::from(".")
+        })
 }
 
 #[cfg(test)]
