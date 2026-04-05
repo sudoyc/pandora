@@ -34,16 +34,27 @@ pub struct GalleryDetail {
     pub size: String,
     pub posted: String,
     pub favorite_slot: Option<i32>,
+    #[serde(default)]
     pub preview_pages: u32,
+    #[serde(default)]
     pub thumb_urls: Vec<String>,
+    #[serde(default)]
     pub rating: f64,
+    #[serde(default)]
     pub rating_count: u32,
+    #[serde(default)]
     pub favorite_count: u32,
+    #[serde(default)]
     pub torrent_count: u32,
+    #[serde(default)]
     pub comments: Vec<Comment>,
+    #[serde(default)]
     pub comments_has_more: bool,
+    #[serde(default)]
     pub api_uid: String,
+    #[serde(default)]
     pub api_key: String,
+    #[serde(default)]
     pub url: String,
 }
 
@@ -52,7 +63,7 @@ pub struct Comment {
     pub id: i64,
     pub user: String,
     pub comment: String,
-    pub score: Option<String>,
+    pub score: i64,
     pub time: String,
     pub is_uploader: bool,
     pub vote_up_able: bool,
@@ -60,7 +71,8 @@ pub struct Comment {
     pub vote_up_ed: bool,
     pub vote_down_ed: bool,
     pub editable: bool,
-    pub last_edited: Option<String>,
+    #[serde(default)]
+    pub last_edited: String,
 }
 
 /// Tag suggestion from /api/tags/suggest
@@ -184,16 +196,27 @@ mod tests {
             "uploader": "user1", "cover_url": "https://img.com/c.jpg",
             "tags": {"female": ["maid", "stockings"], "artist": ["someone"]},
             "pages": 30, "size": "50 MB", "posted": "2024-01-01",
-            "favorite_slot": null, "preview_pages": 2, "thumb_urls": [],
+            "favorite_slot": null, "preview_pages": 2,
+            "thumb_urls": ["https://img.com/t1.jpg"],
             "rating": 4.0, "rating_count": 10,
             "favorite_count": 5, "torrent_count": 1,
-            "comments": [], "comments_has_more": false,
+            "comments": [
+                {"id": 1, "user": "bob", "comment": "nice", "score": 42,
+                 "time": "2024-01-01", "is_uploader": false,
+                 "vote_up_able": true, "vote_down_able": true,
+                 "vote_up_ed": false, "vote_down_ed": false,
+                 "editable": false, "last_edited": ""}
+            ],
+            "comments_has_more": false,
             "api_uid": "uid", "api_key": "key",
             "url": "https://exhentai.org/g/123/abc/"
         }"#;
         let detail: GalleryDetail = serde_json::from_str(json).unwrap();
         assert_eq!(detail.pages, 30);
         assert_eq!(detail.tags["female"], vec!["maid", "stockings"]);
+        assert_eq!(detail.comments.len(), 1);
+        assert_eq!(detail.comments[0].score, 42);
+        assert_eq!(detail.thumb_urls.len(), 1);
     }
 
     #[test]
