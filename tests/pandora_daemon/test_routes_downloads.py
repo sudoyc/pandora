@@ -175,3 +175,76 @@ class TestCancelDownload:
 
         assert response.status_code == 200
         assert response.json() == {"success": False}
+
+
+class TestRetryDownload:
+    def test_retry_completed_with_errors_returns_200(self):
+        mock_downloads = MagicMock()
+        mock_downloads.retry_failed = AsyncMock(return_value=True)
+        app = _make_app(mock_downloads)
+        client = TestClient(app)
+
+        response = client.post("/api/downloads/123/retry")
+        assert response.status_code == 200
+        assert response.json() == {"success": True}
+        mock_downloads.retry_failed.assert_called_once_with("123")
+
+    def test_retry_not_found_returns_404(self):
+        mock_downloads = MagicMock()
+        mock_downloads.retry_failed = AsyncMock(return_value=False)
+        app = _make_app(mock_downloads)
+        client = TestClient(app)
+
+        response = client.post("/api/downloads/999/retry")
+        assert response.status_code == 404
+
+
+class TestResumeDownload:
+    def test_resume_paused_returns_200(self):
+        mock_downloads = MagicMock()
+        mock_downloads.resume = AsyncMock(return_value=True)
+        app = _make_app(mock_downloads)
+        client = TestClient(app)
+
+        response = client.post("/api/downloads/123/resume")
+        assert response.status_code == 200
+        assert response.json() == {"success": True}
+        mock_downloads.resume.assert_called_once_with("123")
+
+    def test_resume_not_paused_returns_404(self):
+        mock_downloads = MagicMock()
+        mock_downloads.resume = AsyncMock(return_value=False)
+        app = _make_app(mock_downloads)
+        client = TestClient(app)
+
+        response = client.post("/api/downloads/123/resume")
+        assert response.status_code == 404
+
+
+class TestGetPageStatus:
+    def test_get_pages_returns_200(self):
+        mock_downloads = MagicMock()
+        task = _make_task(gid="123", total_pages=10, downloaded_pages=5)
+        task.page_states = {1: "done", 2: "done", 3: "failed"}
+        task.failed_pages = [3]
+        mock_downloads.status = MagicMock(return_value=[task])
+        app = _make_app(mock_downloads)
+        client = TestClient(app)
+
+        response = client.get("/api/downloads/123/pages")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["gid"] == "123"
+        assert data["total_pages"] == 10
+        assert data["downloaded_pages"] == 5
+        assert data["failed_pages"] == [3]
+        assert "page_states" in data
+
+    def test_get_pages_not_found_returns_404(self):
+        mock_downloads = MagicMock()
+        mock_downloads.status = MagicMock(return_value=[])
+        app = _make_app(mock_downloads)
+        client = TestClient(app)
+
+        response = client.get("/api/downloads/999/pages")
+        assert response.status_code == 404

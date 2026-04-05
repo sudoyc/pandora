@@ -40,3 +40,34 @@ async def cancel_download(gid: str, downloads: DownloadManager = Depends(get_dow
     """Cancel a download task by gid."""
     result = await downloads.cancel(gid)
     return {"success": result}
+
+
+@router.post("/{gid}/retry")
+async def retry_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
+    result = await downloads.retry_failed(gid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found or not in completed_with_errors state")
+    return {"success": True}
+
+
+@router.post("/{gid}/resume")
+async def resume_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
+    result = await downloads.resume(gid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found or not paused")
+    return {"success": True}
+
+
+@router.get("/{gid}/pages")
+async def get_page_status(gid: str, downloads: DownloadManager = Depends(get_downloads)):
+    tasks = {t.gid: t for t in downloads.status()}
+    task = tasks.get(gid)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {
+        "gid": task.gid,
+        "total_pages": task.total_pages,
+        "downloaded_pages": task.downloaded_pages,
+        "failed_pages": task.failed_pages,
+        "page_states": task.page_states,
+    }
