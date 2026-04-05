@@ -22,6 +22,13 @@ def _sanitize_filename(name: str) -> str:
     return re.sub(r'[\\/*?:"<>|]', "", name)
 
 
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Write via temp file + rename to prevent partial writes on crash."""
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_bytes(data)
+    tmp_path.rename(path)
+
+
 @dataclass
 class DownloadTask:
     """Represents a single gallery download task."""
@@ -41,6 +48,8 @@ class DownloadTask:
     preview_urls: list[str] = field(default_factory=list)
     thumb_urls: list[str] = field(default_factory=list)
     thumb_sprites: list[dict] = field(default_factory=list)  # [{url, offset_x, offset_y, width, height}]
+    page_states: dict[int, str] = field(default_factory=dict)
+    failed_pages: list[int] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.created_at:
