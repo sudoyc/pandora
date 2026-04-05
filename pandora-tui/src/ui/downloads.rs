@@ -9,10 +9,15 @@ pub fn draw_download_overlay(frame: &mut Frame, app: &App) {
     }
 
     let area = frame.area();
+    if area.width < 20 || area.height < 8 {
+        return;
+    }
     let overlay_width = (area.width * 70 / 100).min(60);
-    let overlay_height = (app.downloads.tasks.len() as u16 * 2 + 4).min(area.height - 4).max(6);
-    let x = (area.width - overlay_width) / 2;
-    let y = (area.height - overlay_height) / 2;
+    let overlay_height = (app.downloads.tasks.len() as u16 * 2 + 4)
+        .min(area.height.saturating_sub(4))
+        .max(6);
+    let x = area.width.saturating_sub(overlay_width) / 2;
+    let y = area.height.saturating_sub(overlay_height) / 2;
     let overlay_area = Rect::new(x, y, overlay_width, overlay_height);
 
     frame.render_widget(Clear, overlay_area);
