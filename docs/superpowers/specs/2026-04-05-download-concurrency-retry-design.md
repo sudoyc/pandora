@@ -1,6 +1,6 @@
 # P1: 下载并发+重试+image_service 集成
 
-> 日期：2026-04-05
+> 日期：2026-04-05（v2 更新）
 > 范围：`pandora_daemon/download.py`（重构）、`pandora_daemon/config.py`（修改）、`pandora_daemon/routes/downloads.py`（修改）、`pandora_daemon/app.py`（修改）
 > 依赖：P0 异常体系（已完成）、P0 数据库层（已完成）
 
@@ -15,6 +15,7 @@
 3. **状态保存过频**：每下完一页就全量序列化 `_save_state()`，1000 页画廊写 1000 次 JSON
 4. **缺少页面级状态追踪**：无法知道哪些页成功、哪些失败、哪些未开始
 5. **直接访问 client.session**：`_fetch_image` 绕过 `ImageService`，重复了缓存逻辑
+6. **部分写入风险**：页面图片直接 `write_bytes`，中断时留下不完整文件，断点续传误判为已完成
 
 ## 2. 设计概览
 
@@ -22,10 +23,10 @@
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
-| `pandora_daemon/download.py` | 重构 | 并发下载、异常重试、页面状态、debounce 保存、image_service 集成 |
-| `pandora_daemon/config.py` | 修改 | 新增 `page_concurrency` 参数 |
+| `pandora_daemon/download.py` | 重构 | 并发下载、即时重试、页面状态、原子写入、debounce 保存、image_service 集成 |
+| `pandora_daemon/config.py` | 修改 | `concurrency` → `gallery_concurrency`，新增 `page_concurrency`、`max_retry`、`retry_base_delay` |
 | `pandora_daemon/routes/downloads.py` | 修改 | 新增 3 个端点 |
-| `pandora_daemon/app.py` | 修改 | DownloadManager 构造传入 image_service |
+| `pandora_daemon/app.py` | 修改 | DownloadManager 构造传入 image_service，移除 cache 参数 |
 
 ### 2.2 不改动的部分
 
@@ -57,10 +58,11 @@ class DownloadTask:
 "queued" | "downloading" | "completed" | "failed" | "cancelled"
 
 # 新增
-"completed_with_errors"   # 重试后仍有失败页
+"completed_with_errors"   # 即时重试耗尽后仍有失败页
 "paused"                  # ImageLimitError (509) 触发暂停
-"retrying"                # 正在重试失败页
 ```
+
+注意：不再需要 `"retrying"` 状态。即时重试发生在单页下载函数内部，对外仍表现为 `"downloading"`。
 
 ### 3.3 状态转换图
 
@@ -71,8 +73,8 @@ queued → downloading → completed
                      → paused (ImageLimitError)
                      → cancelled
 
-paused → downloading (用户 resume)
-completed_with_errors → retrying → completed / completed_with_errors
+paused → queued → downloading (用户 resume)
+completed_with_errors → queued → downloading (用户 retry，仅重新下载失败页)
 ```
 
 ## 4. DownloadManager 改动
@@ -81,12 +83,11 @@ completed_with_errors → retrying → completed / completed_with_errors
 
 ```python
 class DownloadManager:
-    def __init__(self, api, config, ws, cache, image_service, state_file: Path) -> None:
+    def __init__(self, api, config, ws, image_service, state_file: Path) -> None:
         self._api = api
         self._config = config
         self._ws = ws
-        self._cache = cache
-        self._image_service = image_service  # 新增
+        self._image_service = image_service  # 替代原来的 cache
         self._state_file = state_file
         self._download_path = Path(config.path).expanduser()
         self._tasks: dict[str, DownloadTask] = {}
@@ -98,11 +99,9 @@ class DownloadManager:
         self._save_task: asyncio.Task | None = None
 ```
 
-注意：`image_service` 参数插入在 `cache` 和 `state_file` 之间。`app.py` 中构造 DownloadManager 时需要传入 `image_service`。
+移除 `cache` 参数。`image_service` 内部已处理缓存。
 
 ### 4.2 _fetch_image 改为使用 image_service
-
-删除现有的 `_fetch_image` 方法，替换为：
 
 ```python
 async def _fetch_image(self, url: str) -> bytes:
@@ -110,41 +109,60 @@ async def _fetch_image(self, url: str) -> bytes:
     return await self._image_service.proxy_image(url)
 ```
 
-所有图片获取（包括 `_download_thumbs` 中的 sprite 图片）都通过 `_fetch_image` → `image_service.proxy_image()` 路径。`_crop_sprite` 是纯计算的 `@staticmethod`，接收 bytes 输入，不涉及网络。
+### 4.3 原子写入辅助函数
 
-**结果**：移除构造函数中的 `cache` 参数。`image_service` 内部已处理缓存。
+```python
+def _atomic_write(path: Path, data: bytes) -> None:
+    """先写临时文件，完成后原子重命名。防止中断导致不完整文件。"""
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_bytes(data)
+    tmp_path.rename(path)
+```
 
-### 4.3 并发页面下载
+所有图片写入（cover、thumbs、pages）都通过此函数。断点续传检测时，`glob(f"{page_num:04d}.*")` 自然排除 `.tmp` 后缀的文件（因为 `.jpg.tmp` 不匹配 `0001.*` 的模式——实际上会匹配，需要显式排除）。
 
-将 `_download_gallery` 中的串行页面下载循环替换为并发版本：
+修正：断点续传检测逻辑：
+
+```python
+existing = [f for f in pages_dir.glob(f"{page_num:04d}.*") if not f.suffix.endswith(".tmp")]
+```
+
+### 4.4 并发页面下载（即时重试）
+
+将 `_download_gallery` 中的串行页面下载循环替换为并发版本。核心变化：重试逻辑内聚在单页下载函数中，不再有后置重试循环。
 
 ```python
 async def _download_pages(self, task: DownloadTask) -> None:
-    """并发下载全部页面图片。使用 stop_reason 标志优雅停止。"""
+    """并发下载全部页面图片。每页失败时即时重试。"""
     semaphore = asyncio.Semaphore(self._config.page_concurrency)
     pages_dir = Path(task.output_dir) / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
+    stop_event = asyncio.Event()  # 不可恢复错误的中止信号
     stop_reason: Exception | None = None
 
     for i in range(1, task.total_pages + 1):
-        if i not in task.page_states or task.page_states[i] != "done":
+        if task.page_states.get(i) != "done":
             task.page_states[i] = "pending"
 
-    async def _download_one_page(page_num: int) -> None:
+    async def _download_single_page(page_num: int) -> None:
         nonlocal stop_reason
-        if stop_reason is not None:
+
+        # 检查中止信号
+        if stop_event.is_set():
             return
+        # 跳过已完成页（断点续传）
         if task.page_states.get(page_num) == "done":
             return
-        existing = list(pages_dir.glob(f"{page_num:04d}.*"))
+        # 文件系统检测（排除 .tmp）
+        existing = [f for f in pages_dir.glob(f"{page_num:04d}.*")
+                     if not f.name.endswith(".tmp")]
         if existing:
             task.page_states[page_num] = "done"
             return
 
         async with semaphore:
-            if stop_reason is not None or task.gid in self._cancelled:
+            if stop_event.is_set() or task.gid in self._cancelled:
                 return
-            task.page_states[page_num] = "downloading"
 
             idx = page_num - 1
             if idx >= len(task.preview_urls):
@@ -153,21 +171,48 @@ async def _download_pages(self, task: DownloadTask) -> None:
                 return
 
             viewer_url = task.preview_urls[idx]
-            try:
-                html = await self._api.client.get_html(viewer_url)
-                image_url, _ = parse_image_viewer(html)
-                if not image_url:
-                    raise ParseError(f"No image URL for page {page_num}")
-                data = await self._fetch_image(image_url)
-                ext = _ext_from_url(image_url)
-                (pages_dir / f"{page_num:04d}{ext}").write_bytes(data)
-                task.page_states[page_num] = "done"
-                task.downloaded_pages += 1
-            except (AuthenticationError, ImageLimitError, GalleryNotFoundError) as e:
-                stop_reason = e
-                task.page_states[page_num] = "failed"
-                return
-            except Exception:
+
+            # 即时重试循环
+            last_exc = None
+            for attempt in range(self._config.max_retry + 1):
+                if stop_event.is_set() or task.gid in self._cancelled:
+                    return
+
+                try:
+                    task.page_states[page_num] = "downloading"
+                    html = await self._api.client.get_html(viewer_url)
+                    image_url, _ = parse_image_viewer(html)
+                    if not image_url:
+                        raise ParseError(f"No image URL for page {page_num}")
+                    data = await self._fetch_image(image_url)
+                    ext = _ext_from_url(image_url)
+                    _atomic_write(pages_dir / f"{page_num:04d}{ext}", data)
+                    task.page_states[page_num] = "done"
+                    task.downloaded_pages += 1
+                    last_exc = None
+                    break  # 成功，退出重试循环
+
+                except (AuthenticationError, ImageLimitError, GalleryNotFoundError) as e:
+                    # 不可恢复错误：设置中止信号，停止所有并发页面
+                    stop_reason = e
+                    stop_event.set()
+                    task.page_states[page_num] = "failed"
+                    return
+
+                except (NetworkError, ParseError) as e:
+                    last_exc = e
+                    if attempt < self._config.max_retry:
+                        delay = self._config.retry_base_delay * (2 ** attempt)
+                        await asyncio.sleep(delay)
+                    # 继续重试循环
+
+                except Exception as e:
+                    # 未知异常：不重试
+                    last_exc = e
+                    break
+
+            # 重试耗尽仍失败
+            if last_exc is not None:
                 task.page_states[page_num] = "failed"
                 task.failed_pages.append(page_num)
 
@@ -177,45 +222,37 @@ async def _download_pages(self, task: DownloadTask) -> None:
             })
             self._mark_dirty()
 
-    coros = [_download_one_page(p) for p in range(1, task.total_pages + 1)]
+    coros = [_download_single_page(p) for p in range(1, task.total_pages + 1)]
     await asyncio.gather(*coros)
 
     if stop_reason is not None:
         raise stop_reason
 ```
 
-**设计要点**：不使用 `asyncio.gather(return_exceptions=False)` 让异常直接取消其他协程（会中断正在写入的页面）。而是用 `stop_reason` 共享标志，让其他协程在获取 semaphore 前检查并优雅退出。gather 完成后，如果有 stop_reason 则向上抛出。
+**设计要点**：
+- 使用 `asyncio.Event` 作为中止信号，比 `stop_reason is not None` 检查更可靠（Event.set() 是线程安全的，且 `is_set()` 是 O(1)）
+- 即时重试在 semaphore 内部进行，重试期间占用一个并发槽位。这是有意为之——避免重试请求和新请求竞争导致更多失败
+- 指数退避：`retry_base_delay * 2^attempt`（默认 2s, 4s, 8s）
 
-### 4.4 异常驱动的重试策略
-
-在 `_download_gallery` 中处理异常和重试：
+### 4.5 _download_gallery 改造
 
 ```python
-MAX_PAGE_RETRY = 2
-
 async def _download_gallery(self, task: DownloadTask) -> None:
+    is_retry = bool(task.failed_pages) and task.downloaded_pages > 0
     task.status = "downloading"
     output_dir = Path(task.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Phase 1: metadata (不变)
-        # Phase 2: cover (不变)
-        # Phase 3: thumbs (不变，但 _fetch_image 已走 image_service)
+        if not is_retry:
+            # Phase 1: metadata（不变，但写入用 _atomic_write）
+            # Phase 2: cover（不变，但写入用 _atomic_write）
+            # Phase 3: thumbs（不变，但 _fetch_image 已走 image_service，写入用 _atomic_write）
 
-        # Phase 4: pages — 并发下载
+        # Phase 4: pages — 并发下载（含即时重试）
         await self._download_pages(task)
 
-        # Phase 5: 重试失败页
-        for attempt in range(MAX_PAGE_RETRY):
-            if not task.failed_pages:
-                break
-            task.status = "retrying"
-            retry_pages = task.failed_pages.copy()
-            task.failed_pages.clear()
-            await self._retry_pages(task, retry_pages)
-
-        # 最终状态
+        # 最终状态（不再有后置重试循环）
         if task.failed_pages:
             task.status = "completed_with_errors"
             task.error = f"{len(task.failed_pages)} pages failed: {task.failed_pages[:10]}"
@@ -232,14 +269,13 @@ async def _download_gallery(self, task: DownloadTask) -> None:
         await self._ws.broadcast(
             {"event": "download_auth_failed", "gid": task.gid, "error": str(e)}
         )
-        # 暂停所有其他任务
         await self._pause_all_tasks()
 
     except ImageLimitError as e:
         task.status = "paused"
         task.error = str(e)
         await self._ws.broadcast(
-            {"event": "download_paused", "gid": task.gid, "error": str(e)}
+            {"event": "download_paused", "gid": task.gid, "reason": "image_limit"}
         )
 
     except GalleryNotFoundError as e:
@@ -259,29 +295,7 @@ async def _download_gallery(self, task: DownloadTask) -> None:
     self._save_state()
 ```
 
-### 4.5 _retry_pages 方法
-
-```python
-async def _retry_pages(self, task: DownloadTask, pages: list[int]) -> None:
-    """重试指定的失败页面，使用与 _download_pages 相同的并发逻辑。"""
-    semaphore = asyncio.Semaphore(self._config.page_concurrency)
-    pages_dir = Path(task.output_dir) / "pages"
-    stop_reason: Exception | None = None
-
-    async def _retry_one(page_num: int) -> None:
-        nonlocal stop_reason
-        if stop_reason is not None or task.gid in self._cancelled:
-            return
-        # 与 _download_one_page 相同的逻辑
-        # ...（省略，实现与 4.3 中的 _download_one_page 相同）
-
-    coros = [_retry_one(p) for p in pages]
-    await asyncio.gather(*coros)
-    if stop_reason is not None:
-        raise stop_reason
-```
-
-为避免代码重复，`_download_one_page` 应提取为 `_download_single_page` 实例方法，被 `_download_pages` 和 `_retry_pages` 共用。
+**is_retry 模式**：当用户对 `completed_with_errors` 任务调用 retry 时，任务重新入队。`_download_gallery` 检测到 `is_retry=True`，跳过 metadata/cover/thumbs 阶段，直接进入 `_download_pages`。`_download_pages` 内部会跳过 `page_states == "done"` 的页面，只下载失败页。
 
 ### 4.6 _pause_all_tasks 方法
 
@@ -289,10 +303,10 @@ async def _retry_pages(self, task: DownloadTask, pages: list[int]) -> None:
 async def _pause_all_tasks(self) -> None:
     """AuthenticationError 时暂停所有正在下载的任务。"""
     for task in self._tasks.values():
-        if task.status in ("queued", "downloading", "retrying"):
+        if task.status in ("queued", "downloading"):
             task.status = "paused"
             await self._ws.broadcast(
-                {"event": "download_paused", "gid": task.gid, "error": "Authentication failed"}
+                {"event": "download_paused", "gid": task.gid, "reason": "auth_failed"}
             )
     self._save_state()
 ```
@@ -325,32 +339,6 @@ async def retry_failed(self, gid: str) -> bool:
     await self._queue.put(gid)
     self._save_state()
     return True
-```
-
-当 worker 从队列取出一个 `completed_with_errors` 的任务时，`_download_gallery` 需要检测这种情况，跳过 metadata/cover/thumbs 阶段，直接进入重试失败页。
-
-修改 `_download_gallery` 开头：
-
-```python
-async def _download_gallery(self, task: DownloadTask) -> None:
-    is_retry = bool(task.failed_pages) and task.downloaded_pages > 0
-    task.status = "downloading" if not is_retry else "retrying"
-
-    if is_retry:
-        # 直接重试失败页，跳过其他阶段
-        retry_pages = task.failed_pages.copy()
-        task.failed_pages.clear()
-        try:
-            await self._retry_pages(task, retry_pages)
-        except ...:
-            # 同样的异常处理
-            ...
-        # 最终状态判定
-        ...
-        return
-
-    # 正常流程：metadata → cover → thumbs → pages → retry
-    ...
 ```
 
 ### 4.9 Debounce 状态保存
@@ -393,44 +381,82 @@ async def shutdown(self) -> None:
     self._save_state()
 ```
 
+### 4.11 start 变更
+
+worker 数量改为使用 `gallery_concurrency`：
+
+```python
+async def start(self) -> None:
+    self._load_state()
+    for task in list(self._tasks.values()):
+        if task.status in ("queued", "downloading"):
+            task.status = "queued"
+            await self._queue.put(task.gid)
+
+    for _ in range(self._config.gallery_concurrency):
+        worker = asyncio.create_task(self._worker())
+        self._workers.append(worker)
+```
+
+### 4.12 .tmp 文件清理
+
+在 `_download_pages` 开始前，清理上次中断留下的 `.tmp` 文件：
+
+```python
+# 清理残留的 .tmp 文件
+for tmp_file in pages_dir.glob("*.tmp"):
+    tmp_file.unlink(missing_ok=True)
+```
+
+同样在 cover 和 thumbs 目录中执行。
+
 ## 5. 配置变更
 
-### 5.1 DownloadConfig 新增字段
+### 5.1 DownloadConfig 修改
 
 ```python
 @dataclass
 class DownloadConfig:
     path: str = "~/Downloads/pandora"
-    concurrency: int = 3          # 画廊级 worker 数
-    page_concurrency: int = 5     # 页面级并发数（每个画廊内）
+    gallery_concurrency: int = 2    # 同时下载的画廊数（worker 数）
+    page_concurrency: int = 4       # 单画廊内页面并发数
+    max_retry: int = 3              # 单页最大重试次数
+    retry_base_delay: float = 2.0   # 重试基础延迟（秒），指数退避
 ```
 
-### 5.2 load_config 修改
+### 5.2 向后兼容
+
+`load_config` 中处理旧的 `concurrency` 字段：
 
 ```python
 dl_data = data.get("download", {})
+# 向后兼容：旧的 concurrency 映射为 gallery_concurrency
+gallery_concurrency = dl_data.get("gallery_concurrency",
+                                   dl_data.get("concurrency", 2))
 download = DownloadConfig(
     path=dl_data.get("path", "~/Downloads/pandora"),
-    concurrency=dl_data.get("concurrency", 3),
-    page_concurrency=dl_data.get("page_concurrency", 5),  # 新增
+    gallery_concurrency=gallery_concurrency,
+    page_concurrency=dl_data.get("page_concurrency", 4),
+    max_retry=dl_data.get("max_retry", 3),
+    retry_base_delay=dl_data.get("retry_base_delay", 2.0),
 )
 ```
 
-### 5.3 to_public_dict 修改
+### 5.3 to_public_dict / _to_dict 修改
 
 ```python
 "download": {
     "path": self.download.path,
-    "concurrency": self.download.concurrency,
-    "page_concurrency": self.download.page_concurrency,  # 新增
+    "gallery_concurrency": self.download.gallery_concurrency,
+    "page_concurrency": self.download.page_concurrency,
+    "max_retry": self.download.max_retry,
+    "retry_base_delay": self.download.retry_base_delay,
 },
 ```
 
 ## 6. REST 端点变更
 
 ### 6.1 新增端点
-
-在 `routes/downloads.py` 中新增 3 个端点：
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -473,7 +499,8 @@ async def get_page_status(gid: str, downloads: DownloadManager = Depends(get_dow
 ### 7.1 新增事件
 
 ```json
-{"event": "download_paused", "gid": "123", "error": "Image viewing limit exceeded"}
+{"event": "download_paused", "gid": "123", "reason": "image_limit"}
+{"event": "download_paused", "gid": "123", "reason": "auth_failed"}
 {"event": "download_auth_failed", "gid": "123", "error": "Sad Panda: cookies invalid"}
 ```
 
@@ -483,47 +510,46 @@ async def get_page_status(gid: str, downloads: DownloadManager = Depends(get_dow
 
 ## 8. app.py 集成变更
 
-### 8.1 DownloadManager 构造修改
-
 ```python
 # 现有
 downloads = DownloadManager(api, config.download, ws, cache, state_file)
 
-# 改为
-downloads = DownloadManager(api, config.download, ws, cache, image_service, state_file)
-```
-
-注意：虽然 4.2 节提到可以移除 `cache` 参数，但为了最小化改动和保持向后兼容，保留 `cache` 参数。`_fetch_image` 不再使用它，但其他代码路径可能仍需要。
-
-**最终决定**：检查 download.py 中 `self._cache` 的所有使用点：
-- `_fetch_image` — 改为走 image_service，不再需要 `self._cache`
-- `_download_thumbs` 中的 sprite 获取 — 调用 `self._fetch_image`，间接走 image_service
-
-结论：`self._cache` 在 download.py 中不再被直接使用。移除 `cache` 参数。
-
-```python
-# 最终
+# 改为（移除 cache，新增 image_service）
 downloads = DownloadManager(api, config.download, ws, image_service, state_file)
 ```
 
-## 9. 测试计划
+## 9. 异常分类重试策略总结
 
-### 9.1 download.py 单元测试 (`tests/pandora_daemon/test_download_concurrency.py`)
+| 异常类型 | 单页行为 | 画廊行为 | 重试 |
+|----------|----------|----------|------|
+| `NetworkError` | 即时指数退避重试 | 继续其他页 | 最多 max_retry 次 |
+| `ParseError` | 即时指数退避重试 | 继续其他页 | 最多 max_retry 次 |
+| `ImageLimitError` | 设置 stop_event | 画廊暂停 (paused) | 不重试，等用户 resume |
+| `AuthenticationError` | 设置 stop_event | 画廊失败 + 暂停所有任务 | 不重试 |
+| `GalleryNotFoundError` | 设置 stop_event | 画廊失败 (failed) | 不重试 |
+| 其他 Exception | 不重试，标记失败 | 继续其他页 | 不重试 |
+
+## 10. 测试计划
+
+### 10.1 download.py 单元测试 (`tests/pandora_daemon/test_download_concurrency.py`)
 
 使用 mock API、mock ImageService、mock WS，测试核心逻辑：
 
 | 测试组 | 用例数 | 覆盖 |
 |--------|--------|------|
 | 并发下载 | 4 | 基本并发、semaphore 限制、断点续传跳过已完成页、cancelled 中断 |
-| 异常重试 | 5 | NetworkError 重试成功、ParseError 重试、重试耗尽 → completed_with_errors、ImageLimitError → paused、AuthenticationError → failed + pause_all |
+| 即时重试 | 5 | NetworkError 重试成功、ParseError 重试、重试耗尽 → failed_pages、指数退避延迟验证、未知异常不重试 |
+| 不可恢复错误 | 3 | ImageLimitError → paused + stop_event、AuthenticationError → failed + pause_all、GalleryNotFoundError → failed |
+| 原子写入 | 3 | _atomic_write 正常写入、.tmp 清理、断点续传排除 .tmp 文件 |
 | 页面状态 | 3 | page_states 初始化、下载后更新、failed_pages 记录 |
 | debounce 保存 | 3 | _mark_dirty 触发延迟保存、即时保存场景、shutdown 取消 debounce |
 | resume/retry | 3 | resume paused 任务、retry_failed 任务、非法状态返回 False |
 | image_service 集成 | 2 | _fetch_image 调用 image_service.proxy_image、不再直接访问 client.session |
+| is_retry 模式 | 2 | retry 跳过 metadata/cover/thumbs、只下载失败页 |
 
-共约 20 个测试。
+共约 28 个测试。
 
-### 9.2 路由测试 (`tests/pandora_daemon/test_routes_downloads.py`)
+### 10.2 路由测试 (`tests/pandora_daemon/test_routes_downloads.py`)
 
 扩展现有测试文件，新增 3 个端点的测试：
 
@@ -539,20 +565,20 @@ downloads = DownloadManager(api, config.download, ws, image_service, state_file)
 
 共约 7 个测试。
 
-### 9.3 config 测试
+### 10.3 config 测试
 
-验证 `page_concurrency` 的加载和默认值。
+验证 `gallery_concurrency`、`page_concurrency`、`max_retry`、`retry_base_delay` 的加载、默认值和向后兼容（旧 `concurrency` 字段映射）。
 
-共约 2 个测试。
+共约 4 个测试。
 
-## 10. 文件变更清单
+## 11. 文件变更清单
 
 | 文件 | 操作 | 预估行数 |
 |------|------|----------|
-| `pandora_daemon/download.py` | 重构 | ~380 行（从 ~340 行增长） |
-| `pandora_daemon/config.py` | 修改 | +5 行 |
+| `pandora_daemon/download.py` | 重构 | ~400 行（从 ~340 行增长） |
+| `pandora_daemon/config.py` | 修改 | +15 行 |
 | `pandora_daemon/routes/downloads.py` | 修改 | +35 行 |
 | `pandora_daemon/app.py` | 修改 | +2 行（构造参数变更） |
-| `tests/pandora_daemon/test_download_concurrency.py` | 新建 | ~350 行 |
+| `tests/pandora_daemon/test_download_concurrency.py` | 新建 | ~450 行 |
 | `tests/pandora_daemon/test_routes_downloads.py` | 修改 | +80 行 |
-| `tests/pandora_daemon/test_config.py` | 修改 | +20 行 |
+| `tests/pandora_daemon/test_config.py` | 修改 | +40 行 |
