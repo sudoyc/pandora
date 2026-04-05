@@ -6,6 +6,7 @@ Provides two cache layers:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 import time
@@ -42,22 +43,29 @@ class CacheManager:
     async def get_image(self, url: str) -> bytes | None:
         path = self._image_path(url)
         if path.exists():
-            return path.read_bytes()
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, path.read_bytes)
         return None
 
     async def put_image(self, url: str, data: bytes) -> None:
         path = self._image_path(url)
-        path.write_bytes(data)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, path.write_bytes, data)
 
     async def evict_images(self) -> None:
         if not self._image_dir.exists():
             return
-        files = sorted(self._image_dir.iterdir(), key=lambda p: p.stat().st_atime)
-        total = sum(f.stat().st_size for f in files)
-        while total > self._max_bytes and files:
-            oldest = files.pop(0)
-            total -= oldest.stat().st_size
-            oldest.unlink()
+
+        def _evict():
+            files = sorted(self._image_dir.iterdir(), key=lambda p: p.stat().st_atime)
+            total = sum(f.stat().st_size for f in files)
+            while total > self._max_bytes and files:
+                oldest = files.pop(0)
+                total -= oldest.stat().st_size
+                oldest.unlink()
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _evict)
 
     def get_gallery(self, gid: str, token: str):
         key = f"{gid}:{token}"
@@ -66,10 +74,17 @@ class CacheManager:
             return None
         detail, expires_at = entry
         if time.time() > expires_at:
-            del self._gallery_cache[key]
+            self._gallery_cache.pop(key, None)
             return None
         return detail
 
     def put_gallery(self, detail) -> None:
         key = f"{detail.gid}:{detail.token}"
         self._gallery_cache[key] = (detail, time.time() + self._ttl)
+
+    def prune_expired_galleries(self) -> None:
+        """Remove expired gallery entries. Call periodically."""
+        now = time.time()
+        expired = [k for k, (_, exp) in self._gallery_cache.items() if now > exp]
+        for k in expired:
+            self._gallery_cache.pop(k, None)

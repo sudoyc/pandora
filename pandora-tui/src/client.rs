@@ -11,12 +11,18 @@ impl DaemonClient {
     pub fn new(base_url: &str) -> Self {
         let http = Client::builder()
             .pool_max_idle_per_host(10)
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(5))
             .build()
             .unwrap_or_else(|_| Client::new());
         Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
         }
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
     }
 
     pub fn ws_url(&self) -> String {
@@ -220,6 +226,7 @@ impl DaemonClient {
                 urlencoding::encode(query),
                 limit
             ))
+            .timeout(std::time::Duration::from_secs(3))
             .send()
             .await
             .map_err(|e| e.to_string())?;

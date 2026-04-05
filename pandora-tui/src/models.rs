@@ -157,6 +157,8 @@ pub struct DownloadedGalleryMeta {
     #[serde(default)]
     pub url: String,
     #[serde(default)]
+    pub thumb_url: Option<String>,
+    #[serde(default)]
     pub downloaded_at: Option<String>,
 }
 

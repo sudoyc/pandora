@@ -5,11 +5,14 @@ Coordinates image proxy, caching, page resolution, and prefetching.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.config import CacheConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ImageService:
@@ -105,6 +108,11 @@ class ImageService:
 
     async def prefetch(self, gid: str, token: str, current_page: int, total_pages: int) -> None:
         """Schedule background prefetch for pages around current_page."""
+        # Prune completed prefetch tasks to prevent unbounded growth
+        done_keys = [k for k, t in self._prefetch_tasks.items() if t.done()]
+        for k in done_keys:
+            del self._prefetch_tasks[k]
+
         start = max(1, current_page - self._config.prefetch_behind)
         end = min(total_pages, current_page + self._config.prefetch_ahead)
 
@@ -129,8 +137,8 @@ class ImageService:
         async with self._semaphore:
             try:
                 await self.get_page_image(gid, token, page)
-            except Exception:
-                pass  # Prefetch failures are silently ignored
+            except Exception as e:
+                logger.debug("Prefetch failed for %s:%d: %s", gid, page, e)
 
     async def shutdown(self) -> None:
         """Cancel all in-flight prefetch tasks."""

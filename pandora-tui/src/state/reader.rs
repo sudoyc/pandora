@@ -5,29 +5,46 @@ pub struct ReaderState {
     pub gid: String,
     pub token: String,
     pub title: String,
+    pub is_local: bool,
     pub loading: bool,
     pub loading_progress: Option<(u64, u64)>, // (received, total)
     pub error: Option<String>,
 }
 
 impl ReaderState {
-    pub fn next_page(&mut self) {
+    pub fn next_page(&mut self) -> bool {
         if self.current_page < self.total_pages {
             self.current_page += 1;
+            true
+        } else {
+            false
         }
     }
 
-    pub fn prev_page(&mut self) {
+    pub fn prev_page(&mut self) -> bool {
         if self.current_page > 1 {
             self.current_page -= 1;
+            true
+        } else {
+            false
         }
     }
 
-    pub fn first_page(&mut self) {
-        self.current_page = 1;
+    pub fn first_page(&mut self) -> bool {
+        if self.total_pages > 0 && self.current_page != 1 {
+            self.current_page = 1;
+            true
+        } else {
+            false
+        }
     }
 
-    pub fn last_page(&mut self) {
-        self.current_page = self.total_pages;
+    pub fn last_page(&mut self) -> bool {
+        if self.total_pages > 0 && self.current_page != self.total_pages {
+            self.current_page = self.total_pages;
+            true
+        } else {
+            false
+        }
     }
 }

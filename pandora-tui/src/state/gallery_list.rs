@@ -45,6 +45,9 @@ impl GalleryListState {
 
     /// Ensure scroll_offset keeps selected item visible within `visible_count` rows.
     pub fn adjust_scroll(&mut self, visible_count: usize) {
+        if visible_count == 0 {
+            return;
+        }
         if self.selected < self.scroll_offset {
             self.scroll_offset = self.selected;
         } else if self.selected >= self.scroll_offset + visible_count {

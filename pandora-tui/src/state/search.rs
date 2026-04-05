@@ -41,6 +41,9 @@ impl SearchState {
     }
 
     pub fn adjust_suggestion_scroll(&mut self, visible_count: usize) {
+        if visible_count == 0 {
+            return;
+        }
         if let Some(sel) = self.selected_suggestion {
             if sel < self.suggestion_scroll {
                 self.suggestion_scroll = sel;

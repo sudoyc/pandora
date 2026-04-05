@@ -121,6 +121,14 @@ Fetches current user's display name and avatar URL.
 
 ## Data Models
 
+### `ThumbSprite`
+A single thumbnail extracted from a CSS sprite sheet (used in `gdtm` preview mode).
+- `url` (str): Sprite image URL
+- `offset_x` (int): CSS background-position x (pixels, positive = crop from left)
+- `offset_y` (int): CSS background-position y (pixels, positive = crop from top)
+- `width` (int): Thumbnail width in pixels
+- `height` (int): Thumbnail height in pixels
+
 ### `GalleryListItem`
 Gallery card in list views.
 - `gid`, `token`, `title`, `category`, `uploader`, `thumb_url`, `posted` (str)
@@ -140,7 +148,8 @@ Full gallery metadata.
 - `comments` (list[GalleryComment])
 - `comments_has_more` (bool)
 - `preview_urls` (List[str]): Viewer page URLs (`/s/{imgkey}/{gid}-{page}`).
-- `thumb_urls` (List[str]): Page thumbnail image URLs (extracted from `.gdtm`/`.gdtl` elements).
+- `thumb_urls` (List[str]): Page thumbnail image URLs (extracted from `.gdtm`/`.gdtl` elements or fallback CSS parsing).
+- `thumb_sprites` (List[ThumbSprite]): CSS sprite crop coordinates for sprite-mode thumbnails. Empty if thumbnails are individual images (`gdtl` mode).
 
 ### `ImageDetail`
 Image viewer result.

@@ -1,4 +1,6 @@
 """WebSocket connection manager for pandora-daemon."""
+import asyncio
+
 from fastapi import WebSocket
 
 
@@ -15,9 +17,9 @@ class WebSocketManager:
 
     async def broadcast(self, event: dict) -> None:
         dead = []
-        for ws in self.connections:
+        for ws in list(self.connections):
             try:
-                await ws.send_json(event)
+                await asyncio.wait_for(ws.send_json(event), timeout=5.0)
             except Exception:
                 dead.append(ws)
         for ws in dead:

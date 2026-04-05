@@ -2,7 +2,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui_image::StatefulImage;
 
-use crate::app::App;
+use crate::app::{App, PageSource};
 use super::gallery_card::{GalleryCard, CARD_HEIGHT};
 use super::info_panel;
 use super::thumb_grid;
@@ -25,8 +25,9 @@ pub fn draw_browse(frame: &mut Frame, app: &mut App, area: Rect) {
 const COVER_WIDTH: u16 = 8;
 
 fn draw_gallery_list(frame: &mut Frame, app: &mut App, area: Rect) {
+    let title = format!(" {} ", app.page_source.label());
     let block = Block::default()
-        .title(" Gallery List ")
+        .title(title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray));
     let inner = block.inner(area);
@@ -39,7 +40,13 @@ fn draw_gallery_list(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 
     if app.gallery_list.items.is_empty() {
-        let empty = Paragraph::new("No galleries");
+        let msg = match &app.page_source {
+            PageSource::Search { .. } => "No results found",
+            PageSource::Downloaded => "No downloaded galleries",
+            PageSource::Favorites => "No favorites",
+            _ => "No galleries",
+        };
+        let empty = Paragraph::new(msg).fg(Color::DarkGray);
         frame.render_widget(empty, inner);
         return;
     }

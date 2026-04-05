@@ -126,6 +126,45 @@ async def download_command(url: str, daemon_url: str) -> int:
     return 0
 
 
+async def status_command(daemon_url: str) -> int:
+    """Show current download queue status."""
+    console = Console()
+
+    try:
+        async with httpx.AsyncClient(base_url=daemon_url, timeout=5.0) as client:
+            resp = await client.get("/api/downloads")
+    except (httpx.ConnectError, httpx.TimeoutException):
+        console.print(f"[red]Cannot connect to daemon at {daemon_url}[/red]")
+        return 1
+
+    tasks = resp.json()
+    if not tasks:
+        console.print("[dim]No downloads in queue[/dim]")
+        return 0
+
+    active = [t for t in tasks if t.get("status") in ("queued", "downloading")]
+    completed = [t for t in tasks if t.get("status") == "completed"]
+    failed = [t for t in tasks if t.get("status") == "failed"]
+
+    if active:
+        console.print(f"[bold]Active ({len(active)}):[/bold]")
+        for t in active:
+            pages = f"{t.get('downloaded_pages', 0)}/{t.get('total_pages', '?')}"
+            console.print(f"  [{t['status']}] {t.get('title', t['gid'])}  pages: {pages}")
+
+    if completed:
+        console.print(f"\n[bold green]Completed ({len(completed)}):[/bold green]")
+        for t in completed:
+            console.print(f"  {t.get('title', t['gid'])}  → {t.get('output_dir', '')}")
+
+    if failed:
+        console.print(f"\n[bold red]Failed ({len(failed)}):[/bold red]")
+        for t in failed:
+            console.print(f"  {t.get('title', t['gid'])}  error: {t.get('error', '?')}")
+
+    return 0
+
+
 def main():
     """Entry point for the `pandora` CLI command."""
     import argparse
@@ -145,13 +184,22 @@ def main():
         help="Gallery URL (e.g. https://exhentai.org/g/123456/abcdef0123/)",
     )
 
+    subparsers.add_parser(
+        "status", aliases=["st"],
+        help="Show download queue status",
+    )
+
     args = parser.parse_args()
 
+    config_path = Path("~/.config/pandora/config.toml").expanduser()
+    config = load_config(config_path)
+    daemon_url = build_daemon_url(config.server.host, config.server.port)
+
     if args.command in ("download", "dl"):
-        config_path = Path("~/.config/pandora/config.toml").expanduser()
-        config = load_config(config_path)
-        daemon_url = build_daemon_url(config.server.host, config.server.port)
         exit_code = asyncio.run(download_command(args.url, daemon_url))
+        sys.exit(exit_code)
+    elif args.command in ("status", "st"):
+        exit_code = asyncio.run(status_command(daemon_url))
         sys.exit(exit_code)
     else:
         parser.print_help()
