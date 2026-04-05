@@ -1,9 +1,10 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui_image::StatefulImage;
 
-use crate::models::GalleryDetail;
+use crate::app::App;
 
-pub fn draw_info_panel(frame: &mut Frame, detail: Option<&GalleryDetail>, area: Rect) {
+pub fn draw_info_panel(frame: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .title(" Info ")
         .borders(Borders::ALL)
@@ -11,7 +12,7 @@ pub fn draw_info_panel(frame: &mut Frame, detail: Option<&GalleryDetail>, area: 
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let detail = match detail {
+    let detail = match &app.gallery_list.detail {
         Some(d) => d,
         None => {
             let text = Paragraph::new("Select a gallery").fg(Color::DarkGray);
@@ -20,13 +21,39 @@ pub fn draw_info_panel(frame: &mut Frame, detail: Option<&GalleryDetail>, area: 
         }
     };
 
-    // Cover placeholder
+    // Clone all fields we need before calling mutable methods on app
+    let cover_url = detail.cover_url.clone();
+    let title = detail.title.clone();
+    let title_jpn = detail.title_jpn.clone();
+    let uploader = detail.uploader.clone();
+    let pages = detail.pages;
+    let size = detail.size.clone();
+    let rating = detail.rating;
+    let rating_count = detail.rating_count;
+    let tags: Vec<(String, Vec<String>)> = detail
+        .tags
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    // Cover image
     let cover_height = inner.height / 3;
     let cover_area = Rect::new(inner.x, inner.y, inner.width, cover_height);
-    let cover_placeholder = Paragraph::new("[Cover]")
-        .alignment(Alignment::Center)
-        .fg(Color::DarkGray);
-    frame.render_widget(cover_placeholder, cover_area);
+
+    // Request thumbnail if not cached
+    if !app.image_cache.contains(&cover_url) {
+        app.request_thumbnail(cover_url.clone());
+    }
+
+    if let Some(protocol) = app.get_image_protocol(&cover_url) {
+        let image_widget = StatefulImage::default();
+        frame.render_stateful_widget(image_widget, cover_area, protocol);
+    } else {
+        let cover_placeholder = Paragraph::new("[Cover]")
+            .alignment(Alignment::Center)
+            .fg(Color::DarkGray);
+        frame.render_widget(cover_placeholder, cover_area);
+    }
 
     // Metadata
     let meta_y = inner.y + cover_height + 1;
@@ -39,11 +66,11 @@ pub fn draw_info_panel(frame: &mut Frame, detail: Option<&GalleryDetail>, area: 
     let mut lines: Vec<Line> = Vec::new();
 
     lines.push(Line::from(Span::styled(
-        &detail.title,
+        title,
         Style::default().bold(),
     )));
 
-    if let Some(ref jpn) = detail.title_jpn {
+    if let Some(ref jpn) = title_jpn {
         lines.push(Line::from(Span::styled(
             jpn.as_str(),
             Style::default().fg(Color::Gray),
@@ -54,22 +81,22 @@ pub fn draw_info_panel(frame: &mut Frame, detail: Option<&GalleryDetail>, area: 
 
     lines.push(Line::from(vec![
         Span::styled("Uploader: ", Style::default().fg(Color::DarkGray)),
-        Span::raw(&detail.uploader),
+        Span::raw(uploader),
     ]));
 
     lines.push(Line::from(vec![
         Span::styled("Pages: ", Style::default().fg(Color::DarkGray)),
-        Span::raw(format!("{}", detail.pages)),
+        Span::raw(format!("{}", pages)),
         Span::raw("  "),
         Span::styled("Size: ", Style::default().fg(Color::DarkGray)),
-        Span::raw(&detail.size),
+        Span::raw(size),
     ]));
 
-    let stars = render_stars(detail.rating);
+    let stars = render_stars(rating);
     lines.push(Line::from(vec![
         Span::styled("Rating: ", Style::default().fg(Color::DarkGray)),
         Span::styled(stars, Style::default().fg(Color::Yellow)),
-        Span::raw(format!(" ({})", detail.rating_count)),
+        Span::raw(format!(" ({})", rating_count)),
     ]));
 
     lines.push(Line::from(""));
@@ -77,8 +104,8 @@ pub fn draw_info_panel(frame: &mut Frame, detail: Option<&GalleryDetail>, area: 
         "Tags:",
         Style::default().fg(Color::DarkGray),
     )));
-    for (namespace, tags) in &detail.tags {
-        let tag_str = tags.join(", ");
+    for (namespace, tag_list) in &tags {
+        let tag_str = tag_list.join(", ");
         lines.push(Line::from(vec![
             Span::styled(
                 format!("  {}: ", namespace),

@@ -1,5 +1,6 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui_image::StatefulImage;
 
 use crate::app::App;
 
@@ -50,16 +51,21 @@ pub fn draw_thumb_grid(frame: &mut Frame, app: &mut App, area: Rect) {
             thumb_h,
         );
 
-        // Show page number as placeholder (image rendering added in Task 7)
-        let label = format!("p.{}", idx + 1);
-        let p = Paragraph::new(label)
-            .alignment(Alignment::Center)
-            .fg(Color::DarkGray);
-        frame.render_widget(p, cell_area);
-
         // Request thumbnail load if not cached
         if !app.image_cache.contains(url) {
             app.request_thumbnail(url.clone());
+        }
+
+        // Render image or placeholder
+        if let Some(protocol) = app.get_image_protocol(url) {
+            let image_widget = StatefulImage::default();
+            frame.render_stateful_widget(image_widget, cell_area, protocol);
+        } else {
+            let label = format!("p.{}", idx + 1);
+            let p = Paragraph::new(label)
+                .alignment(Alignment::Center)
+                .fg(Color::DarkGray);
+            frame.render_widget(p, cell_area);
         }
     }
 }

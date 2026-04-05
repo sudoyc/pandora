@@ -15,6 +15,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
+use ratatui_image::picker::Picker;
 use tokio::sync::mpsc;
 
 use app::{App, AppMode, PageSource};
@@ -37,7 +38,11 @@ async fn main() -> io::Result<()> {
     }
 
     let (tx, mut rx) = mpsc::unbounded_channel::<AppEvent>();
-    let mut app = App::new(client, tx.clone());
+
+    // Detect terminal image protocol before entering raw mode
+    let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+
+    let mut app = App::new(client, tx.clone(), picker);
 
     // Load initial page
     app.load_current_page();
@@ -141,6 +146,7 @@ fn handle_key_browse(app: &mut App, code: KeyCode) {
                 };
                 app.mode = AppMode::Read;
                 app.page_image = None;
+                app.page_image_state = None;
                 load_page_image(app);
             }
         }
@@ -225,12 +231,14 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
         KeyCode::Esc | KeyCode::Char('h') => {
             app.mode = AppMode::Browse;
             app.page_image = None;
+            app.page_image_state = None;
         }
         KeyCode::Char('j') | KeyCode::Char('l') | KeyCode::Char(' ') | KeyCode::Down => {
             app.reader.next_page();
             app.reader.loading = true;
             app.reader.error = None;
             app.page_image = None;
+            app.page_image_state = None;
             load_page_image(app);
         }
         KeyCode::Char('k') | KeyCode::Up => {
@@ -238,6 +246,7 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
             app.reader.loading = true;
             app.reader.error = None;
             app.page_image = None;
+            app.page_image_state = None;
             load_page_image(app);
         }
         KeyCode::Char('G') => {
@@ -245,6 +254,7 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
             app.reader.loading = true;
             app.reader.error = None;
             app.page_image = None;
+            app.page_image_state = None;
             load_page_image(app);
         }
         KeyCode::Char('g') => {
@@ -253,6 +263,7 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
                 app.reader.loading = true;
                 app.reader.error = None;
                 app.page_image = None;
+                app.page_image_state = None;
                 load_page_image(app);
                 app.pending_g = false;
             } else {
@@ -263,6 +274,7 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
             app.reader.loading = true;
             app.reader.error = None;
             app.page_image = None;
+            app.page_image_state = None;
             load_page_image(app);
         }
         KeyCode::Char('d') => {
@@ -482,11 +494,13 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             app.search.suggestions.clear();
         }
         AppEvent::ThumbnailLoaded { url, image } => {
+            app.image_states.remove(&url);
             app.image_cache.put(url, image);
         }
         AppEvent::PageImageLoaded { page, image } => {
             if page == app.reader.current_page {
                 app.page_image = Some(image);
+                app.page_image_state = None;
                 app.reader.loading = false;
                 app.reader.loading_progress = None;
             }

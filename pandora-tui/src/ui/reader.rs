@@ -1,9 +1,10 @@
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, Paragraph};
+use ratatui_image::StatefulImage;
 
 use crate::app::App;
 
-pub fn draw_reader(frame: &mut Frame, app: &App, area: Rect) {
+pub fn draw_reader(frame: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
@@ -48,7 +49,7 @@ fn draw_page_list(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, inner);
 }
 
-fn draw_viewer(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_viewer(frame: &mut Frame, app: &mut App, area: Rect) {
     let title = format!(
         " {} — Page {}/{} ",
         app.reader.title, app.reader.current_page, app.reader.total_pages,
@@ -128,12 +129,17 @@ fn draw_viewer(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Image display placeholder (ratatui-image integration in Task 7)
+    // Image display
     if app.page_image.is_some() {
-        let text = Paragraph::new("[Page image rendered here]")
-            .alignment(Alignment::Center)
-            .fg(Color::DarkGray);
-        frame.render_widget(text, inner);
+        if let Some(protocol) = app.get_page_protocol() {
+            let image_widget = StatefulImage::default();
+            frame.render_stateful_widget(image_widget, inner, protocol);
+        } else {
+            let text = Paragraph::new("Preparing image...")
+                .alignment(Alignment::Center)
+                .fg(Color::DarkGray);
+            frame.render_widget(text, inner);
+        }
     } else {
         let text = Paragraph::new("No image loaded")
             .alignment(Alignment::Center)

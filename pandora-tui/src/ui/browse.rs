@@ -18,7 +18,7 @@ pub fn draw_browse(frame: &mut Frame, app: &mut App, area: Rect) {
 
     draw_gallery_list(frame, app, chunks[0]);
     thumb_grid::draw_thumb_grid(frame, app, chunks[1]);
-    info_panel::draw_info_panel(frame, app.gallery_list.detail.as_ref(), chunks[2]);
+    info_panel::draw_info_panel(frame, app, chunks[2]);
 }
 
 fn draw_gallery_list(frame: &mut Frame, app: &mut App, area: Rect) {

@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 
 use image::DynamicImage;
 use lru::LruCache;
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc;
 
 use crate::client::DaemonClient;
@@ -53,12 +56,16 @@ pub struct App {
     pub should_quit: bool,
     pub pending_g: bool,
 
+    pub picker: Picker,
+    pub image_states: HashMap<String, StatefulProtocol>,
+    pub page_image_state: Option<StatefulProtocol>,
+
     pub client: DaemonClient,
     pub tx: mpsc::UnboundedSender<AppEvent>,
 }
 
 impl App {
-    pub fn new(client: DaemonClient, tx: mpsc::UnboundedSender<AppEvent>) -> Self {
+    pub fn new(client: DaemonClient, tx: mpsc::UnboundedSender<AppEvent>, picker: Picker) -> Self {
         Self {
             mode: AppMode::Browse,
             page_source: PageSource::Homepage,
@@ -72,6 +79,9 @@ impl App {
             show_help: false,
             should_quit: false,
             pending_g: false,
+            picker,
+            image_states: HashMap::new(),
+            page_image_state: None,
             client,
             tx,
         }
@@ -163,6 +173,29 @@ impl App {
                 }
             }
         });
+    }
+
+    /// Get or create a StatefulProtocol for a cached image, keyed by URL.
+    pub fn get_image_protocol(&mut self, url: &str) -> Option<&mut StatefulProtocol> {
+        if !self.image_cache.contains(url) {
+            return None;
+        }
+        if !self.image_states.contains_key(url) {
+            if let Some(img) = self.image_cache.peek(url) {
+                let protocol = self.picker.new_resize_protocol(img.clone());
+                self.image_states.insert(url.to_string(), protocol);
+            }
+        }
+        self.image_states.get_mut(url)
+    }
+
+    /// Get or create a StatefulProtocol for the current page image.
+    pub fn get_page_protocol(&mut self) -> Option<&mut StatefulProtocol> {
+        if self.page_image.is_some() && self.page_image_state.is_none() {
+            let img = self.page_image.as_ref().unwrap();
+            self.page_image_state = Some(self.picker.new_resize_protocol(img.clone()));
+        }
+        self.page_image_state.as_mut()
     }
 }
 
