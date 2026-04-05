@@ -17,6 +17,7 @@ use crossterm::{
 use ratatui::prelude::*;
 use ratatui_image::picker::Picker;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use app::{App, AppMode, PageSource};
 use client::DaemonClient;
@@ -503,11 +504,14 @@ fn start_page_load(app: &mut App) {
     app.reader.error = None;
     app.page_image = None;
     app.page_image_state = None;
-    load_page_image(app);
+    app.page_load_cancel.cancel();
+    app.page_load_cancel = CancellationToken::new();
+    let cancel = app.page_load_cancel.clone();
+    load_page_image(app, cancel);
     preload_adjacent_pages(app);
 }
 
-fn load_page_image(app: &App) {
+fn load_page_image(app: &App, cancel: CancellationToken) {
     let gid = app.reader.gid.clone();
     let token = app.reader.token.clone();
     let page = app.reader.current_page;
@@ -518,84 +522,94 @@ fn load_page_image(app: &App) {
     if is_local {
         // Local: fetch from library file endpoint
         tokio::spawn(async move {
-            let path = format!("page/{}", page);
-            match client.get_library_file(&gid, &path).await {
-                Ok(bytes) => {
-                    let bytes_vec = bytes.to_vec();
-                    match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
-                        Ok(Ok(img)) => {
-                            let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
+            tokio::select! {
+                _ = cancel.cancelled() => {}
+                _ = async {
+                    let path = format!("page/{}", page);
+                    match client.get_library_file(&gid, &path).await {
+                        Ok(bytes) => {
+                            let bytes_vec = bytes.to_vec();
+                            match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                                Ok(Ok(img)) => {
+                                    let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
+                                }
+                                Ok(Err(e)) => {
+                                    let _ = tx.send(AppEvent::ImageError {
+                                        url: format!("page:{}", page),
+                                        error: e.to_string(),
+                                    });
+                                }
+                                Err(_) => {
+                                    let _ = tx.send(AppEvent::ImageError {
+                                        url: format!("page:{}", page),
+                                        error: "image decode task panicked".to_string(),
+                                    });
+                                }
+                            }
                         }
-                        Ok(Err(e)) => {
+                        Err(e) => {
                             let _ = tx.send(AppEvent::ImageError {
                                 url: format!("page:{}", page),
-                                error: e.to_string(),
-                            });
-                        }
-                        Err(_) => {
-                            let _ = tx.send(AppEvent::ImageError {
-                                url: format!("page:{}", page),
-                                error: "image decode task panicked".to_string(),
+                                error: e,
                             });
                         }
                     }
-                }
-                Err(e) => {
-                    let _ = tx.send(AppEvent::ImageError {
-                        url: format!("page:{}", page),
-                        error: e,
-                    });
-                }
+                } => {}
             }
         });
     } else {
         // Online: fetch from daemon page endpoint
         tokio::spawn(async move {
-            match client.get_page_image(&gid, &token, page).await {
-                Ok(response) => {
-                    let content_length = response.content_length().unwrap_or(0);
-                    let bytes = match response.bytes().await {
-                        Ok(b) => b,
+            tokio::select! {
+                _ = cancel.cancelled() => {}
+                _ = async {
+                    match client.get_page_image(&gid, &token, page).await {
+                        Ok(response) => {
+                            let content_length = response.content_length().unwrap_or(0);
+                            let bytes = match response.bytes().await {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    let _ = tx.send(AppEvent::ImageError {
+                                        url: format!("page:{}", page),
+                                        error: e.to_string(),
+                                    });
+                                    return;
+                                }
+                            };
+                            if content_length > 0 {
+                                let _ = tx.send(AppEvent::PageImageProgress {
+                                    page,
+                                    received: bytes.len() as u64,
+                                    total: content_length,
+                                });
+                            }
+                            let bytes_vec = bytes.to_vec();
+                            match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                                Ok(Ok(img)) => {
+                                    let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
+                                }
+                                Ok(Err(e)) => {
+                                    let _ = tx.send(AppEvent::ImageError {
+                                        url: format!("page:{}", page),
+                                        error: e.to_string(),
+                                    });
+                                }
+                                Err(_) => {
+                                    let _ = tx.send(AppEvent::ImageError {
+                                        url: format!("page:{}", page),
+                                        error: "image decode task panicked".to_string(),
+                                    });
+                                }
+                            }
+                        }
                         Err(e) => {
                             let _ = tx.send(AppEvent::ImageError {
                                 url: format!("page:{}", page),
-                                error: e.to_string(),
-                            });
-                            return;
-                        }
-                    };
-                    if content_length > 0 {
-                        let _ = tx.send(AppEvent::PageImageProgress {
-                            page,
-                            received: bytes.len() as u64,
-                            total: content_length,
-                        });
-                    }
-                    let bytes_vec = bytes.to_vec();
-                    match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
-                        Ok(Ok(img)) => {
-                            let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
-                        }
-                        Ok(Err(e)) => {
-                            let _ = tx.send(AppEvent::ImageError {
-                                url: format!("page:{}", page),
-                                error: e.to_string(),
-                            });
-                        }
-                        Err(_) => {
-                            let _ = tx.send(AppEvent::ImageError {
-                                url: format!("page:{}", page),
-                                error: "image decode task panicked".to_string(),
+                                error: e,
                             });
                         }
                     }
-                }
-                Err(e) => {
-                    let _ = tx.send(AppEvent::ImageError {
-                        url: format!("page:{}", page),
-                        error: e,
-                    });
-                }
+                } => {}
             }
         });
         // Online prefetch on daemon side
