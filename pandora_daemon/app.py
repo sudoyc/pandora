@@ -1,5 +1,9 @@
+import asyncio
+import contextlib
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from exhentai_api.api import ExhentaiAPI
@@ -21,6 +25,19 @@ from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
 from pandora_daemon.tag_database import TagDatabase
 from pandora_daemon.db import PandoraDB
+
+logger = logging.getLogger(__name__)
+
+async def _cache_eviction_loop(cache: CacheManager, interval: int) -> None:
+    """Background loop: periodically prune expired galleries and evict images."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            cache.prune_expired_galleries()
+            await cache.evict_images()
+        except Exception:
+            logger.exception("Cache eviction error")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,7 +69,13 @@ async def lifespan(app: FastAPI):
     )
     app.state.pandora = state
     await downloads.start()
+    eviction_task = asyncio.create_task(
+        _cache_eviction_loop(cache, config.cache.eviction_interval_seconds)
+    )
     yield
+    eviction_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await eviction_task
     await db.close()
     await downloads.shutdown()
     await image_service.shutdown()
