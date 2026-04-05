@@ -516,11 +516,15 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             app.gallery_list.loading = false;
             app.status_msg = format!("Error: {}", e);
         }
-        AppEvent::DetailLoaded(Ok(detail)) => {
-            app.gallery_list.detail = Some(detail);
+        AppEvent::DetailLoaded(Ok(detail), generation) => {
+            if generation == app.detail_generation {
+                app.gallery_list.detail = Some(detail);
+            }
         }
-        AppEvent::DetailLoaded(Err(e)) => {
-            app.status_msg = format!("Detail error: {}", e);
+        AppEvent::DetailLoaded(Err(e), generation) => {
+            if generation == app.detail_generation {
+                app.status_msg = format!("Detail error: {}", e);
+            }
         }
         AppEvent::SuggestionsLoaded(Ok(suggestions)) => {
             app.search.suggestions = suggestions;

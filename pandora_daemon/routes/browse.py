@@ -123,7 +123,11 @@ async def get_watched(page: int = 0, api=Depends(get_api)):
 @router.get("/image/proxy")
 async def image_proxy(url: str, image_service=Depends(get_image_service)):
     """Proxy any image URL through the local cache."""
-    data = await image_service.proxy_image(url)
+    try:
+        data = await image_service.proxy_image(url)
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=502, detail=f"Failed to fetch image: {e}")
     lower_url = url.lower()
     if lower_url.endswith(".png"):
         media_type = "image/png"

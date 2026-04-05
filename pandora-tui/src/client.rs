@@ -114,6 +114,27 @@ impl DaemonClient {
             .map_err(|e| e.to_string())
     }
 
+    pub async fn get_thumb_image(
+        &self,
+        gid: &str,
+        token: &str,
+        page: u32,
+    ) -> Result<Vec<u8>, String> {
+        let resp = self.http
+            .get(format!(
+                "{}/api/gallery/{}/{}/thumb/{}",
+                self.base_url, gid, token, page
+            ))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        Ok(bytes.to_vec())
+    }
+
     pub async fn prefetch(
         &self,
         gid: &str,

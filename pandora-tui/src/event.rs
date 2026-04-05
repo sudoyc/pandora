@@ -12,7 +12,7 @@ pub enum AppEvent {
 
     // ── Daemon responses ──
     GalleriesLoaded(Result<Vec<GalleryItem>, String>),
-    DetailLoaded(Result<GalleryDetail, String>),
+    DetailLoaded(Result<GalleryDetail, String>, u64),
     FavoritesLoaded(Result<FavoritesResponse, String>),
     SuggestionsLoaded(Result<Vec<TagSuggestion>, String>),
     DownloadSubmitted(Result<DownloadTask, String>),

@@ -56,6 +56,7 @@ pub struct App {
     pub show_help: bool,
     pub should_quit: bool,
     pub pending_g: bool,
+    pub detail_generation: u64,
 
     pub picker: Picker,
     pub image_states: HashMap<String, StatefulProtocol>,
@@ -80,6 +81,7 @@ impl App {
             show_help: false,
             should_quit: false,
             pending_g: false,
+            detail_generation: 0,
             picker,
             image_states: HashMap::new(),
             page_image_state: None,
@@ -166,10 +168,12 @@ impl App {
 
     pub fn load_selected_detail(&mut self) {
         if let Some(item) = self.gallery_list.selected_item() {
+            self.detail_generation += 1;
+            let generation = self.detail_generation;
             let gid = item.gid.clone();
             let token = item.token.clone();
             self.spawn_fetch(move |c| async move {
-                AppEvent::DetailLoaded(c.get_gallery_detail(&gid, &token).await)
+                AppEvent::DetailLoaded(c.get_gallery_detail(&gid, &token).await, generation)
             });
         }
     }
@@ -195,6 +199,41 @@ impl App {
                 },
                 Err(e) => {
                     let _ = tx.send(AppEvent::ImageError { url, error: e });
+                }
+            }
+        });
+    }
+
+    /// Request a cropped thumbnail via the daemon's thumb endpoint.
+    /// Uses "thumb:{gid}:{page}" as cache key.
+    pub fn request_gallery_thumb(&mut self, gid: String, token: String, page: u32) {
+        let cache_key = format!("thumb:{}:{}", gid, page);
+        if self.image_cache.contains(&cache_key) {
+            return;
+        }
+        let tx = self.tx.clone();
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            match client.get_thumb_image(&gid, &token, page).await {
+                Ok(bytes) => match image::load_from_memory(&bytes) {
+                    Ok(img) => {
+                        let _ = tx.send(AppEvent::ThumbnailLoaded {
+                            url: cache_key,
+                            image: img,
+                        });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AppEvent::ImageError {
+                            url: cache_key,
+                            error: e.to_string(),
+                        });
+                    }
+                },
+                Err(e) => {
+                    let _ = tx.send(AppEvent::ImageError {
+                        url: cache_key,
+                        error: e,
+                    });
                 }
             }
         });

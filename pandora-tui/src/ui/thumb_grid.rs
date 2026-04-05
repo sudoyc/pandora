@@ -21,20 +21,22 @@ pub fn draw_thumb_grid(frame: &mut Frame, app: &mut App, area: Rect) {
         }
     };
 
-    if detail.thumb_urls.is_empty() {
+    let total_thumbs = detail.pages as usize;
+    if total_thumbs == 0 {
         let text = Paragraph::new("No thumbnails").fg(Color::DarkGray);
         frame.render_widget(text, inner);
         return;
     }
 
-    let thumb_w: u16 = 10;
-    let thumb_h: u16 = 7;
+    let gid = detail.gid.clone();
+    let token = detail.token.clone();
+
+    let thumb_w: u16 = 14;
+    let thumb_h: u16 = 8;
     let cols = (inner.width / thumb_w).max(1) as usize;
     let rows = (inner.height / thumb_h).max(1) as usize;
 
-    let thumb_urls: Vec<String> = detail.thumb_urls.clone();
-
-    for (idx, url) in thumb_urls.iter().enumerate().take(cols * rows) {
+    for idx in 0..total_thumbs.min(cols * rows) {
         let col = idx % cols;
         let row = idx / cols;
         let x = inner.x + (col as u16) * thumb_w;
@@ -51,17 +53,20 @@ pub fn draw_thumb_grid(frame: &mut Frame, app: &mut App, area: Rect) {
             thumb_h,
         );
 
-        // Request thumbnail load if not cached
-        if !app.image_cache.contains(url) {
-            app.request_thumbnail(url.clone());
+        let page = (idx + 1) as u32;
+        let cache_key = format!("thumb:{}:{}", gid, page);
+
+        // Request cropped thumbnail if not cached
+        if !app.image_cache.contains(&cache_key) {
+            app.request_gallery_thumb(gid.clone(), token.clone(), page);
         }
 
         // Render image or placeholder
-        if let Some(protocol) = app.get_image_protocol(url) {
+        if let Some(protocol) = app.get_image_protocol(&cache_key) {
             let image_widget = StatefulImage::default();
             frame.render_stateful_widget(image_widget, cell_area, protocol);
         } else {
-            let label = format!("p.{}", idx + 1);
+            let label = format!("p.{}", page);
             let p = Paragraph::new(label)
                 .alignment(Alignment::Center)
                 .fg(Color::DarkGray);
