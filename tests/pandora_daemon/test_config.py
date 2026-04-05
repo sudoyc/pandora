@@ -30,9 +30,12 @@ class TestDefaultConfig:
         assert srv.port == 7860
 
     def test_default_download_config(self):
-        dl = DownloadConfig()
-        assert dl.path == "~/Downloads/pandora"
-        assert dl.concurrency == 3
+        cfg = DownloadConfig()
+        assert cfg.path == "~/Downloads/pandora"
+        assert cfg.gallery_concurrency == 2
+        assert cfg.page_concurrency == 4
+        assert cfg.max_retry == 3
+        assert cfg.retry_base_delay == 2.0
 
     def test_default_cache_config(self):
         cache = CacheConfig()
@@ -64,14 +67,14 @@ class TestLoadConfig:
         assert cfg.server.host == "127.0.0.1"
         assert cfg.server.port == 7860
         assert cfg.download.path == "~/Downloads/pandora"
-        assert cfg.download.concurrency == 3
+        assert cfg.download.gallery_concurrency == 2
 
     def test_load_config_reads_existing(self, tmp_path):
         config_path = tmp_path / "config.toml"
         data = {
             "credentials": {"igneous": "abc123", "ipb_member_id": "999"},
             "server": {"host": "0.0.0.0", "port": 9999},
-            "download": {"path": "/custom/path", "concurrency": 5},
+            "download": {"path": "/custom/path", "gallery_concurrency": 5},
             "cache": {
                 "image_dir": "/custom/cache",
                 "image_max_size_mb": 1000,
@@ -87,7 +90,7 @@ class TestLoadConfig:
         assert cfg.server.host == "0.0.0.0"
         assert cfg.server.port == 9999
         assert cfg.download.path == "/custom/path"
-        assert cfg.download.concurrency == 5
+        assert cfg.download.gallery_concurrency == 5
         assert cfg.cache.image_dir == "/custom/cache"
         assert cfg.cache.image_max_size_mb == 1000
         assert cfg.cache.gallery_ttl_seconds == 600
@@ -112,6 +115,30 @@ class TestLoadConfig:
         assert cfg.cache.image_max_size_mb == 2048
 
 
+    def test_load_config_backward_compat_concurrency(self, tmp_path):
+        """Old 'concurrency' field maps to gallery_concurrency."""
+        config_path = tmp_path / "config.toml"
+        data = {"download": {"concurrency": 5, "path": "~/dl"}}
+        config_path.write_bytes(tomli_w.dumps(data).encode())
+        cfg = load_config(config_path)
+        assert cfg.download.gallery_concurrency == 5
+        assert cfg.download.page_concurrency == 4
+
+    def test_load_config_new_fields(self, tmp_path):
+        """New fields load correctly."""
+        config_path = tmp_path / "config.toml"
+        data = {"download": {
+            "gallery_concurrency": 1, "page_concurrency": 8,
+            "max_retry": 5, "retry_base_delay": 1.0,
+        }}
+        config_path.write_bytes(tomli_w.dumps(data).encode())
+        cfg = load_config(config_path)
+        assert cfg.download.gallery_concurrency == 1
+        assert cfg.download.page_concurrency == 8
+        assert cfg.download.max_retry == 5
+        assert cfg.download.retry_base_delay == 1.0
+
+
 class TestSaveConfig:
     """Test save_config behavior."""
 
@@ -120,7 +147,7 @@ class TestSaveConfig:
         cfg = PandoraConfig(
             credentials=CredentialsConfig(igneous="tok", ipb_member_id="42"),
             server=ServerConfig(host="0.0.0.0", port=1234),
-            download=DownloadConfig(path="/dl", concurrency=2),
+            download=DownloadConfig(path="/dl", gallery_concurrency=2),
             cache=CacheConfig(
                 image_dir="/cache",
                 image_max_size_mb=100,
@@ -139,7 +166,7 @@ class TestSaveConfig:
         assert data["server"]["host"] == "0.0.0.0"
         assert data["server"]["port"] == 1234
         assert data["download"]["path"] == "/dl"
-        assert data["download"]["concurrency"] == 2
+        assert data["download"]["gallery_concurrency"] == 2
         assert data["cache"]["image_dir"] == "/cache"
         assert data["cache"]["image_max_size_mb"] == 100
         assert data["cache"]["gallery_ttl_seconds"] == 60
@@ -156,7 +183,7 @@ class TestSaveConfig:
         assert reloaded.server.host == "192.168.1.1"
         assert reloaded.server.port == 5555
         # Defaults remain intact
-        assert reloaded.download.concurrency == 3
+        assert reloaded.download.gallery_concurrency == 2
 
 
 class TestToPublicDict:
@@ -177,7 +204,7 @@ class TestToPublicDict:
     def test_to_public_dict_contains_correct_values(self):
         cfg = PandoraConfig(
             server=ServerConfig(host="127.0.0.1", port=7860),
-            download=DownloadConfig(path="~/Downloads/pandora", concurrency=3),
+            download=DownloadConfig(path="~/Downloads/pandora", gallery_concurrency=2),
         )
 
         public = cfg.to_public_dict()
@@ -185,4 +212,14 @@ class TestToPublicDict:
         assert public["server"]["host"] == "127.0.0.1"
         assert public["server"]["port"] == 7860
         assert public["download"]["path"] == "~/Downloads/pandora"
-        assert public["download"]["concurrency"] == 3
+        assert public["download"]["gallery_concurrency"] == 2
+
+    def test_to_public_dict_contains_new_download_fields(self):
+        cfg = PandoraConfig()
+        d = cfg.to_public_dict()
+        dl = d["download"]
+        assert "gallery_concurrency" in dl
+        assert "page_concurrency" in dl
+        assert "max_retry" in dl
+        assert "retry_base_delay" in dl
+        assert "concurrency" not in dl

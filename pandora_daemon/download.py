@@ -72,7 +72,7 @@ class DownloadManager:
                 task.status = "queued"
                 await self._queue.put(task.gid)
 
-        for _ in range(self._config.concurrency):
+        for _ in range(self._config.gallery_concurrency):
             worker = asyncio.create_task(self._worker())
             self._workers.append(worker)
 

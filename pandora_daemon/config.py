@@ -36,7 +36,10 @@ class DownloadConfig:
     """Download manager settings."""
 
     path: str = "~/Downloads/pandora"
-    concurrency: int = 3
+    gallery_concurrency: int = 2
+    page_concurrency: int = 4
+    max_retry: int = 3
+    retry_base_delay: float = 2.0
 
 
 @dataclass
@@ -79,7 +82,10 @@ class PandoraConfig:
             },
             "download": {
                 "path": self.download.path,
-                "concurrency": self.download.concurrency,
+                "gallery_concurrency": self.download.gallery_concurrency,
+                "page_concurrency": self.download.page_concurrency,
+                "max_retry": self.download.max_retry,
+                "retry_base_delay": self.download.retry_base_delay,
             },
             "cache": {
                 "image_dir": self.cache.image_dir,
@@ -130,9 +136,14 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
     )
 
     dl_data = data.get("download", {})
+    gallery_concurrency = dl_data.get("gallery_concurrency",
+                                       dl_data.get("concurrency", 2))
     download = DownloadConfig(
         path=dl_data.get("path", "~/Downloads/pandora"),
-        concurrency=dl_data.get("concurrency", 3),
+        gallery_concurrency=gallery_concurrency,
+        page_concurrency=dl_data.get("page_concurrency", 4),
+        max_retry=dl_data.get("max_retry", 3),
+        retry_base_delay=dl_data.get("retry_base_delay", 2.0),
     )
 
     cache_data = data.get("cache", {})

@@ -17,7 +17,7 @@ from pandora_daemon.download import DownloadManager, DownloadTask, _sanitize_fil
 
 @pytest.fixture
 def download_config(tmp_path):
-    return DownloadConfig(path=str(tmp_path / "downloads"), concurrency=2)
+    return DownloadConfig(path=str(tmp_path / "downloads"), gallery_concurrency=2)
 
 
 @pytest.fixture
@@ -265,7 +265,7 @@ async def test_start_creates_workers(mock_api, mock_ws, mock_cache, download_con
     await manager.start()
 
     try:
-        assert len(manager._workers) == download_config.concurrency
+        assert len(manager._workers) == download_config.gallery_concurrency
     finally:
         await manager.shutdown()
 
