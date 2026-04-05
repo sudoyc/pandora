@@ -5,6 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from exhentai_api.exceptions import (
+    AuthenticationError, ImageLimitError, GalleryNotFoundError,
+    NetworkError, ParseError,
+)
 from pandora_daemon.download import DownloadTask, _atomic_write
 
 
@@ -156,3 +160,108 @@ class TestDebounce:
         await mgr.shutdown()
         assert state_file.exists()
         assert mgr._save_task is None or mgr._save_task.done() or mgr._save_task.cancelled()
+
+
+class TestDownloadPages:
+    """Tests for _download_pages concurrent download logic."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_download_all_pages_succeed(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+        )
+        pages_dir = Path(task.output_dir) / "pages"
+        pages_dir.mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
+            await mgr._download_pages(task)
+
+        assert task.downloaded_pages == 3
+        assert task.failed_pages == []
+        assert all(task.page_states[i] == "done" for i in range(1, 4))
+
+    @pytest.mark.asyncio
+    async def test_concurrent_download_skips_existing_files(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+        )
+        pages_dir = Path(task.output_dir) / "pages"
+        pages_dir.mkdir(parents=True)
+        (pages_dir / "0001.jpg").write_bytes(b"existing")
+        (pages_dir / "0002.jpg").write_bytes(b"existing")
+
+        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/3.jpg", None)):
+            await mgr._download_pages(task)
+
+        assert task.page_states[1] == "done"
+        assert task.page_states[2] == "done"
+        assert task.page_states[3] == "done"
+        assert mock_api.client.get_html.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_concurrent_download_ignores_tmp_files(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        pages_dir = Path(task.output_dir) / "pages"
+        pages_dir.mkdir(parents=True)
+        (pages_dir / "0001.jpg.tmp").write_bytes(b"partial")
+
+        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
+            await mgr._download_pages(task)
+
+        assert task.page_states[1] == "done"
+        assert not (pages_dir / "0001.jpg.tmp").exists()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_download_broadcasts_progress(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=2, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
+            await mgr._download_pages(task)
+
+        progress_calls = [
+            c[0][0] for c in mock_ws.broadcast.call_args_list
+            if c[0][0].get("event") == "download_progress"
+        ]
+        assert len(progress_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_uses_atomic_write(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
+            with patch("pandora_daemon.download._atomic_write") as mock_aw:
+                await mgr._download_pages(task)
+                mock_aw.assert_called_once()

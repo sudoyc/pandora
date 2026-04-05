@@ -12,6 +12,10 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from exhentai_api.exceptions import (
+    AuthenticationError, ImageLimitError, GalleryNotFoundError,
+    NetworkError, ParseError,
+)
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import _ext_from_url
@@ -217,6 +221,98 @@ class DownloadManager:
                 self._save_state()
 
             self._queue.task_done()
+
+    async def _download_pages(self, task: DownloadTask) -> None:
+        """Concurrent page download with inline retry."""
+        semaphore = asyncio.Semaphore(self._config.page_concurrency)
+        pages_dir = Path(task.output_dir) / "pages"
+        pages_dir.mkdir(parents=True, exist_ok=True)
+        stop_event = asyncio.Event()
+        stop_reason: Exception | None = None
+
+        # Clean leftover .tmp files
+        for tmp_file in pages_dir.glob("*.tmp"):
+            tmp_file.unlink(missing_ok=True)
+
+        # Initialize page states
+        for i in range(1, task.total_pages + 1):
+            if task.page_states.get(i) != "done":
+                task.page_states[i] = "pending"
+
+        async def _download_single_page(page_num: int) -> None:
+            nonlocal stop_reason
+            if stop_event.is_set():
+                return
+            if task.page_states.get(page_num) == "done":
+                return
+            # File system check (exclude .tmp)
+            existing = [f for f in pages_dir.glob(f"{page_num:04d}.*")
+                        if not f.name.endswith(".tmp")]
+            if existing:
+                task.page_states[page_num] = "done"
+                return
+
+            async with semaphore:
+                if stop_event.is_set() or task.gid in self._cancelled:
+                    return
+
+                idx = page_num - 1
+                if idx >= len(task.preview_urls):
+                    task.page_states[page_num] = "failed"
+                    task.failed_pages.append(page_num)
+                    return
+
+                viewer_url = task.preview_urls[idx]
+                last_exc = None
+
+                for attempt in range(self._config.max_retry + 1):
+                    if stop_event.is_set() or task.gid in self._cancelled:
+                        return
+                    try:
+                        task.page_states[page_num] = "downloading"
+                        html = await self._api.client.get_html(viewer_url)
+                        image_url, _ = parse_image_viewer(html)
+                        if not image_url:
+                            raise ParseError(f"No image URL for page {page_num}")
+                        data = await self._fetch_image(image_url)
+                        ext = _ext_from_url(image_url)
+                        _atomic_write(pages_dir / f"{page_num:04d}{ext}", data)
+                        task.page_states[page_num] = "done"
+                        task.downloaded_pages += 1
+                        last_exc = None
+                        break
+
+                    except (AuthenticationError, ImageLimitError, GalleryNotFoundError) as e:
+                        stop_reason = e
+                        stop_event.set()
+                        task.page_states[page_num] = "failed"
+                        return
+
+                    except (NetworkError, ParseError) as e:
+                        last_exc = e
+                        if attempt < self._config.max_retry:
+                            delay = self._config.retry_base_delay * (2 ** attempt)
+                            await asyncio.sleep(delay)
+
+                    except Exception as e:
+                        last_exc = e
+                        break
+
+                if last_exc is not None:
+                    task.page_states[page_num] = "failed"
+                    task.failed_pages.append(page_num)
+
+                await self._ws.broadcast({
+                    "event": "download_progress", "gid": task.gid,
+                    "phase": "pages", "page": page_num, "total": task.total_pages,
+                })
+                self._mark_dirty()
+
+        coros = [_download_single_page(p) for p in range(1, task.total_pages + 1)]
+        await asyncio.gather(*coros)
+
+        if stop_reason is not None:
+            raise stop_reason
 
     async def _download_gallery(self, task: DownloadTask) -> None:
         """Download complete gallery: metadata, cover, thumbs, pages."""
