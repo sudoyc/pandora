@@ -129,6 +129,20 @@ class TestHistory:
         assert len(rows) == 200
         await db.close()
 
+    @pytest.mark.asyncio
+    async def test_put_history_preserves_read_page(self):
+        db = await make_db()
+        item = make_list_item(gid="77")
+        await db.put_history(item)
+        # Manually set read_page to 42
+        await db._db.execute("UPDATE history SET read_page = 42 WHERE gid = '77'")
+        await db._db.commit()
+        # Put the same gallery again
+        await db.put_history(item)
+        rows = await db.get_history()
+        assert rows[0]["read_page"] == 42
+        await db.close()
+
 
 # ── local_favorites ───────────────────────────────────────────────────────────
 
@@ -311,6 +325,21 @@ class TestFilter:
         await db.add_filter(FILTER_TAG, "loli")
         # Put tags in cache for gid "1"
         await db.put_cached_tags("1", {"female": ["loli", "schoolgirl"]})
+        galleries = [
+            {"gid": "1", "title": "Gallery A", "uploader": "user"},
+            {"gid": "2", "title": "Gallery B", "uploader": "user"},
+        ]
+        result = await db.apply_filters(galleries)
+        assert len(result) == 1
+        assert result[0]["gid"] == "2"
+        await db.close()
+
+    @pytest.mark.asyncio
+    async def test_apply_filters_tag_namespace(self):
+        db = await make_db()
+        await db.add_filter(FILTER_TAG_NAMESPACE, "female")
+        # Gallery "1" has a "female" namespace in its tags
+        await db.put_cached_tags("1", {"female": ["tag1"], "male": ["tag2"]})
         galleries = [
             {"gid": "1", "title": "Gallery A", "uploader": "user"},
             {"gid": "2", "title": "Gallery B", "uploader": "user"},

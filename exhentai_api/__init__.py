@@ -1,5 +1,14 @@
 from .api import ExhentaiAPI
 from .client import ExhentaiClient
+from .exceptions import (
+    ExhentaiError,
+    AuthenticationError,
+    ImageLimitError,
+    GalleryNotFoundError,
+    GalleryOffensiveError,
+    ParseError,
+    NetworkError,
+)
 from .models.gallery import GalleryListItem, GalleryDetail
 from .models.comment import GalleryComment
 from .models.torrent import TorrentItem

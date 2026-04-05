@@ -69,7 +69,7 @@ class TestGetConfig:
 
         data = resp.json()
         assert "download" in data
-        assert "concurrency" in data["download"]
+        assert "gallery_concurrency" in data["download"]
 
     def test_get_config_returns_cache_section(self):
         app, _ = _make_app()
@@ -121,10 +121,10 @@ class TestUpdateConfig:
         client = TestClient(app)
 
         with patch("pandora_daemon.routes.config_routes.save_config"):
-            resp = client.put("/api/config", json={"download": {"concurrency": 5}})
+            resp = client.put("/api/config", json={"download": {"gallery_concurrency": 5}})
 
         assert resp.status_code == 200
-        assert state.config.download.concurrency == 5
+        assert state.config.download.gallery_concurrency == 5
 
     def test_update_config_cache_ttl(self, tmp_path):
         config_path = tmp_path / "config.toml"
