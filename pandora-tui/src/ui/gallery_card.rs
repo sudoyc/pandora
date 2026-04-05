@@ -1,12 +1,11 @@
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Widget};
+use ratatui::widgets::Widget;
+use unicode_width::UnicodeWidthStr;
 
-use crate::models::{category_to_color, GalleryItem};
+use crate::models::{category_colors, GalleryItem};
 
 /// Height of a single gallery card in rows.
 pub const CARD_HEIGHT: u16 = 4;
-/// Width reserved for the thumbnail placeholder on the left.
-pub const THUMB_WIDTH: u16 = 10;
 
 pub struct GalleryCard<'a> {
     pub item: &'a GalleryItem,
@@ -15,7 +14,7 @@ pub struct GalleryCard<'a> {
 
 impl<'a> Widget for GalleryCard<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if area.height < CARD_HEIGHT || area.width < THUMB_WIDTH + 20 {
+        if area.height < CARD_HEIGHT || area.width < 25 {
             return;
         }
 
@@ -24,49 +23,42 @@ impl<'a> Widget for GalleryCard<'a> {
             for y in area.y..area.y + area.height.min(CARD_HEIGHT) {
                 for x in area.x..area.x + area.width {
                     if let Some(cell) = buf.cell_mut((x, y)) {
-                        cell.set_bg(Color::Rgb(40, 40, 60));
+                        cell.set_bg(Color::Rgb(50, 50, 80));
                     }
                 }
             }
         }
 
-        // Thumbnail placeholder
-        let thumb_area = Rect::new(area.x, area.y, THUMB_WIDTH, CARD_HEIGHT.min(area.height));
-        let thumb_block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray));
-        thumb_block.render(thumb_area, buf);
+        // Selection indicator
+        let indicator_width: u16 = 2;
+        if self.selected {
+            buf.set_string(
+                area.x,
+                area.y,
+                "▶ ",
+                Style::default().fg(Color::Cyan).bold(),
+            );
+        }
 
-        // Text area
-        let text_x = area.x + THUMB_WIDTH + 1;
-        let text_width = area.width.saturating_sub(THUMB_WIDTH + 1);
+        // Text area (after indicator)
+        let text_x = area.x + indicator_width;
+        let text_width = area.width.saturating_sub(indicator_width) as usize;
         if text_width < 10 {
             return;
         }
 
-        // Line 1-2: Title
-        let title = truncate(&self.item.title, text_width as usize * 2);
-        let title_line1 = if title.chars().count() > text_width as usize {
-            truncate(&title, text_width as usize)
-        } else {
-            title.clone()
-        };
-        buf.set_string(text_x, area.y, &title_line1, Style::default().bold());
+        // Line 1: Title (truncated to display width)
+        let title = truncate_to_width(&self.item.title, text_width);
+        buf.set_string(text_x, area.y, &title, Style::default().bold());
 
-        if title.chars().count() > text_width as usize {
-            let skip: String = title.chars().take(text_width as usize).collect();
-            let rest: String = title.chars().skip(skip.chars().count()).collect();
-            let title_line2 = truncate(&rest, text_width as usize);
-            buf.set_string(text_x, area.y + 1, &title_line2, Style::default().bold());
-        } else {
-            // Line 2: Uploader
-            buf.set_string(
-                text_x,
-                area.y + 1,
-                &self.item.uploader,
-                Style::default().fg(Color::Gray),
-            );
-        }
+        // Line 2: Uploader
+        let uploader = truncate_to_width(&self.item.uploader, text_width);
+        buf.set_string(
+            text_x,
+            area.y + 1,
+            &uploader,
+            Style::default().fg(Color::Gray),
+        );
 
         // Line 3: Rating + Category
         let rating_y = area.y + 2;
@@ -74,10 +66,9 @@ impl<'a> Widget for GalleryCard<'a> {
             let stars = render_stars(self.item.rating);
             buf.set_string(text_x, rating_y, &stars, Style::default().fg(Color::Yellow));
 
-            let cat_x = text_x + stars.len() as u16 + 2;
-            let cat_style = Style::default()
-                .fg(Color::White)
-                .bg(category_to_color(&self.item.category));
+            let cat_x = text_x + UnicodeWidthStr::width(stars.as_str()) as u16 + 2;
+            let (cat_fg, cat_bg) = category_colors(&self.item.category);
+            let cat_style = Style::default().fg(cat_fg).bg(cat_bg);
             let cat_label = format!(" {} ", self.item.category);
             if cat_x + cat_label.len() as u16 <= area.x + area.width {
                 buf.set_string(cat_x, rating_y, &cat_label, cat_style);
@@ -120,11 +111,23 @@ fn render_stars(rating: f64) -> String {
     s
 }
 
-fn truncate(s: &str, max_len: usize) -> String {
-    if s.chars().count() <= max_len {
-        s.to_string()
-    } else {
-        let truncated: String = s.chars().take(max_len.saturating_sub(3)).collect();
-        format!("{}...", truncated)
+/// Truncate string to fit within `max_width` display columns.
+fn truncate_to_width(s: &str, max_width: usize) -> String {
+    let width = UnicodeWidthStr::width(s);
+    if width <= max_width {
+        return s.to_string();
     }
+    let mut result = String::new();
+    let mut current_width = 0;
+    let target = max_width.saturating_sub(3);
+    for ch in s.chars() {
+        let ch_width = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+        if current_width + ch_width > target {
+            break;
+        }
+        result.push(ch);
+        current_width += ch_width;
+    }
+    result.push_str("...");
+    result
 }

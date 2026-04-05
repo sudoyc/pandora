@@ -150,21 +150,21 @@ pub struct DownloadedGalleryMeta {
     pub downloaded_at: Option<String>,
 }
 
-/// Category color mapping
-pub fn category_to_color(category: &str) -> ratatui::style::Color {
+/// Category color mapping — returns (foreground, background) for readability.
+pub fn category_colors(category: &str) -> (ratatui::style::Color, ratatui::style::Color) {
     use ratatui::style::Color;
     match category.to_lowercase().as_str() {
-        "doujinshi" => Color::Red,
-        "manga" => Color::Yellow,
-        "artist cg" => Color::LightYellow,
-        "game cg" => Color::Green,
-        "western" => Color::LightGreen,
-        "non-h" => Color::Blue,
-        "image set" => Color::Magenta,
-        "cosplay" => Color::LightMagenta,
-        "asian porn" => Color::DarkGray,
-        "misc" => Color::Gray,
-        _ => Color::White,
+        "doujinshi" => (Color::White, Color::Red),
+        "manga" => (Color::Black, Color::Yellow),
+        "artist cg" => (Color::Black, Color::Rgb(200, 150, 0)),
+        "game cg" => (Color::Black, Color::Green),
+        "western" => (Color::Black, Color::Rgb(140, 200, 60)),
+        "non-h" => (Color::White, Color::Blue),
+        "image set" => (Color::White, Color::Magenta),
+        "cosplay" => (Color::Black, Color::LightMagenta),
+        "asian porn" => (Color::White, Color::DarkGray),
+        "misc" => (Color::Black, Color::Gray),
+        _ => (Color::White, Color::DarkGray),
     }
 }
 
@@ -238,10 +238,13 @@ mod tests {
     }
 
     #[test]
-    fn test_category_color() {
+    fn test_category_colors() {
         use ratatui::style::Color;
-        assert_eq!(category_to_color("Doujinshi"), Color::Red);
-        assert_eq!(category_to_color("Manga"), Color::Yellow);
-        assert_eq!(category_to_color("Non-H"), Color::Blue);
+        let (fg, bg) = category_colors("Doujinshi");
+        assert_eq!(fg, Color::White);
+        assert_eq!(bg, Color::Red);
+        let (fg, bg) = category_colors("Manga");
+        assert_eq!(fg, Color::Black);
+        assert_eq!(bg, Color::Yellow);
     }
 }
