@@ -273,10 +273,7 @@ fn handle_key_browse(app: &mut App, code: KeyCode) {
                 let client = app.client.clone();
                 tokio::spawn(async move {
                     if let Err(e) = client.add_favorite(&gid, &token, 0).await {
-                        let _ = tx.send(AppEvent::ImageError {
-                            url: String::new(),
-                            error: e,
-                        });
+                        let _ = tx.send(AppEvent::StatusMessage(format!("收藏失败: {}", e)));
                     }
                 });
                 app.status_msg = "Added to favorites".to_string();
@@ -474,10 +471,10 @@ fn request_suggestions(app: &App) {
     tokio::spawn(async move {
         match client.suggest_tags(&keyword, 10).await {
             Ok(resp) => {
-                let _ = tx.send(AppEvent::SuggestionsLoaded(Ok(resp.suggestions)));
+                let _ = tx.send(AppEvent::SuggestionsLoaded(Ok(resp.suggestions), 0));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::SuggestionsLoaded(Err(e)));
+                let _ = tx.send(AppEvent::SuggestionsLoaded(Err(e), 0));
             }
         }
     });
@@ -758,11 +755,11 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
                 app.status_msg = format!("Detail load failed: {}", e);
             }
         }
-        AppEvent::SuggestionsLoaded(Ok(suggestions)) => {
+        AppEvent::SuggestionsLoaded(Ok(suggestions), _generation) => {
             app.search.suggestions = suggestions;
             app.search.selected_suggestion = None;
         }
-        AppEvent::SuggestionsLoaded(Err(_)) => {
+        AppEvent::SuggestionsLoaded(Err(_), _) => {
             app.search.suggestions.clear();
         }
         AppEvent::ThumbnailLoaded { url, image } => {
@@ -832,6 +829,12 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
         AppEvent::FavoritesLoaded(Err(e)) => {
             app.gallery_list.loading = false;
             app.status_msg = format!("Favorites error: {}", e);
+        }
+        AppEvent::PreloadFailed { page } => {
+            app.pending_pages.remove(&page);
+        }
+        AppEvent::StatusMessage(msg) => {
+            app.status_msg = msg;
         }
         AppEvent::WsEvent(ev) => {
             if let Some(ref gid) = ev.gid {
