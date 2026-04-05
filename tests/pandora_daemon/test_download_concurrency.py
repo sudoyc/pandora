@@ -504,3 +504,62 @@ class TestDownloadGallery:
 
         assert task.status == "completed"
         mock_api.get_gallery_details.assert_not_awaited()
+
+
+class TestResumeRetry:
+    @pytest.mark.asyncio
+    async def test_resume_paused_task(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        await mgr.submit("1", "t")
+        task = mgr._tasks["1"]
+        task.status = "paused"
+
+        result = await mgr.resume("1")
+        assert result is True
+        assert task.status == "queued"
+
+    @pytest.mark.asyncio
+    async def test_resume_non_paused_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        await mgr.submit("1", "t")
+
+        result = await mgr.resume("1")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_resume_nonexistent_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        result = await mgr.resume("999")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_retry_failed_completed_with_errors(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        await mgr.submit("1", "t")
+        task = mgr._tasks["1"]
+        task.status = "completed_with_errors"
+        task.failed_pages = [3, 5]
+        task.downloaded_pages = 8
+
+        result = await mgr.retry_failed("1")
+        assert result is True
+        assert task.status == "queued"
+
+    @pytest.mark.asyncio
+    async def test_retry_failed_wrong_status_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        await mgr.submit("1", "t")
+
+        result = await mgr.retry_failed("1")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_retry_failed_no_failed_pages_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        await mgr.submit("1", "t")
+        task = mgr._tasks["1"]
+        task.status = "completed_with_errors"
+        task.failed_pages = []
+
+        result = await mgr.retry_failed("1")
+        assert result is False

@@ -152,6 +152,28 @@ class DownloadManager:
         self._save_state()
         return True
 
+    async def resume(self, gid: str) -> bool:
+        """Resume a paused task."""
+        task = self._tasks.get(gid)
+        if task is None or task.status != "paused":
+            return False
+        task.status = "queued"
+        await self._queue.put(gid)
+        self._save_state()
+        return True
+
+    async def retry_failed(self, gid: str) -> bool:
+        """Retry failed pages of a completed_with_errors task."""
+        task = self._tasks.get(gid)
+        if task is None or task.status != "completed_with_errors":
+            return False
+        if not task.failed_pages:
+            return False
+        task.status = "queued"
+        await self._queue.put(gid)
+        self._save_state()
+        return True
+
     def status(self) -> list[DownloadTask]:
         return list(self._tasks.values())
 
