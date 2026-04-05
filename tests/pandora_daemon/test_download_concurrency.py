@@ -265,3 +265,139 @@ class TestDownloadPages:
             with patch("pandora_daemon.download._atomic_write") as mock_aw:
                 await mgr._download_pages(task)
                 mock_aw.assert_called_once()
+
+
+class TestRetryBehavior:
+    @pytest.mark.asyncio
+    async def test_network_error_retries_and_succeeds(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        dl_config.max_retry = 2
+        dl_config.retry_base_delay = 0.01
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        call_count = 0
+        async def get_html_side_effect(url):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise NetworkError("timeout")
+            return "<html></html>"
+
+        mock_api.client.get_html = AsyncMock(side_effect=get_html_side_effect)
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
+            await mgr._download_pages(task)
+
+        assert task.page_states[1] == "done"
+        assert task.failed_pages == []
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_network_error_exhausts_retries(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        dl_config.max_retry = 1
+        dl_config.retry_base_delay = 0.01
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(side_effect=NetworkError("timeout"))
+        await mgr._download_pages(task)
+
+        assert task.page_states[1] == "failed"
+        assert 1 in task.failed_pages
+
+    @pytest.mark.asyncio
+    async def test_parse_error_retries(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        dl_config.max_retry = 1
+        dl_config.retry_base_delay = 0.01
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=(None, None)):
+            await mgr._download_pages(task)
+
+        assert task.page_states[1] == "failed"
+        assert 1 in task.failed_pages
+
+    @pytest.mark.asyncio
+    async def test_unknown_exception_no_retry(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        dl_config.max_retry = 3
+        dl_config.retry_base_delay = 0.01
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(side_effect=RuntimeError("unexpected"))
+        await mgr._download_pages(task)
+
+        assert task.page_states[1] == "failed"
+        assert mock_api.client.get_html.await_count == 1
+
+
+class TestFatalExceptions:
+    @pytest.mark.asyncio
+    async def test_auth_error_stops_all_pages(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(side_effect=AuthenticationError("Sad Panda"))
+        with pytest.raises(AuthenticationError):
+            await mgr._download_pages(task)
+
+    @pytest.mark.asyncio
+    async def test_image_limit_error_raises(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(side_effect=ImageLimitError("509"))
+        with pytest.raises(ImageLimitError):
+            await mgr._download_pages(task)
+
+    @pytest.mark.asyncio
+    async def test_gallery_not_found_raises(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            preview_urls=["https://ex.org/s/a/1-1"],
+        )
+        Path(task.output_dir, "pages").mkdir(parents=True)
+
+        mock_api.client.get_html = AsyncMock(side_effect=GalleryNotFoundError("removed"))
+        with pytest.raises(GalleryNotFoundError):
+            await mgr._download_pages(task)
