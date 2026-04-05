@@ -339,6 +339,7 @@ fn handle_key_search(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                         .map(|i| (i + 1) % len)
                         .unwrap_or(0),
                 );
+                app.search.adjust_suggestion_scroll(5);
             }
         }
         KeyCode::BackTab | KeyCode::Up => {
@@ -350,6 +351,7 @@ fn handle_key_search(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                         .map(|i| if i == 0 { len - 1 } else { i - 1 })
                         .unwrap_or(len - 1),
                 );
+                app.search.adjust_suggestion_scroll(5);
             }
         }
         KeyCode::Char('t') if modifiers.contains(KeyModifiers::CONTROL) => {

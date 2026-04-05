@@ -30,13 +30,24 @@ fn draw_suggestions(frame: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    for (i, suggestion) in app.search.suggestions.iter().enumerate() {
-        let y = inner.y + (i as u16) * 2;
+    let visible_count = (inner.height / 2) as usize;
+    let scroll = app.search.suggestion_scroll;
+
+    for (vi, suggestion) in app
+        .search
+        .suggestions
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(visible_count)
+    {
+        let row = vi - scroll;
+        let y = inner.y + (row as u16) * 2;
         if y + 1 >= inner.y + inner.height {
             break;
         }
 
-        let selected = app.search.selected_suggestion == Some(i);
+        let selected = app.search.selected_suggestion == Some(vi);
         let style = if selected {
             Style::default().fg(Color::Yellow).bold()
         } else {

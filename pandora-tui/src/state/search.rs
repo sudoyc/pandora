@@ -22,6 +22,7 @@ pub struct SearchState {
     pub cursor_pos: usize,
     pub suggestions: Vec<TagSuggestion>,
     pub selected_suggestion: Option<usize>,
+    pub suggestion_scroll: usize,
     pub filter_active: bool,
     pub filter_cursor: usize,
     pub excluded_categories: u32,
@@ -32,9 +33,20 @@ pub struct SearchState {
 impl SearchState {
     pub fn category_bitmask(&self) -> Option<u32> {
         if self.excluded_categories == 0 {
-            None
+            None // no filtering — all included
         } else {
-            Some(self.excluded_categories)
+            // Invert excluded → included for daemon API
+            Some((!self.excluded_categories) & 1023)
+        }
+    }
+
+    pub fn adjust_suggestion_scroll(&mut self, visible_count: usize) {
+        if let Some(sel) = self.selected_suggestion {
+            if sel < self.suggestion_scroll {
+                self.suggestion_scroll = sel;
+            } else if sel >= self.suggestion_scroll + visible_count {
+                self.suggestion_scroll = sel - visible_count + 1;
+            }
         }
     }
 
@@ -108,6 +120,7 @@ impl SearchState {
         self.cursor_pos = 0;
         self.suggestions.clear();
         self.selected_suggestion = None;
+        self.suggestion_scroll = 0;
         self.filter_active = false;
     }
 }
@@ -170,5 +183,27 @@ mod tests {
         s.input = "f:\"maid$\" stock".to_string();
         s.cursor_pos = s.input.len();
         assert_eq!(s.extract_last_keyword(), "stock");
+    }
+
+    #[test]
+    fn test_category_bitmask_returns_include_mask() {
+        let mut s = SearchState::default();
+        s.excluded_categories = 2; // exclude doujinshi
+        // Should return INCLUDE mask = all bits except 2 = 1021
+        assert_eq!(s.category_bitmask(), Some(1021));
+    }
+
+    #[test]
+    fn test_category_bitmask_none_when_no_exclusions() {
+        let s = SearchState::default();
+        assert_eq!(s.category_bitmask(), None);
+    }
+
+    #[test]
+    fn test_suggestion_scroll() {
+        let mut s = SearchState::default();
+        s.selected_suggestion = Some(7);
+        s.adjust_suggestion_scroll(5);
+        assert_eq!(s.suggestion_scroll, 3); // 7 - 5 + 1
     }
 }
