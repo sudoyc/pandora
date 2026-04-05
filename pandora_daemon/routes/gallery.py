@@ -74,6 +74,7 @@ def _detail_to_dict(d) -> dict:
         "posted": d.posted,
         "favorite_slot": d.favorite_slot,
         "preview_pages": d.preview_pages,
+        "thumb_urls": d.thumb_urls,
         "rating": d.rating,
         "rating_count": d.rating_count,
         "favorite_count": d.favorite_count,

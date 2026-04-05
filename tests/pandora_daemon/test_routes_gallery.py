@@ -121,6 +121,21 @@ class TestGalleryDetail:
         mock_api.get_gallery_details.assert_not_called()
         mock_cache.get_gallery.assert_called_once_with("123", "abc")
 
+    def test_gallery_detail_includes_thumb_urls(self):
+        mock_api = AsyncMock()
+        detail = _make_detail()
+        detail.thumb_urls = ["https://ex.com/t1.jpg", "https://ex.com/t2.jpg"]
+        mock_cache = MagicMock()
+        mock_cache.get_gallery.return_value = detail
+        app = _make_app(mock_api, mock_cache=mock_cache)
+        client = TestClient(app)
+
+        resp = client.get("/api/gallery/123/abc")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "thumb_urls" in data
+        assert data["thumb_urls"] == ["https://ex.com/t1.jpg", "https://ex.com/t2.jpg"]
+
 
 class TestCommentGallery:
     def test_comment_gallery(self):
