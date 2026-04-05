@@ -320,6 +320,8 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
             app.page_image_state = None;
             app.page_cache.clear();
             app.pending_pages.clear();
+            app.preload_cancel.cancel();
+            app.page_load_cancel.cancel();
         }
         KeyCode::Char('j') | KeyCode::Char('l') | KeyCode::Char(' ') | KeyCode::Down => {
             if app.reader.next_page() {
@@ -624,6 +626,8 @@ fn load_page_image(app: &App, cancel: CancellationToken) {
 
 /// Preload adjacent pages into page_cache in background.
 fn preload_adjacent_pages(app: &mut App) {
+    app.preload_cancel.cancel();
+    app.preload_cancel = CancellationToken::new();
     let page = app.reader.current_page;
     let total = app.reader.total_pages;
     let is_local = app.reader.is_local;
@@ -663,26 +667,38 @@ fn preload_adjacent_pages(app: &mut App) {
         let sem = app.preload_semaphore.clone();
 
         if is_local {
+            let cancel = app.preload_cancel.child_token();
             tokio::spawn(async move {
-                let _permit = sem.acquire().await;
-                let path = format!("page/{}", p);
-                if let Ok(bytes) = client.get_library_file(&gid, &path).await {
-                    let bytes_vec = bytes.to_vec();
-                    if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
-                        let _ = tx.send(AppEvent::PageImageLoaded { page: p, image: img });
-                    }
+                tokio::select! {
+                    _ = cancel.cancelled() => {}
+                    _ = async {
+                        let _permit = sem.acquire().await;
+                        let path = format!("page/{}", p);
+                        if let Ok(bytes) = client.get_library_file(&gid, &path).await {
+                            let bytes_vec = bytes.to_vec();
+                            if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                                let _ = tx.send(AppEvent::PageImageLoaded { page: p, image: img });
+                            }
+                        }
+                    } => {}
                 }
             });
         } else {
+            let cancel = app.preload_cancel.child_token();
             tokio::spawn(async move {
-                let _permit = sem.acquire().await;
-                if let Ok(resp) = client.get_page_image(&gid, &token, p).await {
-                    if let Ok(bytes) = resp.bytes().await {
-                        let bytes_vec = bytes.to_vec();
-                        if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
-                            let _ = tx.send(AppEvent::PageImageLoaded { page: p, image: img });
+                tokio::select! {
+                    _ = cancel.cancelled() => {}
+                    _ = async {
+                        let _permit = sem.acquire().await;
+                        if let Ok(resp) = client.get_page_image(&gid, &token, p).await {
+                            if let Ok(bytes) = resp.bytes().await {
+                                let bytes_vec = bytes.to_vec();
+                                if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                                    let _ = tx.send(AppEvent::PageImageLoaded { page: p, image: img });
+                                }
+                            }
                         }
-                    }
+                    } => {}
                 }
             });
         }
