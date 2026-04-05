@@ -4,6 +4,7 @@ from pandora_daemon.routes.config_routes import router as config_router
 from pandora_daemon.routes.downloads import router as downloads_router
 from pandora_daemon.routes.favorites import router as favorites_router
 from pandora_daemon.routes.gallery import router as gallery_router
+from pandora_daemon.routes.library import router as library_router
 from pandora_daemon.routes.tags import router as tags_router
 from pandora_daemon.routes.user import router as user_router
 
@@ -15,3 +16,4 @@ router.include_router(downloads_router)
 router.include_router(user_router)
 router.include_router(config_router)
 router.include_router(tags_router)
+router.include_router(library_router)
