@@ -70,7 +70,7 @@ impl<'a> Widget for GalleryCard<'a> {
             let (cat_fg, cat_bg) = category_colors(&self.item.category);
             let cat_style = Style::default().fg(cat_fg).bg(cat_bg);
             let cat_label = format!(" {} ", self.item.category);
-            if cat_x + cat_label.len() as u16 <= area.x + area.width {
+            if cat_x + UnicodeWidthStr::width(cat_label.as_str()) as u16 <= area.x + area.width {
                 buf.set_string(cat_x, rating_y, &cat_label, cat_style);
             }
         }
@@ -79,14 +79,19 @@ impl<'a> Widget for GalleryCard<'a> {
         let date_y = area.y + 3;
         if date_y < area.y + area.height {
             let date = if self.item.posted.len() >= 10 {
-                &self.item.posted[..10]
+                let end = self.item.posted
+                    .char_indices()
+                    .nth(10)
+                    .map(|(i, _)| i)
+                    .unwrap_or(self.item.posted.len());
+                &self.item.posted[..end]
             } else {
                 &self.item.posted
             };
             buf.set_string(text_x, date_y, date, Style::default().fg(Color::DarkGray));
 
             let pages_str = format!("{}p", self.item.pages);
-            let pages_x = text_x + date.len() as u16 + 2;
+            let pages_x = text_x + UnicodeWidthStr::width(date) as u16 + 2;
             if pages_x + pages_str.len() as u16 <= area.x + area.width {
                 buf.set_string(
                     pages_x,
