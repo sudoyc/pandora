@@ -58,14 +58,14 @@ class ImageService:
         if page_idx < 0 or page_idx >= detail.pages:
             raise ValueError(f"Page {page} out of range (1-{detail.pages})")
 
-        # If page is beyond currently loaded preview_urls, fetch the needed preview page
-        if page_idx >= len(detail.preview_urls):
+        # If page is beyond currently loaded viewer_urls, fetch the needed preview page
+        if page_idx >= len(detail.viewer_urls):
             await self._load_preview_page(detail, page_idx)
 
-        if page_idx >= len(detail.preview_urls):
+        if page_idx >= len(detail.viewer_urls):
             raise ValueError(f"Could not resolve viewer URL for page {page}")
 
-        viewer_url = detail.preview_urls[page_idx]
+        viewer_url = detail.viewer_urls[page_idx]
 
         # Fetch and parse the viewer page to get the CDN image URL
         html = await self._api.client.get_html(viewer_url)
@@ -91,19 +91,19 @@ class ImageService:
 
     async def _load_preview_page(self, detail, target_page_idx: int) -> None:
         """Fetch additional gallery preview pages to resolve viewer URLs beyond page 1."""
-        items_per_page = len(detail.preview_urls) if detail.preview_urls else 20
+        items_per_page = len(detail.viewer_urls) if detail.viewer_urls else 20
         if items_per_page == 0:
             return
         # Which preview page do we need?
         needed_preview_page = target_page_idx // items_per_page
         # Fetch all missing preview pages up to the needed one
         for p in range(1, needed_preview_page + 1):
-            if len(detail.preview_urls) > target_page_idx:
+            if len(detail.viewer_urls) > target_page_idx:
                 break  # Already have enough
             page_url = f"{detail.url}?p={p}"
             html = await self._api.client.get_html(page_url)
             page_detail = parse_gallery_detail(html, detail.gid, detail.token)
-            detail.preview_urls.extend(page_detail.preview_urls)
+            detail.viewer_urls.extend(page_detail.viewer_urls)
             detail.thumb_urls.extend(page_detail.thumb_urls)
 
     async def prefetch(self, gid: str, token: str, current_page: int, total_pages: int) -> None:

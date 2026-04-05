@@ -79,7 +79,7 @@ class TestGetPageImage:
     @pytest.mark.asyncio
     async def test_page_image_not_cached(self, mock_api, mock_cache, cache_config):
         detail = MagicMock()
-        detail.preview_urls = ["https://exhentai.org/s/imgkey1/123-1"]
+        detail.viewer_urls = ["https://exhentai.org/s/imgkey1/123-1"]
         detail.pages = 1
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
@@ -104,7 +104,7 @@ class TestPrefetch:
     @pytest.mark.asyncio
     async def test_prefetch_schedules_tasks(self, mock_api, mock_cache, cache_config):
         detail = MagicMock()
-        detail.preview_urls = [f"https://exhentai.org/s/key{i}/123-{i+1}" for i in range(10)]
+        detail.viewer_urls = [f"https://exhentai.org/s/key{i}/123-{i+1}" for i in range(10)]
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
         svc = ImageService(mock_api, mock_cache, cache_config)
@@ -122,7 +122,7 @@ class TestPrefetch:
     @pytest.mark.asyncio
     async def test_prefetch_clamps_to_bounds(self, mock_api, mock_cache, cache_config):
         detail = MagicMock()
-        detail.preview_urls = [f"https://exhentai.org/s/key{i}/123-{i+1}" for i in range(5)]
+        detail.viewer_urls = [f"https://exhentai.org/s/key{i}/123-{i+1}" for i in range(5)]
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
         svc = ImageService(mock_api, mock_cache, cache_config)

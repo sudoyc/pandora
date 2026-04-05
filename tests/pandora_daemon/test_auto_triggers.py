@@ -30,7 +30,7 @@ def _make_detail():
     d.posted = "2026-01-01"
     d.favorite_slot = None
     d.preview_pages = 1
-    d.preview_urls = []
+    d.viewer_urls = []
     d.thumb_urls = []
     d.rating = 4.5
     d.rating_count = 100

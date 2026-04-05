@@ -88,7 +88,7 @@ def mock_api():
     detail.title_jpn = "Test JPN"
     detail.pages = 3
     detail.preview_pages = 1
-    detail.preview_urls = ["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"]
+    detail.viewer_urls = ["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"]
     detail.thumb_urls = ["https://ex.org/t/1.jpg", "https://ex.org/t/2.jpg", "https://ex.org/t/3.jpg"]
     detail.thumb_sprites = []
     detail.gid = "1"
@@ -172,7 +172,7 @@ class TestDownloadPages:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
         )
         pages_dir = Path(task.output_dir) / "pages"
         pages_dir.mkdir(parents=True)
@@ -192,7 +192,7 @@ class TestDownloadPages:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
         )
         pages_dir = Path(task.output_dir) / "pages"
         pages_dir.mkdir(parents=True)
@@ -215,7 +215,7 @@ class TestDownloadPages:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         pages_dir = Path(task.output_dir) / "pages"
         pages_dir.mkdir(parents=True)
@@ -235,7 +235,7 @@ class TestDownloadPages:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=2, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2"],
+            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -256,7 +256,7 @@ class TestDownloadPages:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -277,7 +277,7 @@ class TestRetryBehavior:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -306,7 +306,7 @@ class TestRetryBehavior:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -325,7 +325,7 @@ class TestRetryBehavior:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -345,7 +345,7 @@ class TestRetryBehavior:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -364,7 +364,7 @@ class TestFatalExceptions:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -379,7 +379,7 @@ class TestFatalExceptions:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -394,7 +394,7 @@ class TestFatalExceptions:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
@@ -411,7 +411,7 @@ class TestDownloadGallery:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
             thumb_urls=["https://ex.org/t/1.jpg"],
         )
 
@@ -431,7 +431,7 @@ class TestDownloadGallery:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
             thumb_urls=[],
         )
 
@@ -448,7 +448,7 @@ class TestDownloadGallery:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
             thumb_urls=[],
         )
 
@@ -466,7 +466,7 @@ class TestDownloadGallery:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1"],
+            viewer_urls=["https://ex.org/s/a/1-1"],
             thumb_urls=[],
         )
 
@@ -485,7 +485,7 @@ class TestDownloadGallery:
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            preview_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
+            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
             thumb_urls=[],
             downloaded_pages=2,
             metadata_saved=True,

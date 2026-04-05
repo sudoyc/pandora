@@ -33,7 +33,7 @@ def mock_api():
     detail.title_jpn = "Test JPN"
     detail.pages = 3
     detail.preview_pages = 1
-    detail.preview_urls = [
+    detail.viewer_urls = [
         "https://exhentai.org/s/abc/123-1",
         "https://exhentai.org/s/def/123-2",
         "https://exhentai.org/s/ghi/123-3",
@@ -106,7 +106,7 @@ def test_download_task_creation():
     assert task.metadata_saved is False
     assert task.error == ""
     assert task.created_at != ""
-    assert task.preview_urls == []
+    assert task.viewer_urls == []
     assert task.thumb_urls == []
 
 
@@ -141,7 +141,7 @@ async def test_submit_creates_task(mock_api, mock_ws, mock_image_service, downlo
     assert task.token == "abc"
     assert task.title == "Test Gallery"
     assert task.total_pages == 3
-    assert len(task.preview_urls) == 3
+    assert len(task.viewer_urls) == 3
     assert len(task.thumb_urls) == 3
     assert task.status == "queued"
 
@@ -239,7 +239,7 @@ async def test_load_state_requeues_pending(mock_api, mock_ws, mock_image_service
         total_pages=5,
         output_dir="/tmp/456",
         status="queued",
-        preview_urls=["https://exhentai.org/s/zzz/456-1"],
+        viewer_urls=["https://exhentai.org/s/zzz/456-1"],
         thumb_urls=["https://exhentai.org/t/t1.jpg"],
     )
     state_file.parent.mkdir(parents=True, exist_ok=True)

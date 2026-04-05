@@ -79,17 +79,17 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
             except ValueError:
                 pass
 
-    preview_urls = []
+    viewer_urls = []
     for gdt in soup.find_all(class_=["gdtm", "gdtl"]):
         a_tag = gdt.find("a")
         if a_tag and a_tag.get("href"):
-            preview_urls.append(a_tag.get("href"))
-    if not preview_urls:
+            viewer_urls.append(a_tag.get("href"))
+    if not viewer_urls:
         gdt_elem = soup.find(id="gdt")
         if gdt_elem:
             for a_tag in gdt_elem.find_all("a"):
                 if a_tag and a_tag.get("href") and "/s/" in a_tag.get("href"):
-                    preview_urls.append(a_tag.get("href"))
+                    viewer_urls.append(a_tag.get("href"))
 
     thumb_urls = []
     thumb_sprites = []
@@ -248,7 +248,7 @@ def parse_gallery_detail(html: str, gid: str, token: str) -> GalleryDetail:
         posted=posted,
         favorite_slot=favorite_slot,
         preview_pages=preview_pages,
-        preview_urls=preview_urls,
+        viewer_urls=viewer_urls,
         thumb_urls=thumb_urls,
         thumb_sprites=thumb_sprites,
         rating=rating,

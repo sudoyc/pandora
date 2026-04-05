@@ -49,7 +49,7 @@ class DownloadTask:
     metadata_saved: bool = False
     error: str = ""
     created_at: str = ""
-    preview_urls: list[str] = field(default_factory=list)
+    viewer_urls: list[str] = field(default_factory=list)
     thumb_urls: list[str] = field(default_factory=list)
     thumb_sprites: list[dict] = field(default_factory=list)  # [{url, offset_x, offset_y, width, height}]
     page_states: dict[int, str] = field(default_factory=dict)
@@ -109,7 +109,7 @@ class DownloadManager:
         detail = await self._api.get_gallery_details(gid, token)
 
         # Collect all preview URLs, thumb URLs, and sprite info across ALL preview pages
-        preview_urls = list(detail.preview_urls)
+        viewer_urls = list(detail.viewer_urls)
         thumb_urls = list(detail.thumb_urls)
         thumb_sprites = [asdict(s) for s in detail.thumb_sprites]
         if detail.preview_pages > 1:
@@ -117,7 +117,7 @@ class DownloadManager:
                 page_url = f"{detail.url}?p={p}"
                 html = await self._api.client.get_html(page_url)
                 page_detail = parse_gallery_detail(html, gid, token)
-                preview_urls.extend(page_detail.preview_urls)
+                viewer_urls.extend(page_detail.viewer_urls)
                 thumb_urls.extend(page_detail.thumb_urls)
                 thumb_sprites.extend(asdict(s) for s in page_detail.thumb_sprites)
 
@@ -130,7 +130,7 @@ class DownloadManager:
             title=detail.title,
             total_pages=detail.pages,
             output_dir=output_dir,
-            preview_urls=preview_urls,
+            viewer_urls=viewer_urls,
             thumb_urls=thumb_urls,
             thumb_sprites=thumb_sprites,
         )
@@ -269,12 +269,12 @@ class DownloadManager:
                     return
 
                 idx = page_num - 1
-                if idx >= len(task.preview_urls):
+                if idx >= len(task.viewer_urls):
                     task.page_states[page_num] = "failed"
                     task.failed_pages.append(page_num)
                     return
 
-                viewer_url = task.preview_urls[idx]
+                viewer_url = task.viewer_urls[idx]
                 last_exc = None
 
                 for attempt in range(self._config.max_retry + 1):
