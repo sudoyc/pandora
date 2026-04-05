@@ -54,16 +54,20 @@ async fn main() -> io::Result<()> {
     app.load_current_page();
 
     // WebSocket background connection
-    {
+    let ws_handle = {
         let ws_url = app.client.ws_url();
         let tx_ws = tx.clone();
         tokio::spawn(async move {
             use futures_util::StreamExt;
             use tokio_tungstenite::connect_async;
 
+            let mut backoff = Duration::from_secs(3);
+            const MAX_BACKOFF: Duration = Duration::from_secs(60);
+
             loop {
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
+                        backoff = Duration::from_secs(3);
                         let _ = tx_ws.send(crate::event::AppEvent::WsReconnected);
                         let (_, mut read) = ws_stream.split();
                         while let Some(msg) = read.next().await {
@@ -79,12 +83,15 @@ async fn main() -> io::Result<()> {
                         }
                         let _ = tx_ws.send(crate::event::AppEvent::WsDisconnected);
                     }
-                    Err(_) => {}
+                    Err(_) => {
+                        let _ = tx_ws.send(crate::event::AppEvent::WsDisconnected);
+                    }
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(MAX_BACKOFF);
             }
-        });
-    }
+        })
+    };
 
     // Install panic hook to restore terminal on crash
     let original_hook = std::panic::take_hook();
@@ -175,6 +182,7 @@ async fn main() -> io::Result<()> {
     }
 
     // Cleanup
+    ws_handle.abort();
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
