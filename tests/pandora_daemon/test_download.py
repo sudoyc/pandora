@@ -69,13 +69,10 @@ def mock_ws():
 
 
 @pytest.fixture
-def mock_cache():
-    cache = MagicMock()
-    cache.get_image = AsyncMock(return_value=None)
-    cache.put_image = AsyncMock()
-    cache.get_gallery = MagicMock(return_value=None)
-    cache.put_gallery = MagicMock()
-    return cache
+def mock_image_service():
+    svc = AsyncMock()
+    svc.proxy_image.return_value = b"fake image bytes"
+    return svc
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +132,8 @@ def test_download_task_to_dict():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_submit_creates_task(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_submit_creates_task(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
     task = await manager.submit("123", "abc")
 
@@ -150,8 +147,8 @@ async def test_submit_creates_task(mock_api, mock_ws, mock_cache, download_confi
 
 
 @pytest.mark.asyncio
-async def test_submit_broadcasts_queued_event(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_submit_broadcasts_queued_event(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
     await manager.submit("123", "abc")
 
@@ -162,8 +159,8 @@ async def test_submit_broadcasts_queued_event(mock_api, mock_ws, mock_cache, dow
 
 
 @pytest.mark.asyncio
-async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
     await manager.submit("123", "abc")
 
@@ -172,8 +169,8 @@ async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_cache, download
 
 
 @pytest.mark.asyncio
-async def test_submit_saves_state(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_submit_saves_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
     await manager.submit("123", "abc")
 
@@ -187,8 +184,8 @@ async def test_submit_saves_state(mock_api, mock_ws, mock_cache, download_config
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_status_returns_all_tasks(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_status_returns_all_tasks(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     result = manager.status()
@@ -197,8 +194,8 @@ async def test_status_returns_all_tasks(mock_api, mock_ws, mock_cache, download_
 
 
 @pytest.mark.asyncio
-async def test_cancel_marks_cancelled(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_cancel_marks_cancelled(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     result = await manager.cancel("123")
@@ -208,8 +205,8 @@ async def test_cancel_marks_cancelled(mock_api, mock_ws, mock_cache, download_co
 
 
 @pytest.mark.asyncio
-async def test_cancel_nonexistent(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_cancel_nonexistent(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
     result = await manager.cancel("999")
 
@@ -221,8 +218,8 @@ async def test_cancel_nonexistent(mock_api, mock_ws, mock_cache, download_config
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_save_and_load_state(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_save_and_load_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     manager._save_state()
@@ -234,7 +231,7 @@ async def test_save_and_load_state(mock_api, mock_ws, mock_cache, download_confi
 
 
 @pytest.mark.asyncio
-async def test_load_state_requeues_pending(mock_api, mock_ws, mock_cache, download_config, state_file):
+async def test_load_state_requeues_pending(mock_api, mock_ws, mock_image_service, download_config, state_file):
     task = DownloadTask(
         gid="456",
         token="def",
@@ -248,7 +245,7 @@ async def test_load_state_requeues_pending(mock_api, mock_ws, mock_cache, downlo
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps({"456": task.to_dict()}), encoding="utf-8")
 
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
     manager._load_state()
 
     assert "456" in manager._tasks
@@ -260,8 +257,8 @@ async def test_load_state_requeues_pending(mock_api, mock_ws, mock_cache, downlo
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_start_creates_workers(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_start_creates_workers(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
     await manager.start()
 
     try:
@@ -271,8 +268,8 @@ async def test_start_creates_workers(mock_api, mock_ws, mock_cache, download_con
 
 
 @pytest.mark.asyncio
-async def test_shutdown_saves_state(mock_api, mock_ws, mock_cache, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+async def test_shutdown_saves_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
     await manager.start()
     await manager.submit("123", "abc")
 
@@ -288,9 +285,9 @@ async def test_shutdown_saves_state(mock_api, mock_ws, mock_cache, download_conf
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_write_metadata(mock_api, mock_ws, mock_cache, download_config, state_file):
+async def test_write_metadata(mock_api, mock_ws, mock_image_service, download_config, state_file):
     """_write_metadata creates a valid metadata.json in the output dir."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_cache, state_file)
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
     detail = mock_api.get_gallery_details.return_value
     output_dir = Path(download_config.path) / "123-Test Gallery"

@@ -62,17 +62,19 @@ class DownloadTask:
 class DownloadManager:
     """Produces complete offline gallery clones with metadata, covers, thumbs, and pages."""
 
-    def __init__(self, api, config, ws, cache, state_file: Path) -> None:
+    def __init__(self, api, config, ws, image_service, state_file: Path) -> None:
         self._api = api
         self._config = config
         self._ws = ws
-        self._cache = cache
+        self._image_service = image_service
         self._state_file = state_file
         self._download_path = Path(config.path).expanduser()
         self._tasks: dict[str, DownloadTask] = {}
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._workers: list[asyncio.Task] = []
         self._cancelled: set[str] = set()
+        self._save_dirty: bool = False
+        self._save_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         self._load_state()
@@ -90,6 +92,9 @@ class DownloadManager:
             worker.cancel()
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
+        if self._save_task and not self._save_task.done():
+            self._save_task.cancel()
+            await asyncio.gather(self._save_task, return_exceptions=True)
         self._save_state()
 
     async def submit(self, gid: str, token: str) -> DownloadTask:
@@ -355,16 +360,21 @@ class DownloadManager:
             return None
 
     async def _fetch_image(self, url: str) -> bytes:
-        """Fetch image bytes, checking cache first."""
-        cached = await self._cache.get_image(url)
-        if cached is not None:
-            return cached
+        """Fetch image bytes via ImageService (cache-first)."""
+        return await self._image_service.proxy_image(url)
 
-        resp = await self._api.client.session.get(url)
-        resp.raise_for_status()
-        data = resp.content
-        await self._cache.put_image(url, data)
-        return data
+    def _mark_dirty(self) -> None:
+        """Mark state as dirty, start delayed save."""
+        self._save_dirty = True
+        if self._save_task is None or self._save_task.done():
+            self._save_task = asyncio.create_task(self._debounced_save())
+
+    async def _debounced_save(self) -> None:
+        """Save after 5s delay, coalescing multiple writes."""
+        await asyncio.sleep(5)
+        if self._save_dirty:
+            self._save_state()
+            self._save_dirty = False
 
     def _save_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)

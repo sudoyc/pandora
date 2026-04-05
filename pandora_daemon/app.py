@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass  # Non-fatal: suggest will return empty results
     state_file = config_path.parent / "downloads.json"
-    downloads = DownloadManager(api=api, config=config.download, ws=ws, cache=cache, state_file=state_file)
+    downloads = DownloadManager(api=api, config=config.download, ws=ws, image_service=image_service, state_file=state_file)
     state = AppState(
         config=config, config_path=config_path,
         client=client, api=api,
