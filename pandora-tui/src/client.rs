@@ -201,6 +201,35 @@ impl DaemonClient {
         resp.json().await.map_err(|e| e.to_string())
     }
 
+    // ── Library ──
+
+    pub async fn get_library(&self) -> Result<Vec<DownloadedGalleryMeta>, String> {
+        let resp = self.http
+            .get(format!("{}/api/library", self.base_url))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
+    pub async fn get_library_file(&self, gid: &str, path: &str) -> Result<Vec<u8>, String> {
+        let resp = self.http
+            .get(format!(
+                "{}/api/library/{}/file?path={}",
+                self.base_url,
+                gid,
+                urlencoding::encode(path)
+            ))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        Ok(bytes.to_vec())
+    }
+
     // ── Image proxy ──
 
     pub async fn proxy_image(&self, url: &str) -> Result<Vec<u8>, String> {

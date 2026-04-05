@@ -138,15 +138,25 @@ pub struct DownloadedGalleryMeta {
     pub gid: String,
     pub token: String,
     pub title: String,
+    #[serde(default)]
     pub title_jpn: Option<String>,
+    #[serde(default)]
     pub category: String,
+    #[serde(default)]
     pub uploader: String,
+    #[serde(default)]
     pub tags: HashMap<String, Vec<String>>,
+    #[serde(default)]
     pub pages: u32,
+    #[serde(default)]
     pub size: String,
+    #[serde(default)]
     pub posted: String,
+    #[serde(default)]
     pub rating: f64,
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub downloaded_at: Option<String>,
 }
 

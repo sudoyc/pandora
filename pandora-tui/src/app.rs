@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::client::DaemonClient;
 use crate::event::AppEvent;
+use crate::models::GalleryItem;
 use crate::state::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,8 +134,32 @@ impl App {
                 });
             }
             PageSource::Downloaded => {
-                self.gallery_list.loading = false;
-                self.status_msg = "Downloaded view: not yet implemented".to_string();
+                self.spawn_fetch(|c| async move {
+                    match c.get_library().await {
+                        Ok(metas) => {
+                            let items: Vec<GalleryItem> = metas
+                                .into_iter()
+                                .map(|m| GalleryItem {
+                                    gid: m.gid,
+                                    token: m.token,
+                                    title: m.title,
+                                    category: m.category,
+                                    uploader: m.uploader,
+                                    thumb_url: String::new(),
+                                    posted: m.posted,
+                                    rating: m.rating,
+                                    pages: m.pages,
+                                    rated: false,
+                                    thumb_width: 0,
+                                    thumb_height: 0,
+                                    url: m.url,
+                                })
+                                .collect();
+                            AppEvent::GalleriesLoaded(Ok(items))
+                        }
+                        Err(e) => AppEvent::GalleriesLoaded(Err(e)),
+                    }
+                });
             }
         }
     }
