@@ -1,17 +1,10 @@
-use crossterm::event::KeyEvent;
 use image::DynamicImage;
 
 use crate::models::*;
 
-/// All events flowing into the main App::update() loop.
 pub enum AppEvent {
-    /// Terminal key press
-    Key(KeyEvent),
-    /// Tick for periodic updates (e.g., debounce timers)
-    Tick,
-
-    // ── Daemon responses ──
-    GalleriesLoaded(Result<Vec<GalleryItem>, String>),
+    // Daemon responses
+    GalleriesLoaded(Result<Vec<GalleryItem>, String>, u64),
     DetailLoaded(Result<GalleryDetail, String>, u64),
     FavoritesLoaded(Result<FavoritesResponse, String>),
     SuggestionsLoaded(Result<Vec<TagSuggestion>, String>),

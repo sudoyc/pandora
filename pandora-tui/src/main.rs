@@ -7,10 +7,10 @@ mod state;
 mod ui;
 
 use std::io;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crossterm::{
-    event::{self as ct_event, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -21,6 +21,11 @@ use tokio::sync::mpsc;
 use app::{App, AppMode, PageSource};
 use client::DaemonClient;
 use event::AppEvent;
+
+const PRELOAD_WINDOW_LOCAL: u32 = 10;
+const PRELOAD_WINDOW_ONLINE: u32 = 3;
+const PRELOAD_CONCURRENT: usize = 3;
+const RENDER_BURST_FRAMES: u8 = 2;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -58,6 +63,7 @@ async fn main() -> io::Result<()> {
             loop {
                 match connect_async(&ws_url).await {
                     Ok((ws_stream, _)) => {
+                        let _ = tx_ws.send(crate::event::AppEvent::WsReconnected);
                         let (_, mut read) = ws_stream.split();
                         while let Some(msg) = read.next().await {
                             match msg {
@@ -72,13 +78,9 @@ async fn main() -> io::Result<()> {
                         }
                         let _ = tx_ws.send(crate::event::AppEvent::WsDisconnected);
                     }
-                    Err(_) => {
-                        let _ = tx_ws.send(crate::event::AppEvent::WsDisconnected);
-                    }
+                    Err(_) => {}
                 }
-                // Reconnect after 3 seconds
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                let _ = tx_ws.send(crate::event::AppEvent::WsReconnected);
             }
         });
     }
@@ -90,37 +92,76 @@ async fn main() -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let tick_rate = Duration::from_millis(50);
-    let mut last_tick = Instant::now();
+    // Async terminal event stream
+    let mut term_events = crossterm::event::EventStream::new();
+
+    // Render state
+    let mut dirty = true;
+    let mut render_burst: u8 = 0;
+
+    // Debounce state for search suggestions
+    let mut suggest_deadline: Option<tokio::time::Instant> = None;
 
     loop {
-        // Draw
-        terminal.draw(|frame| {
-            ui::draw(frame, &mut app);
-        })?;
-
-        // Poll for terminal events with timeout
-        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-        if ct_event::poll(timeout)? {
-            if let Event::Key(key) = ct_event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    handle_key(&mut app, key.code, key.modifiers);
-                }
+        // Render if dirty
+        if dirty {
+            terminal.draw(|frame| {
+                ui::draw(frame, &mut app);
+            })?;
+            dirty = false;
+            if render_burst > 0 {
+                render_burst -= 1;
+                dirty = true;
             }
-        }
-
-        // Drain channel events
-        while let Ok(app_event) = rx.try_recv() {
-            handle_app_event(&mut app, app_event);
-        }
-
-        // Tick
-        if last_tick.elapsed() >= tick_rate {
-            last_tick = Instant::now();
         }
 
         if app.should_quit {
             break;
+        }
+
+        // Block until an event arrives
+        tokio::select! {
+            maybe_event = futures_util::StreamExt::next(&mut term_events) => {
+                if let Some(Ok(event)) = maybe_event {
+                    match event {
+                        Event::Key(key) if key.kind == KeyEventKind::Press => {
+                            handle_key(&mut app, key.code, key.modifiers);
+                            dirty = true;
+                        }
+                        Event::Resize(_, _) => {
+                            dirty = true;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Some(app_event) = rx.recv() => {
+                let is_image_event = matches!(
+                    app_event,
+                    AppEvent::ThumbnailLoaded { .. } | AppEvent::PageImageLoaded { .. }
+                );
+                handle_app_event(&mut app, app_event);
+                dirty = true;
+                if is_image_event {
+                    render_burst = RENDER_BURST_FRAMES;
+                }
+            }
+            _ = async {
+                match suggest_deadline {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => std::future::pending::<()>().await,
+                }
+            }, if suggest_deadline.is_some() => {
+                suggest_deadline = None;
+                request_suggestions(&app);
+                dirty = true;
+            }
+        }
+
+        // Check if a keystroke scheduled a suggestion debounce
+        if app.suggest_pending {
+            suggest_deadline = Some(tokio::time::Instant::now() + Duration::from_millis(150));
+            app.suggest_pending = false;
         }
     }
 
@@ -171,19 +212,18 @@ fn handle_key_browse(app: &mut App, code: KeyCode) {
         }
         KeyCode::Char('l') | KeyCode::Enter => {
             if let Some(detail) = &app.gallery_list.detail {
+                let is_local = app.page_source == PageSource::Downloaded;
                 app.reader = state::ReaderState {
                     current_page: 1,
                     total_pages: detail.pages,
                     gid: detail.gid.clone(),
                     token: detail.token.clone(),
                     title: detail.title.clone(),
-                    loading: true,
+                    is_local,
                     ..Default::default()
                 };
                 app.mode = AppMode::Read;
-                app.page_image = None;
-                app.page_image_state = None;
-                load_page_image(app);
+                start_page_load(app);
             }
         }
         KeyCode::Char('n') => {
@@ -212,13 +252,14 @@ fn handle_key_browse(app: &mut App, code: KeyCode) {
             if let Some(item) = app.gallery_list.selected_item() {
                 let gid = item.gid.clone();
                 let token = item.token.clone();
-                app.spawn_fetch(move |c| async move {
-                    match c.add_favorite(&gid, &token, 0).await {
-                        Ok(()) => AppEvent::Tick,
-                        Err(e) => AppEvent::ImageError {
+                let tx = app.tx.clone();
+                let client = app.client.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = client.add_favorite(&gid, &token, 0).await {
+                        let _ = tx.send(AppEvent::ImageError {
                             url: String::new(),
                             error: e,
-                        },
+                        });
                     }
                 });
                 app.status_msg = "Added to favorites".to_string();
@@ -268,50 +309,36 @@ fn handle_key_read(app: &mut App, code: KeyCode) {
             app.mode = AppMode::Browse;
             app.page_image = None;
             app.page_image_state = None;
+            app.page_cache.clear();
+            app.pending_pages.clear();
         }
         KeyCode::Char('j') | KeyCode::Char('l') | KeyCode::Char(' ') | KeyCode::Down => {
-            app.reader.next_page();
-            app.reader.loading = true;
-            app.reader.error = None;
-            app.page_image = None;
-            app.page_image_state = None;
-            load_page_image(app);
+            if app.reader.next_page() {
+                start_page_load(app);
+            }
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            app.reader.prev_page();
-            app.reader.loading = true;
-            app.reader.error = None;
-            app.page_image = None;
-            app.page_image_state = None;
-            load_page_image(app);
+            if app.reader.prev_page() {
+                start_page_load(app);
+            }
         }
         KeyCode::Char('G') => {
-            app.reader.last_page();
-            app.reader.loading = true;
-            app.reader.error = None;
-            app.page_image = None;
-            app.page_image_state = None;
-            load_page_image(app);
+            if app.reader.last_page() {
+                start_page_load(app);
+            }
         }
         KeyCode::Char('g') => {
             if was_pending_g {
-                app.reader.first_page();
-                app.reader.loading = true;
-                app.reader.error = None;
-                app.page_image = None;
-                app.page_image_state = None;
-                load_page_image(app);
+                if app.reader.first_page() {
+                    start_page_load(app);
+                }
                 app.pending_g = false;
             } else {
                 app.pending_g = true;
             }
         }
         KeyCode::Char('r') => {
-            app.reader.loading = true;
-            app.reader.error = None;
-            app.page_image = None;
-            app.page_image_state = None;
-            load_page_image(app);
+            start_page_load(app);
         }
         KeyCode::Char('d') => {
             let gid = app.reader.gid.clone();
@@ -366,17 +393,19 @@ fn handle_key_search(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 };
                 app.search.reset();
                 app.mode = AppMode::Browse;
-                app.page_source = PageSource::Homepage; // Search results shown in list
+                app.page_source = PageSource::Search {
+                    keyword: keyword.clone(),
+                    category: cat,
+                    min_rating: rating,
+                };
                 app.gallery_list.clear();
                 app.gallery_list.loading = true;
-                app.spawn_fetch(move |c| async move {
-                    AppEvent::GalleriesLoaded(c.search(&keyword, 0, cat, rating).await)
-                });
+                app.load_current_page();
             }
         }
         KeyCode::Backspace => {
             app.search.delete_char();
-            request_suggestions(app);
+            app.suggest_pending = true;
         }
         KeyCode::Tab | KeyCode::Down => {
             let len = app.search.suggestions.len();
@@ -410,7 +439,7 @@ fn handle_key_search(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         }
         KeyCode::Char(c) => {
             app.search.insert_char(c);
-            request_suggestions(app);
+            app.suggest_pending = true;
         }
         _ => {}
     }
@@ -435,62 +464,207 @@ fn request_suggestions(app: &App) {
     });
 }
 
+fn save_current_page_to_cache(app: &mut App) {
+    if let Some(img) = app.page_image.take() {
+        let key = format!("page:{}:{}", app.reader.gid, app.reader.current_page);
+        app.page_cache.put(key, img);
+        app.page_image_state = None;
+    }
+}
+
+fn start_page_load(app: &mut App) {
+    // Save outgoing page to cache before loading new one
+    save_current_page_to_cache(app);
+
+    let page = app.reader.current_page;
+    let cache_key = format!("page:{}:{}", app.reader.gid, page);
+
+    // Check page_cache first — instant display if cached
+    if let Some(img) = app.page_cache.get(&cache_key) {
+        app.page_image = Some(img.clone());
+        app.page_image_state = None;
+        app.reader.loading = false;
+        app.reader.error = None;
+        app.reader.loading_progress = None;
+        // Still preload neighbors
+        preload_adjacent_pages(app);
+        return;
+    }
+
+    app.reader.loading = true;
+    app.reader.error = None;
+    app.page_image = None;
+    app.page_image_state = None;
+    load_page_image(app);
+    preload_adjacent_pages(app);
+}
+
 fn load_page_image(app: &App) {
     let gid = app.reader.gid.clone();
     let token = app.reader.token.clone();
     let page = app.reader.current_page;
+    let is_local = app.reader.is_local;
     let tx = app.tx.clone();
     let client = app.client.clone();
-    tokio::spawn(async move {
-        match client.get_page_image(&gid, &token, page).await {
-            Ok(response) => {
-                let content_length = response
-                    .content_length()
-                    .unwrap_or(0);
-                let bytes = match response.bytes().await {
-                    Ok(b) => b,
-                    Err(e) => {
-                        let _ = tx.send(AppEvent::ImageError {
-                            url: format!("page:{}", page),
-                            error: e.to_string(),
-                        });
-                        return;
+
+    if is_local {
+        // Local: fetch from library file endpoint
+        tokio::spawn(async move {
+            let path = format!("page/{}", page);
+            match client.get_library_file(&gid, &path).await {
+                Ok(bytes) => {
+                    let bytes_vec = bytes.to_vec();
+                    match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                        Ok(Ok(img)) => {
+                            let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
+                        }
+                        Ok(Err(e)) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: format!("page:{}", page),
+                                error: e.to_string(),
+                            });
+                        }
+                        Err(_) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: format!("page:{}", page),
+                                error: "image decode task panicked".to_string(),
+                            });
+                        }
                     }
-                };
-                if content_length > 0 {
-                    let _ = tx.send(AppEvent::PageImageProgress {
-                        page,
-                        received: bytes.len() as u64,
-                        total: content_length,
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::ImageError {
+                        url: format!("page:{}", page),
+                        error: e,
                     });
                 }
-                match image::load_from_memory(&bytes) {
-                    Ok(img) => {
-                        let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
-                    }
-                    Err(e) => {
-                        let _ = tx.send(AppEvent::ImageError {
-                            url: format!("page:{}", page),
-                            error: e.to_string(),
+            }
+        });
+    } else {
+        // Online: fetch from daemon page endpoint
+        tokio::spawn(async move {
+            match client.get_page_image(&gid, &token, page).await {
+                Ok(response) => {
+                    let content_length = response.content_length().unwrap_or(0);
+                    let bytes = match response.bytes().await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: format!("page:{}", page),
+                                error: e.to_string(),
+                            });
+                            return;
+                        }
+                    };
+                    if content_length > 0 {
+                        let _ = tx.send(AppEvent::PageImageProgress {
+                            page,
+                            received: bytes.len() as u64,
+                            total: content_length,
                         });
                     }
+                    let bytes_vec = bytes.to_vec();
+                    match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                        Ok(Ok(img)) => {
+                            let _ = tx.send(AppEvent::PageImageLoaded { page, image: img });
+                        }
+                        Ok(Err(e)) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: format!("page:{}", page),
+                                error: e.to_string(),
+                            });
+                        }
+                        Err(_) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: format!("page:{}", page),
+                                error: "image decode task panicked".to_string(),
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::ImageError {
+                        url: format!("page:{}", page),
+                        error: e,
+                    });
                 }
             }
-            Err(e) => {
-                let _ = tx.send(AppEvent::ImageError {
-                    url: format!("page:{}", page),
-                    error: e,
-                });
-            }
+        });
+        // Online prefetch on daemon side
+        let gid2 = app.reader.gid.clone();
+        let token2 = app.reader.token.clone();
+        let client2 = app.client.clone();
+        tokio::spawn(async move {
+            let _ = client2.prefetch(&gid2, &token2, page).await;
+        });
+    }
+}
+
+/// Preload adjacent pages into page_cache in background.
+fn preload_adjacent_pages(app: &mut App) {
+    let page = app.reader.current_page;
+    let total = app.reader.total_pages;
+    let is_local = app.reader.is_local;
+    let gid = app.reader.gid.clone();
+    let token = app.reader.token.clone();
+
+    let (behind, ahead) = if is_local {
+        (PRELOAD_WINDOW_LOCAL, PRELOAD_WINDOW_LOCAL)
+    } else {
+        (PRELOAD_WINDOW_ONLINE, PRELOAD_WINDOW_ONLINE)
+    };
+    let start = page.saturating_sub(behind).max(1);
+    let end = (page + ahead).min(total);
+
+    // Priority order: N+1, N-1, N+2, N-2, ...
+    let mut pages_to_load: Vec<u32> = Vec::new();
+    for delta in 1..=ahead.max(behind) {
+        if page + delta <= end {
+            pages_to_load.push(page + delta);
         }
-    });
-    // Trigger prefetch
-    let gid2 = app.reader.gid.clone();
-    let token2 = app.reader.token.clone();
-    let client2 = app.client.clone();
-    tokio::spawn(async move {
-        let _ = client2.prefetch(&gid2, &token2, page).await;
-    });
+        if delta <= behind && page > delta && page - delta >= start {
+            pages_to_load.push(page - delta);
+        }
+    }
+
+    for p in pages_to_load {
+        let cache_key = format!("page:{}:{}", gid, p);
+        if app.page_cache.contains(&cache_key) || app.pending_pages.contains(&p) {
+            continue;
+        }
+        app.pending_pages.insert(p);
+
+        let tx = app.tx.clone();
+        let client = app.client.clone();
+        let gid = gid.clone();
+        let token = token.clone();
+        let sem = app.preload_semaphore.clone();
+
+        if is_local {
+            tokio::spawn(async move {
+                let _permit = sem.acquire().await;
+                let path = format!("page/{}", p);
+                if let Ok(bytes) = client.get_library_file(&gid, &path).await {
+                    let bytes_vec = bytes.to_vec();
+                    if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                        let _ = tx.send(AppEvent::PageImageLoaded { page: p, image: img });
+                    }
+                }
+            });
+        } else {
+            tokio::spawn(async move {
+                let _permit = sem.acquire().await;
+                if let Ok(resp) = client.get_page_image(&gid, &token, p).await {
+                    if let Ok(bytes) = resp.bytes().await {
+                        let bytes_vec = bytes.to_vec();
+                        if let Ok(Ok(img)) = tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                            let _ = tx.send(AppEvent::PageImageLoaded { page: p, image: img });
+                        }
+                    }
+                }
+            });
+        }
+    }
 }
 
 fn switch_page_source(app: &mut App, source: PageSource) {
@@ -501,12 +675,14 @@ fn switch_page_source(app: &mut App, source: PageSource) {
     app.gallery_list.clear();
     app.failed_images.clear();
     app.pending_images.clear();
+    app.image_states.clear();
     app.load_current_page();
 }
 
 fn handle_app_event(app: &mut App, event: AppEvent) {
     match event {
-        AppEvent::GalleriesLoaded(Ok(items)) => {
+        AppEvent::GalleriesLoaded(Ok(items), generation) => {
+            if generation != app.list_generation { return; }
             let count = items.len();
             app.gallery_list.items = items;
             app.gallery_list.loading = false;
@@ -514,9 +690,16 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             app.status_msg = format!("Loaded {} galleries", count);
             app.load_selected_detail();
         }
-        AppEvent::GalleriesLoaded(Err(e)) => {
+        AppEvent::GalleriesLoaded(Err(e), generation) => {
+            if generation != app.list_generation { return; }
             app.gallery_list.loading = false;
-            app.status_msg = format!("Error: {}", e);
+            app.status_msg = if e.contains("timed out") || e.contains("timeout") {
+                "Connection timed out — check daemon".to_string()
+            } else if e.contains("connect") || e.contains("Connection refused") {
+                "Cannot reach daemon — is it running?".to_string()
+            } else {
+                format!("Load failed: {}", e)
+            };
         }
         AppEvent::DetailLoaded(Ok(detail), generation) => {
             if generation == app.detail_generation {
@@ -525,7 +708,8 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
         }
         AppEvent::DetailLoaded(Err(e), generation) => {
             if generation == app.detail_generation {
-                app.status_msg = format!("Detail error: {}", e);
+                app.gallery_list.detail = None;
+                app.status_msg = format!("Detail load failed: {}", e);
             }
         }
         AppEvent::SuggestionsLoaded(Ok(suggestions)) => {
@@ -539,13 +723,23 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
             app.pending_images.remove(&url);
             app.image_states.remove(&url);
             app.image_cache.put(url, image);
+            // Prune image_states for keys no longer in cache
+            if app.image_states.len() > 300 {
+                let cached_keys: std::collections::HashSet<String> =
+                    app.image_cache.iter().map(|(k, _)| k.clone()).collect();
+                app.image_states.retain(|k, _| cached_keys.contains(k));
+            }
         }
         AppEvent::PageImageLoaded { page, image } => {
+            app.pending_pages.remove(&page);
             if page == app.reader.current_page {
-                app.page_image = Some(image);
                 app.page_image_state = None;
                 app.reader.loading = false;
                 app.reader.loading_progress = None;
+                app.page_image = Some(image);
+            } else {
+                let cache_key = format!("page:{}:{}", app.reader.gid, page);
+                app.page_cache.put(cache_key, image);
             }
         }
         AppEvent::PageImageProgress {
@@ -559,10 +753,18 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
         }
         AppEvent::ImageError { url, error } => {
             app.pending_images.remove(&url);
+            if app.failed_images.len() > 500 {
+                app.failed_images.clear();
+            }
             app.failed_images.insert(url.clone());
             if url.starts_with("page:") {
-                app.reader.loading = false;
-                app.reader.error = Some(error);
+                if let Ok(p) = url.trim_start_matches("page:").parse::<u32>() {
+                    app.pending_pages.remove(&p);
+                    if p == app.reader.current_page {
+                        app.reader.loading = false;
+                        app.reader.error = Some(error);
+                    }
+                }
             }
         }
         AppEvent::DownloadSubmitted(Ok(task)) => {
@@ -603,7 +805,5 @@ fn handle_app_event(app: &mut App, event: AppEvent) {
         AppEvent::WsReconnected => {
             app.status_msg.clear();
         }
-        AppEvent::Tick => {}
-        AppEvent::Key(_) => {} // Keys are handled separately in handle_key
     }
 }

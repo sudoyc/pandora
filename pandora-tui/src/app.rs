@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 use image::DynamicImage;
 use lru::LruCache;
 use ratatui_image::picker::Picker;
 use ratatui_image::protocol::StatefulProtocol;
 use tokio::sync::mpsc;
+use tokio::sync::Semaphore;
 
 use crate::client::DaemonClient;
 use crate::event::AppEvent;
@@ -19,7 +21,7 @@ pub enum AppMode {
     Search,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PageSource {
     Homepage,
     Popular,
@@ -27,6 +29,11 @@ pub enum PageSource {
     Watched,
     Favorites,
     Downloaded,
+    Search {
+        keyword: String,
+        category: Option<u32>,
+        min_rating: Option<u32>,
+    },
 }
 
 impl PageSource {
@@ -38,6 +45,7 @@ impl PageSource {
             Self::Watched => "Watched",
             Self::Favorites => "Favorites",
             Self::Downloaded => "Downloaded",
+            Self::Search { .. } => "Search",
         }
     }
 }
@@ -51,18 +59,25 @@ pub struct App {
     pub downloads: DownloadState,
 
     pub image_cache: LruCache<String, DynamicImage>,
+    pub page_cache: LruCache<String, DynamicImage>,
     pub page_image: Option<DynamicImage>,
     pub status_msg: String,
     pub show_help: bool,
     pub should_quit: bool,
     pub pending_g: bool,
     pub detail_generation: u64,
+    pub list_generation: u64,
 
     pub picker: Picker,
     pub image_states: HashMap<String, StatefulProtocol>,
     pub page_image_state: Option<StatefulProtocol>,
     pub failed_images: std::collections::HashSet<String>,
     pub pending_images: std::collections::HashSet<String>,
+    pub pending_pages: std::collections::HashSet<u32>,
+
+    pub suggest_pending: bool,
+
+    pub preload_semaphore: Arc<Semaphore>,
 
     pub client: DaemonClient,
     pub tx: mpsc::UnboundedSender<AppEvent>,
@@ -78,17 +93,22 @@ impl App {
             search: SearchState::default(),
             downloads: DownloadState::default(),
             image_cache: LruCache::new(NonZeroUsize::new(200).unwrap()),
+            page_cache: LruCache::new(NonZeroUsize::new(30).unwrap()),
             page_image: None,
             status_msg: String::new(),
             show_help: false,
             should_quit: false,
             pending_g: false,
             detail_generation: 0,
+            list_generation: 0,
             picker,
             image_states: HashMap::new(),
             page_image_state: None,
             failed_images: std::collections::HashSet::new(),
             pending_images: std::collections::HashSet::new(),
+            pending_pages: std::collections::HashSet::new(),
+            suggest_pending: false,
+            preload_semaphore: Arc::new(Semaphore::new(3)),
             client,
             tx,
         }
@@ -108,63 +128,82 @@ impl App {
     }
 
     pub fn load_current_page(&mut self) {
+        self.list_generation += 1;
+        let generation = self.list_generation;
         self.gallery_list.loading = true;
         let page = self.gallery_list.current_page;
         match self.page_source {
             PageSource::Homepage => {
-                self.spawn_fetch(|c| async move {
-                    AppEvent::GalleriesLoaded(c.get_homepage().await)
+                self.spawn_fetch(move |c| async move {
+                    AppEvent::GalleriesLoaded(c.get_homepage().await, generation)
                 });
             }
             PageSource::Popular => {
-                self.spawn_fetch(|c| async move {
-                    AppEvent::GalleriesLoaded(c.get_popular().await)
+                self.spawn_fetch(move |c| async move {
+                    AppEvent::GalleriesLoaded(c.get_popular().await, generation)
                 });
             }
             PageSource::Toplist => {
-                self.spawn_fetch(|c| async move {
-                    AppEvent::GalleriesLoaded(c.get_toplist("15").await)
+                self.spawn_fetch(move |c| async move {
+                    AppEvent::GalleriesLoaded(c.get_toplist("15").await, generation)
                 });
             }
             PageSource::Watched => {
                 self.spawn_fetch(move |c| async move {
-                    AppEvent::GalleriesLoaded(c.get_watched(page).await)
+                    AppEvent::GalleriesLoaded(c.get_watched(page).await, generation)
                 });
             }
             PageSource::Favorites => {
                 self.spawn_fetch(move |c| async move {
                     match c.get_favorites(-1, page).await {
-                        Ok(resp) => AppEvent::GalleriesLoaded(Ok(resp.galleries)),
-                        Err(e) => AppEvent::GalleriesLoaded(Err(e)),
+                        Ok(resp) => AppEvent::GalleriesLoaded(Ok(resp.galleries), generation),
+                        Err(e) => AppEvent::GalleriesLoaded(Err(e), generation),
                     }
                 });
             }
             PageSource::Downloaded => {
-                self.spawn_fetch(|c| async move {
+                let base = self.client.base_url().to_string();
+                self.spawn_fetch(move |c| async move {
                     match c.get_library().await {
                         Ok(metas) => {
                             let items: Vec<GalleryItem> = metas
                                 .into_iter()
-                                .map(|m| GalleryItem {
-                                    gid: m.gid,
-                                    token: m.token,
-                                    title: m.title,
-                                    category: m.category,
-                                    uploader: m.uploader,
-                                    thumb_url: String::new(),
-                                    posted: m.posted,
-                                    rating: m.rating,
-                                    pages: m.pages,
-                                    rated: false,
-                                    thumb_width: 0,
-                                    thumb_height: 0,
-                                    url: m.url,
+                                .map(|m| {
+                                    let thumb_url = m.thumb_url.as_ref().map_or(
+                                        String::new(),
+                                        |path| format!("{}{}", base, path),
+                                    );
+                                    GalleryItem {
+                                        gid: m.gid,
+                                        token: m.token,
+                                        title: m.title,
+                                        category: m.category,
+                                        uploader: m.uploader,
+                                        thumb_url,
+                                        posted: m.posted,
+                                        rating: m.rating,
+                                        pages: m.pages,
+                                        rated: false,
+                                        thumb_width: 0,
+                                        thumb_height: 0,
+                                        url: m.url,
+                                    }
                                 })
                                 .collect();
-                            AppEvent::GalleriesLoaded(Ok(items))
+                            AppEvent::GalleriesLoaded(Ok(items), generation)
                         }
-                        Err(e) => AppEvent::GalleriesLoaded(Err(e)),
+                        Err(e) => AppEvent::GalleriesLoaded(Err(e), generation),
                     }
+                });
+            }
+            PageSource::Search {
+                ref keyword,
+                category,
+                min_rating,
+            } => {
+                let keyword = keyword.clone();
+                self.spawn_fetch(move |c| async move {
+                    AppEvent::GalleriesLoaded(c.search(&keyword, page, category, min_rating).await, generation)
                 });
             }
         }
@@ -194,17 +233,26 @@ impl App {
         let client = self.client.clone();
         tokio::spawn(async move {
             match client.proxy_image(&url).await {
-                Ok(bytes) => match image::load_from_memory(&bytes) {
-                    Ok(img) => {
-                        let _ = tx.send(AppEvent::ThumbnailLoaded { url, image: img });
+                Ok(bytes) => {
+                    let bytes_vec = bytes.to_vec();
+                    match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                        Ok(Ok(img)) => {
+                            let _ = tx.send(AppEvent::ThumbnailLoaded { url, image: img });
+                        }
+                        Ok(Err(e)) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url,
+                                error: e.to_string(),
+                            });
+                        }
+                        Err(_) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url,
+                                error: "image decode task panicked".to_string(),
+                            });
+                        }
                     }
-                    Err(e) => {
-                        let _ = tx.send(AppEvent::ImageError {
-                            url,
-                            error: e.to_string(),
-                        });
-                    }
-                },
+                }
                 Err(e) => {
                     let _ = tx.send(AppEvent::ImageError { url, error: e });
                 }
@@ -227,20 +275,29 @@ impl App {
         let client = self.client.clone();
         tokio::spawn(async move {
             match client.get_thumb_image(&gid, &token, page).await {
-                Ok(bytes) => match image::load_from_memory(&bytes) {
-                    Ok(img) => {
-                        let _ = tx.send(AppEvent::ThumbnailLoaded {
-                            url: cache_key,
-                            image: img,
-                        });
+                Ok(bytes) => {
+                    let bytes_vec = bytes.to_vec();
+                    match tokio::task::spawn_blocking(move || image::load_from_memory(&bytes_vec)).await {
+                        Ok(Ok(img)) => {
+                            let _ = tx.send(AppEvent::ThumbnailLoaded {
+                                url: cache_key,
+                                image: img,
+                            });
+                        }
+                        Ok(Err(e)) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: cache_key,
+                                error: e.to_string(),
+                            });
+                        }
+                        Err(_) => {
+                            let _ = tx.send(AppEvent::ImageError {
+                                url: cache_key,
+                                error: "image decode task panicked".to_string(),
+                            });
+                        }
                     }
-                    Err(e) => {
-                        let _ = tx.send(AppEvent::ImageError {
-                            url: cache_key,
-                            error: e.to_string(),
-                        });
-                    }
-                },
+                }
                 Err(e) => {
                     let _ = tx.send(AppEvent::ImageError {
                         url: cache_key,
