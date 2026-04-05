@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -39,8 +38,8 @@ async def _cache_eviction_loop(cache: CacheManager, interval: int) -> None:
             logger.exception("Cache eviction error")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _build_state() -> AppState:
+    """Construct all components and return AppState."""
     config_path = Path("~/.config/pandora/config.toml").expanduser()
     config = load_config(config_path)
     db_path = config_path.parent / "pandora.db"
@@ -60,26 +59,28 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass  # Non-fatal: suggest will return empty results
     state_file = config_path.parent / "downloads.json"
-    downloads = DownloadManager(api=api, config=config.download, ws=ws, image_service=image_service, state_file=state_file)
-    state = AppState(
+    downloads = DownloadManager(
+        api=api, config=config.download, ws=ws,
+        image_service=image_service, state_file=state_file,
+    )
+    return AppState(
         config=config, config_path=config_path,
         client=client, api=api,
-        downloads=downloads, cache=cache, image_service=image_service, ws=ws,
+        downloads=downloads, cache=cache,
+        image_service=image_service, ws=ws,
         db=db, tag_database=tag_database,
     )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    state = await _build_state()
     app.state.pandora = state
-    await downloads.start()
-    eviction_task = asyncio.create_task(
-        _cache_eviction_loop(cache, config.cache.eviction_interval_seconds)
+    await state.start(
+        _cache_eviction_loop(state.cache, state.config.cache.eviction_interval_seconds)
     )
     yield
-    eviction_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await eviction_task
-    await db.close()
-    await downloads.shutdown()
-    await image_service.shutdown()
-    await api.aclose()
+    await state.shutdown()
 
 def create_app() -> FastAPI:
     from pandora_daemon.routes import router
