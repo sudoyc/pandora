@@ -53,5 +53,27 @@ impl DownloadState {
             .iter()
             .filter(|t| t.status == "downloading" || t.status == "queued")
             .count() as u32;
+        self.cleanup_completed();
+    }
+
+    /// Remove old completed/failed tasks, keeping at most 50.
+    pub fn cleanup_completed(&mut self) {
+        let terminal_count = self.tasks.iter()
+            .filter(|t| t.status == "complete" || t.status == "error")
+            .count();
+        if terminal_count > 50 {
+            let mut removed = 0;
+            let to_remove = terminal_count - 50;
+            self.tasks.retain(|t| {
+                if removed >= to_remove {
+                    return true;
+                }
+                if t.status == "complete" || t.status == "error" {
+                    removed += 1;
+                    return false;
+                }
+                true
+            });
+        }
     }
 }
