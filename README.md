@@ -35,9 +35,10 @@ Async Python library. 22 API methods, 17 model types, 11 parsers, 77 tests. Full
 
 ### pandora-daemon
 
-FastAPI service wrapping `exhentai_api`. 228 tests.
+FastAPI service wrapping `exhentai_api`. 341 tests.
 
 - **Image proxy** — all image types cached with SHA256 keys, LRU eviction (2 GB default)
+- **SQLite database** — browsing history, local favorites, reading bookmarks, saved searches, gallery filters, tag cache. Auto-triggers on gallery view and page prefetch
 - **Server-side prefetch** — background prefetch of surrounding pages during reading
 - **Thumb cropping** — CSS sprite cropping for gdtm-mode thumbnails, on-demand preview page loading
 - **Download manager** — complete offline gallery clones (metadata + cover + thumbs + pages), resume support, WebSocket progress events
@@ -45,7 +46,7 @@ FastAPI service wrapping `exhentai_api`. 228 tests.
 - **Tag suggest** — EhTagTranslation database (~15K tags), substring search with prefix-first ranking
 - **Config** — TOML-based (`~/.config/pandora/config.toml`)
 
-30+ REST endpoints, WebSocket real-time events.
+30+ REST endpoints, WebSocket real-time events. SQLite persistence (`~/.config/pandora/pandora.db`).
 
 ### Rust TUI
 
@@ -98,7 +99,7 @@ uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abctoken/"
 ## Development
 
 ```bash
-# Python tests (228)
+# Python tests (341)
 uv run pytest tests/ -v
 
 # Rust TUI tests (16)

@@ -1,6 +1,7 @@
-# P0: 异常体系设计
+# P0: 异常体系设计 ✅ 已完成
 
 > 日期：2026-04-05  
+> 完成日期：2026-04-05  
 > 范围：`exhentai_api/exceptions.py`（新建）、`exhentai_api/client.py`（修改）、`pandora_daemon/app.py`（修改）  
 > 不改动：parsers、download.py、routes、TUI
 

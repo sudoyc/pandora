@@ -202,3 +202,54 @@ Search query builder.
 
 ### `WatchedTag`
 - `tag_id` (int), `name` (str), `watched` (bool), `hidden` (bool), `color` (str), `weight` (int)
+
+---
+
+## Daemon REST API — Local Database Endpoints
+
+These endpoints manage local data stored in SQLite (`~/.config/pandora/pandora.db`).
+
+### History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/history?limit=50&offset=0` | List browsing history (newest first) |
+| DELETE | `/api/history/{gid}` | Delete single history entry |
+| DELETE | `/api/history` | Clear all history |
+
+History is auto-populated when viewing gallery details (`GET /api/gallery/{gid}/{token}`). Max 200 entries.
+
+### Local Favorites
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/local-favorites?limit=50&offset=0` | List local favorites |
+| POST | `/api/local-favorites` | Add local favorite (body: `{gid, token, title, category, uploader, thumb_url, posted, rating, pages, title_jpn?}`) |
+| DELETE | `/api/local-favorites/{gid}` | Remove local favorite |
+
+### Bookmarks (Reading Progress)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/bookmarks?limit=50&offset=0` | List all bookmarks |
+| GET | `/api/bookmarks/{gid}` | Get bookmark for gallery (404 if none) |
+| DELETE | `/api/bookmarks/{gid}` | Delete bookmark |
+
+Bookmarks are auto-updated on prefetch (`POST /api/gallery/{gid}/{token}/prefetch`).
+
+### Quick Search
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/quick-search` | List saved search presets |
+| POST | `/api/quick-search` | Add preset (body: `{name, keyword?, category?, min_rating?, page_from?, page_to?}`) → `{id}` |
+| DELETE | `/api/quick-search/{search_id}` | Delete preset |
+
+### Filters
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/filters` | List filter rules |
+| POST | `/api/filters` | Add filter (body: `{mode, text}`) → `{id}`. Modes: 0=title, 1=uploader, 2=tag, 3=tag_namespace |
+| PUT | `/api/filters/{filter_id}` | Toggle filter enabled/disabled |
+| DELETE | `/api/filters/{filter_id}` | Delete filter |
