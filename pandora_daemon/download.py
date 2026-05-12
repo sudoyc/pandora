@@ -79,6 +79,7 @@ class DownloadManager:
         self._cancelled: set[str] = set()
         self._save_dirty: bool = False
         self._save_task: asyncio.Task | None = None
+        self._submit_lock = asyncio.Lock()
 
     async def start(self) -> None:
         self._load_state()
@@ -102,44 +103,45 @@ class DownloadManager:
         self._save_state()
 
     async def submit(self, gid: str, token: str) -> DownloadTask:
-        existing = self._tasks.get(gid)
-        if existing and existing.status in ("queued", "downloading"):
-            raise ValueError(f"Gallery {gid} is already queued or downloading")
+        async with self._submit_lock:
+            existing = self._tasks.get(gid)
+            if existing and existing.status in ("queued", "downloading"):
+                raise ValueError(f"Gallery {gid} is already queued or downloading")
 
-        detail = await self._api.get_gallery_details(gid, token)
+            detail = await self._api.get_gallery_details(gid, token)
 
-        # Collect all preview URLs, thumb URLs, and sprite info across ALL preview pages
-        viewer_urls = list(detail.viewer_urls)
-        thumb_urls = list(detail.thumb_urls)
-        thumb_sprites = [asdict(s) for s in detail.thumb_sprites]
-        if detail.preview_pages > 1:
-            for p in range(1, detail.preview_pages):
-                page_url = f"{detail.url}?p={p}"
-                html = await self._api.client.get_html(page_url)
-                page_detail = parse_gallery_detail(html, gid, token)
-                viewer_urls.extend(page_detail.viewer_urls)
-                thumb_urls.extend(page_detail.thumb_urls)
-                thumb_sprites.extend(asdict(s) for s in page_detail.thumb_sprites)
+            # Collect all preview URLs, thumb URLs, and sprite info across ALL preview pages
+            viewer_urls = list(detail.viewer_urls)
+            thumb_urls = list(detail.thumb_urls)
+            thumb_sprites = [asdict(s) for s in detail.thumb_sprites]
+            if detail.preview_pages > 1:
+                for p in range(1, detail.preview_pages):
+                    page_url = f"{detail.url}?p={p}"
+                    html = await self._api.client.get_html(page_url)
+                    page_detail = parse_gallery_detail(html, gid, token)
+                    viewer_urls.extend(page_detail.viewer_urls)
+                    thumb_urls.extend(page_detail.thumb_urls)
+                    thumb_sprites.extend(asdict(s) for s in page_detail.thumb_sprites)
 
-        safe_title = _sanitize_filename(detail.title)
-        output_dir = str(self._download_path / f"{gid}-{safe_title}")
+            safe_title = _sanitize_filename(detail.title)
+            output_dir = str(self._download_path / f"{gid}-{safe_title}")
 
-        task = DownloadTask(
-            gid=gid,
-            token=token,
-            title=detail.title,
-            total_pages=detail.pages,
-            output_dir=output_dir,
-            viewer_urls=viewer_urls,
-            thumb_urls=thumb_urls,
-            thumb_sprites=thumb_sprites,
-        )
-        self._tasks[gid] = task
-        await self._queue.put(gid)
+            task = DownloadTask(
+                gid=gid,
+                token=token,
+                title=detail.title,
+                total_pages=detail.pages,
+                output_dir=output_dir,
+                viewer_urls=viewer_urls,
+                thumb_urls=thumb_urls,
+                thumb_sprites=thumb_sprites,
+            )
+            self._tasks[gid] = task
+            await self._queue.put(gid)
 
-        await self._ws.broadcast({"event": "download_queued", "gid": gid, "title": detail.title})
-        self._save_state()
-        return task
+            await self._ws.broadcast({"event": "download_queued", "gid": gid, "title": detail.title})
+            self._save_state()
+            return task
 
     async def cancel(self, gid: str) -> bool:
         task = self._tasks.get(gid)
@@ -251,6 +253,9 @@ class DownloadManager:
             if task.page_states.get(i) != "done":
                 task.page_states[i] = "pending"
 
+        def _count_done_pages() -> int:
+            return sum(1 for state in task.page_states.values() if state == "done")
+
         async def _download_single_page(page_num: int) -> None:
             nonlocal stop_reason
             if stop_event.is_set():
@@ -262,6 +267,7 @@ class DownloadManager:
                         if not f.name.endswith(".tmp")]
             if existing:
                 task.page_states[page_num] = "done"
+                task.downloaded_pages = max(task.downloaded_pages, _count_done_pages())
                 return
 
             async with semaphore:
@@ -290,7 +296,7 @@ class DownloadManager:
                         ext = _ext_from_url(image_url)
                         _atomic_write(pages_dir / f"{page_num:04d}{ext}", data)
                         task.page_states[page_num] = "done"
-                        task.downloaded_pages += 1
+                        task.downloaded_pages = max(task.downloaded_pages, _count_done_pages())
                         last_exc = None
                         break
 
@@ -333,6 +339,10 @@ class DownloadManager:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         try:
+            if task.status == "queued":
+                task.status = "downloading"
+                self._save_state()
+
             if not is_retry:
                 detail = await self._api.get_gallery_details(task.gid, task.token)
 
@@ -502,7 +512,9 @@ class DownloadManager:
     def _save_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         data = {gid: task.to_dict() for gid, task in self._tasks.items()}
-        self._state_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp_path = self._state_file.with_suffix(self._state_file.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp_path.replace(self._state_file)
 
     def _load_state(self) -> None:
         if not self._state_file.exists():
@@ -514,6 +526,10 @@ class DownloadManager:
             return
         for gid, task_dict in data.items():
             try:
+                if isinstance(task_dict.get("page_states"), dict):
+                    task_dict["page_states"] = {
+                        int(page): state for page, state in task_dict["page_states"].items()
+                    }
                 task = DownloadTask(**task_dict)
                 self._tasks[gid] = task
             except Exception:

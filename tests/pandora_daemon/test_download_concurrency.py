@@ -206,6 +206,7 @@ class TestDownloadPages:
         assert task.page_states[1] == "done"
         assert task.page_states[2] == "done"
         assert task.page_states[3] == "done"
+        assert task.downloaded_pages == 3
         assert mock_api.client.get_html.await_count == 1
 
     @pytest.mark.asyncio
@@ -422,6 +423,27 @@ class TestDownloadGallery:
         assert task.status == "completed"
         assert task.metadata_saved is True
         assert task.cover_downloaded is True
+
+    @pytest.mark.asyncio
+    async def test_download_gallery_sets_downloading_before_work(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    ):
+        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        task = DownloadTask(
+            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
+            viewer_urls=["https://ex.org/s/a/1-1"],
+            thumb_urls=[],
+        )
+
+        async def assert_downloading(url):
+            assert task.status == "downloading"
+            return "<html></html>"
+
+        mock_api.client.get_html = AsyncMock(side_effect=assert_downloading)
+        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
+            await mgr._download_gallery(task)
+
+        assert task.status == "completed"
 
     @pytest.mark.asyncio
     async def test_failed_pages_sets_completed_with_errors(

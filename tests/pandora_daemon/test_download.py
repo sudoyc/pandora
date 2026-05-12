@@ -1,6 +1,7 @@
 """Tests for pandora_daemon.download module — offline library builder."""
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -169,6 +170,26 @@ async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_image_service, 
 
 
 @pytest.mark.asyncio
+async def test_submit_duplicate_rejected_under_concurrency(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+
+    async def slow_detail(gid, token):
+        await asyncio.sleep(0.01)
+        return mock_api.get_gallery_details.return_value
+
+    mock_api.get_gallery_details.side_effect = slow_detail
+    results = await asyncio.gather(
+        manager.submit("123", "abc"),
+        manager.submit("123", "abc"),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(r, DownloadTask) for r in results) == 1
+    assert sum(isinstance(r, ValueError) for r in results) == 1
+    assert len(manager._tasks) == 1
+
+
+@pytest.mark.asyncio
 async def test_submit_saves_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
     manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
 
@@ -250,6 +271,38 @@ async def test_load_state_requeues_pending(mock_api, mock_ws, mock_image_service
 
     assert "456" in manager._tasks
     assert manager._tasks["456"].title == "Persisted Gallery"
+
+
+@pytest.mark.asyncio
+async def test_load_state_normalizes_page_state_keys(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    task = DownloadTask(
+        gid="456",
+        token="def",
+        title="Persisted Gallery",
+        total_pages=2,
+        output_dir="/tmp/456",
+        status="queued",
+        page_states={1: "done", 2: "failed"},
+    )
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps({"456": task.to_dict()}), encoding="utf-8")
+
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    manager._load_state()
+
+    assert manager._tasks["456"].page_states == {1: "done", 2: "failed"}
+
+
+@pytest.mark.asyncio
+async def test_save_state_writes_atomically(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    await manager.submit("123", "abc")
+
+    manager._save_state()
+
+    assert state_file.exists()
+    assert not state_file.with_suffix(state_file.suffix + ".tmp").exists()
+    assert json.loads(state_file.read_text())["123"]["gid"] == "123"
 
 
 # ---------------------------------------------------------------------------
