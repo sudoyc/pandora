@@ -1,6 +1,8 @@
 """Config and WebSocket routes for pandora-daemon."""
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
+
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from pandora_daemon.config import save_config
@@ -10,9 +12,36 @@ from pandora_daemon.state import AppState
 router = APIRouter(tags=["config"])
 
 
+def _pandora_version() -> str:
+    try:
+        return version("pandora")
+    except PackageNotFoundError:
+        return "0.2.0"
+
+
 @router.get("/api/config")
 async def get_config(state: AppState = Depends(get_state)):
     return state.config.to_public_dict()
+
+
+@router.get("/api/health")
+async def get_health(state: AppState = Depends(get_state)):
+    config = state.config
+    return {
+        "ok": True,
+        "version": _pandora_version(),
+        "service": "pandora-daemon",
+        "auth_configured": bool(config.credentials.igneous and config.credentials.ipb_member_id),
+        "capabilities": {
+            "browse": True,
+            "gallery_detail": True,
+            "downloads": True,
+            "library": True,
+            "tags": True,
+            "favorites": True,
+            "websocket": True,
+        },
+    }
 
 
 @router.put("/api/config")

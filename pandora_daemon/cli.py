@@ -341,6 +341,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_common_options(status_parser)
 
+    health_parser = subparsers.add_parser("health", help="Check daemon health")
+    _add_common_options(health_parser)
+
+    config_parser = subparsers.add_parser("config", help="Show daemon public config")
+    _add_common_options(config_parser)
+
     search_parser = subparsers.add_parser("search", help="Search galleries")
     search_parser.add_argument("keyword", help="Search keyword")
     search_parser.add_argument("--page", type=int, default=0)
@@ -427,6 +433,17 @@ async def _run_http_command(args: argparse.Namespace) -> int:
 
     try:
         async with httpx.AsyncClient(base_url=daemon_url, timeout=_client_timeout(args)) as client:
+            if command == "health":
+                data = await _request_json(client, "GET", "/api/health")
+                if args.json:
+                    return _dispatch_json(data)
+                Console().print(f"[green]OK[/green] {data.get('service', 'pandora-daemon')}")
+                return 0
+
+            if command == "config":
+                data = await _request_json(client, "GET", "/api/config")
+                return _dispatch_json(data)
+
             if command == "status":
                 tasks = await _download_statuses(client)
                 if args.json:
@@ -488,7 +505,7 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                 return _dispatch_json(data) if args.json else _dispatch_json(data)
 
             if command == "favorites":
-                data = await _request_json(client, "GET", "/api/favorites", params={"slot": 0, "page": 0})
+                data = await _request_json(client, "GET", "/api/favorites", params={"slot": -1, "page": 0})
                 return _dispatch_json(data) if args.json else _dispatch_json(data)
 
             if command == "popular":

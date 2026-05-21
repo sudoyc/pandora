@@ -1,15 +1,16 @@
 # Pandora Project Context
 
 ## Project Overview
-Pandora is a completely self-contained suite of applications for browsing, searching, and downloading from ExHentai. It consists of a reusable Python API library (`exhentai_api`), a local backend daemon (`pandora-daemon`) running FastAPI, a terminal UI in Rust (`pandora-tui`), and a planned Web frontend.
+Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for CLI JSON/NDJSON and Hermes agent/plugin workflows. It consists of the reusable Python API library (`exhentai_api`), the local FastAPI daemon (`pandora-daemon`), a daemon-backed CLI, an optional Web frontend, and an archived Rust TUI.
 
 *Note: The `ARCHITECTURE.md` file in the project root is a detailed research report on the `Ehviewer_CN_SXJ` Android application, which serves as the reference implementation and inspiration for Pandora's API and data models.*
 
 ### Architecture
 - **exhentai_api (Python)**: The core, stateless abstraction over the ExHentai site.
 - **pandora-daemon (Python/FastAPI)**: The intermediary that handles sessions, caching, database persistence (SQLite), download management, and provides a proxy for images. It runs a REST + WebSocket API on `localhost:7860`. All frontends MUST communicate with ExHentai through this daemon.
-- **pandora-tui (Rust)**: Terminal frontend. Development is currently suspended.
-- **Web Frontend**: (Planned/In Progress) The next phase of development.
+- **CLI / Hermes workflows**: Primary integration surface for agents and scripts. Use `health --json`, `config --json`, REST, and WebSocket/NDJSON events.
+- **pandora-tui (Rust)**: Archived/frozen. Do not improve or extend it; keep only as historical REST/WS consumer reference.
+- **Web Frontend**: Optional human UI, lower priority than daemon/CLI/Hermes contracts.
 
 ### Core Principles
 - **No Direct Access:** Frontends NEVER access ExHentai directly. All traffic is routed through `pandora-daemon`.
@@ -19,16 +20,22 @@ Pandora is a completely self-contained suite of applications for browsing, searc
 ## Current Status
 - **exhentai_api**: Completed. (22 API methods, 17 model types, 11 parsers, fully tested).
 - **pandora-daemon**: Completed. (Proxy, SQLite DB, Background prefetch, Download manager, WebSocket events).
-- **pandora-tui**: Suspended.
-- **Web Frontend**: **Current objective.**
+- **CLI/Hermes contracts**: **Current objective.**
+- **pandora-tui**: Archived/frozen.
+- **Web Frontend**: Optional WIP.
 
-## Technical Stack for Web Frontend (Recommended Defaults)
-- **Frontend Framework**: React (TypeScript) or Angular.
-- **Styling**: Vanilla CSS is preferred for maximum flexibility. Avoid TailwindCSS unless specifically requested.
-- **Backend API**: Interact exclusively with the local `pandora-daemon` via REST/WebSocket endpoints at `http://127.0.0.1:7860`.
+## Agent Readiness Checks
+
+```bash
+uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli status --json
+```
 
 ## API Documentation Quick Links
 - **REST Endpoints:**
+  - `GET /api/health`: minimal daemon health/capability probe (no credentials or local paths)
+  - `GET /api/config`: public daemon config with credentials omitted and proxy secrets redacted
   - `GET /api/history`: Browsing history
   - `GET /api/local-favorites`: Local favorites
   - `GET /api/bookmarks`: Reading progress
@@ -42,6 +49,6 @@ Pandora is a completely self-contained suite of applications for browsing, searc
 - **Downloads:** Managed entirely by the daemon. Frontends can submit URLs and monitor progress via WebSockets.
 
 ## Next Steps
-1. Design and plan the Web frontend architecture using `enter_plan_mode`.
-2. Ensure the UI design is modern, rich, and visually appealing, utilizing platform-native primitives.
-3. Validate API interactions with the existing `pandora-daemon`.
+1. Keep daemon REST and CLI JSON/NDJSON contracts stable and covered by tests.
+2. Package common flows in the Hermes skill/plugin layer without exposing credentials.
+3. Treat Web as optional and TUI as archived/frozen.

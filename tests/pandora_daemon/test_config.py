@@ -242,6 +242,15 @@ class TestToPublicDict:
         assert "retry_base_delay" in dl
         assert "concurrency" not in dl
 
+    def test_to_public_dict_redacts_proxy_secret(self):
+        cfg = PandoraConfig(network=NetworkConfig(proxy="http://user:pass@proxy:8080", timeout=45))
+
+        public = cfg.to_public_dict()
+
+        assert public["network"]["proxy_configured"] is True
+        assert "proxy" not in public["network"]
+        assert public["network"]["timeout"] == 45
+
 
 class TestNetworkConfig:
     def test_default_network_config(self):
@@ -292,5 +301,5 @@ class TestLoadConfigNetwork:
         cfg = PandoraConfig(network=NetworkConfig(proxy="http://proxy:8080", timeout=45))
         d = cfg.to_public_dict()
         assert "network" in d
-        assert d["network"]["proxy"] == "http://proxy:8080"
+        assert d["network"]["proxy_configured"] is True
         assert d["network"]["timeout"] == 45

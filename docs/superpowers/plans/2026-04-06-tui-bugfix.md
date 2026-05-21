@@ -1,6 +1,8 @@
 # TUI Bugfix Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Archived: `pandora-tui/` is frozen and no longer maintained. This plan is retained for historical context only and must not be executed unless the project explicitly reverses the archive decision. Preserve API compatibility through daemon/CLI contract tests instead.
+
+> Historical note: the original execution handoff has been disabled because this plan is no longer active.
 
 **Goal:** Fix all 19 bugs from the TUI audit report (`docs/tui-audit-2026-04-05.md`), grouped into 4 batches by severity.
 

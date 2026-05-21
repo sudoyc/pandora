@@ -1,7 +1,7 @@
-# Pandora Web Frontend Implementation Tasks
+# Pandora Active Roadmap
 
-- [x] Task 1: Project Scaffolding & Initial Setup
-- [x] Task 2: API Client & Data Fetching (Home/Search)
-- [x] Task 3: Gallery Card & Detail Drawer (Radix UI Dialog)
-- [x] Task 4: Fullscreen Reader Mode
-- [x] Task 5: WebSocket Download Progress & Polish
+- [x] P1: Add daemon health probe and CLI `health --json` / `config --json`.
+- [x] P2: Add Python contract tests for agent-facing REST/WS JSON shapes.
+- [x] P3: Update repo-local Pandora agent skill for daemon/CLI/Hermes workflows.
+- [x] P4: Freeze `pandora-tui/` as archived historical reference; do not delete or improve it.
+- [ ] Future: Consider a thin Hermes plugin/toolset after the CLI contract remains stable.

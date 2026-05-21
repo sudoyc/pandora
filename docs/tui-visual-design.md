@@ -1,7 +1,9 @@
 # pandora-tui 外观设计文档
 
 日期: 2026-04-06
-状态: TUI 开发已挂起，本文档记录当前设计和待改进项
+状态: 已归档。`pandora-tui/` 已冻结且不再维护；本文仅记录历史设计，不再作为待执行开发计划。
+
+> 当前项目方向是 daemon + CLI + Hermes skill/plugin。不要继续实现本文的待改进项；如需保障旧 TUI 依赖的接口，请在 `tests/pandora_daemon/` 中维护契约测试。
 
 ---
 

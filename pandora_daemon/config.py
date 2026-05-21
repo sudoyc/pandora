@@ -86,7 +86,7 @@ class PandoraConfig:
             self.network = NetworkConfig()
 
     def to_public_dict(self) -> dict[str, Any]:
-        """Return config as a dict with credentials stripped out."""
+        """Return config as a dict with credentials and proxy secrets stripped out."""
         return {
             "server": {
                 "host": self.server.host,
@@ -108,7 +108,7 @@ class PandoraConfig:
                 "eviction_interval_seconds": self.cache.eviction_interval_seconds,
             },
             "network": {
-                "proxy": self.network.proxy,
+                "proxy_configured": bool(self.network.proxy),
                 "timeout": self.network.timeout,
             },
         }

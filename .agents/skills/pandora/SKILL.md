@@ -16,28 +16,31 @@ allowed-tools: Bash(uv:*), Bash(git:*), Bash(cargo:*), Bash(npm:*)
 
 ## Overview
 
-Pandora is a local ExHentai/E-Hentai browser and downloader with a daemon-first architecture. This skill is for agents that need to inspect, operate, test, or extend Pandora without relying on a human clicking through a UI.
+Pandora is a local ExHentai/E-Hentai browser and downloader with a daemon-first, CLI/Hermes-friendly architecture. This skill is for agents that need to inspect, operate, test, or extend Pandora without relying on a human clicking through a UI.
 
 Priority for agent work:
 
 1. Prefer daemon REST/CLI workflows with JSON or NDJSON output.
 2. Keep `exhentai_api` stateless.
-3. Keep frontends thin: they call daemon REST + WebSocket only.
-4. Do not bypass the daemon from TUI/Web/CLI.
+3. Treat Hermes skills/plugins as thin wrappers around daemon REST or CLI JSON/NDJSON.
+4. Keep frontends thin: they call daemon REST + WebSocket only.
+5. Do not bypass the daemon from CLI/Web or any future plugin.
+6. Treat `pandora-tui/` as archived/frozen; do not improve it.
 
 ## Architecture Contract
 
 ```text
 exhentai_api (stateless Python library)
         -> pandora-daemon (FastAPI + SQLite + cache + downloads)
-        -> frontends (Rust TUI, React web, Python CLI)
+        -> consumers (Python CLI, Hermes skill/plugin, optional React web)
 ```
 
 Layer rules:
 
 - `exhentai_api`: HTTP requests, HTML parsing, models. No config, cache, DB, UI, or local state.
 - `pandora-daemon`: credentials, session, cache, SQLite DB, downloads, local library, config.
-- Frontends/agents: render or automate user actions by calling daemon REST/WS/CLI.
+- Consumers/agents: render or automate user actions by calling daemon REST/WS/CLI.
+- `pandora-tui/`: archived historical REST/WS consumer reference only.
 
 ## Starting and Verifying the Daemon
 
@@ -55,7 +58,11 @@ http://127.0.0.1:7860
 
 Basic health-style checks for agents:
 
+- `health --json` is a minimal capability probe; it intentionally omits credentials and local filesystem paths.
+- `config --json` returns public runtime config; credentials are omitted and proxy secrets are redacted.
+
 ```bash
+uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
 uv run python -m pandora_daemon.cli status --json
 ```
@@ -73,7 +80,8 @@ Use JSON/NDJSON when scripting or delegating.
 Browse/read-only commands:
 
 ```bash
-uv run python -m pandora_daemon.cli homepage --json
+uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli config --json
 uv run python -m pandora_daemon.cli search "keyword" --page 0 --json
 uv run python -m pandora_daemon.cli popular --json
 uv run python -m pandora_daemon.cli toplist --tl 15 --json
@@ -82,7 +90,7 @@ uv run python -m pandora_daemon.cli gallery "https://exhentai.org/g/123/abcdef01
 uv run python -m pandora_daemon.cli gallery 123 abcdef0123 --json
 uv run python -m pandora_daemon.cli tags suggest "artist" --json
 uv run python -m pandora_daemon.cli library list --json
-uv run python -m pandora_daemon.cli favorites list --json
+uv run python -m pandora_daemon.cli favorites list --json   # all favorites (`slot=-1`)
 ```
 
 Download commands:
@@ -153,16 +161,13 @@ Before committing daemon/CLI/agent changes:
 
 ```bash
 uv run python -m pytest tests/pandora_daemon/test_cli.py -q
+uv run python -m pytest tests/pandora_daemon/test_routes_config.py tests/pandora_daemon/test_agent_contracts.py -q
 uv run python -m pytest tests/pandora_daemon/test_download.py tests/pandora_daemon/test_download_concurrency.py -q
 uv run python -m pytest -q
 git diff --check
 ```
 
-If TUI changed:
-
-```bash
-cd pandora-tui && cargo test
-```
+Do not change `pandora-tui/` for normal agent work. It is archived/frozen and excluded from default verification.
 
 If Web changed, defer unless the current task explicitly includes Web; when included, verify:
 
@@ -183,8 +188,9 @@ cd pandora-web && npm run lint && npm run build
 2. Treating `download_paused` as non-terminal leaves CLI/agents hanging.
 3. JSON persistence turns dict keys into strings; convert `page_states` keys back to `int` on load.
 4. Existing page files must update progress counters, or resumed downloads under-report completion.
-5. Web work is not the default priority for agent automation; prefer CLI/daemon first.
-6. On Arch/PEP-668 environments use `uv`; do not install dependencies with global `pip`.
+5. Web work is not the default priority for agent automation; prefer CLI/daemon/Hermes first.
+6. TUI work is not active; preserve it only as archived reference unless explicitly instructed otherwise.
+7. On Arch/PEP-668 environments use `uv`; do not install dependencies with global `pip`.
 
 ## Verification Checklist
 

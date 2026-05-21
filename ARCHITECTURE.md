@@ -2,6 +2,8 @@
 
 > 本文档基于 EhViewer_CN_SXJ 分支，对项目的整体架构、接口设计、数据库设计、前端 UI、下载系统、网络层等进行全面分析。
 
+> Pandora 当前架构见 `docs/architecture.md`。本文是 Android 参考项目研究报告，不是 Pandora 当前架构说明。当前 Pandora 优先方向是 `exhentai_api -> pandora-daemon -> CLI/Hermes skill/plugin`；`pandora-tui/` 已归档冻结，仅保留为历史 REST/WebSocket consumer 参考。
+
 ---
 
 ## 目录
@@ -1688,4 +1690,3 @@ C 层
 | **Async Callback** | EhClient.Callback\<E\> 异步回调 |
 | **LRU Cache** | BeerBelly 内存+磁盘两级缓存 |
 | **反范式数据库** | 画廊信息内联到各表，避免 JOIN |
-

@@ -6,9 +6,9 @@
 
 ## 项目定位
 
-Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，采用 daemon + 多前端架构。名字取自潘多拉之盒与 Sad Panda 的双关。
+Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先方向是稳定的 daemon + CLI + Hermes agent/plugin 契约。名字取自潘多拉之盒与 Sad Panda 的双关。
 
-核心目标：为桌面用户提供一个本地化的、可离线浏览的画廊管理工具。daemon 作为本地服务运行，前端通过 REST/WebSocket 通信，彼此完全解耦。
+核心目标：通过本地 daemon 提供认证、缓存、下载、数据库与图片代理能力；CLI/Hermes 使用稳定 JSON/NDJSON 契约自动化操作。Web 是可选人类 UI，`pandora-tui/` 已归档冻结。
 
 ---
 
@@ -16,10 +16,10 @@ Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，采用 daemon 
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    前端层 (Frontends)                 │
+│          消费层 (Consumers / Agent Workflows)         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
-│  │ TUI      │  │ Web SPA  │  │ CLI      │           │
-│  │ (Rust)   │  │ (React)  │  │ (Python) │           │
+│  │ CLI      │  │ Hermes   │  │ Web SPA  │           │
+│  │ (Python) │  │ skill/tool│ │ (React)  │           │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘           │
 │       │              │              │                 │
 │       └──────────────┼──────────────┘                 │
@@ -50,7 +50,7 @@ Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，采用 daemon 
 |---|---|---|
 | exhentai_api | HTTP 请求、HTML 解析、数据模型定义 | 无状态、无缓存、无配置、无持久化 |
 | pandora-daemon | 会话管理、下载队列、图片缓存、数据库持久化、配置管理 | 不做 UI 渲染 |
-| 前端 | 渲染、用户交互、调用 daemon API | 不直接请求 ExHentai |
+| 消费层 | CLI JSON/NDJSON、Hermes 自动化、可选 Web UI | 不直接请求 ExHentai |
 
 ### 为什么这样分
 
@@ -127,7 +127,7 @@ pandora_daemon/
 ├── download.py         # 下载管理器 (离线画廊构建)
 ├── tag_database.py     # EhTagTranslation 中文标签数据库
 ├── ws.py               # WebSocket 广播管理器
-├── cli.py              # CLI 入口 (pandora download/status)
+├── cli.py              # CLI 入口 (daemon-backed JSON/NDJSON)
 └── routes/
     ├── browse.py       # 首页、搜索、热门、排行、关注、图片代理
     ├── gallery.py      # 画廊详情、评论、评分、投票、种子、归档、翻页、缩略图、预取
@@ -227,8 +227,9 @@ SQLite + aiosqlite，WAL 模式，版本迁移机制。6 张表：
 实时下载事件广播：
 
 ```
-事件类型: queued → started → page_done (×N) → thumb_done (×N)
-         → cover_done → completed / completed_with_errors / paused / failed
+事件类型: download_queued → download_progress (cover/thumbs/pages)
+         → download_complete / download_error / download_cancelled
+         → download_paused / download_auth_failed
 ```
 
 每个事件携带 `gid`, `event`, 以及可选的 `page`, `total`, `path`, `error`, `title`, `phase` 字段。
@@ -248,31 +249,46 @@ SQLite + aiosqlite，WAL 模式，版本迁移机制。6 张表：
 
 ---
 
-### 3. 前端层
+### 3. 消费层
 
 #### CLI (`pandora_daemon/cli.py`)
 
 ```bash
-pandora download <url>    # 提交下载任务
-pandora dl <url>          # 同上 (别名)
-pandora status            # 查看下载状态
+pandora download <url>              # 兼容旧入口：提交并用 rich/websocket 监控
+pandora dl <url>                    # 同上 (别名)
+pandora download add <url|gid> [token]
+pandora download list --json
+pandora download watch [gid] --ndjson
+pandora download cancel <gid>
+pandora download resume <gid>
+pandora download retry <gid>
+pandora download pages <gid>
+pandora health --json
+pandora config --json
+pandora status --json
+pandora search "keyword" --page 0 --json
+pandora gallery <url|gid> [token] --json
+pandora library list --json
+pandora tags suggest "artist" --json
+pandora favorites list --json
+pandora popular --json
 ```
 
-轻量级命令行工具，直接调用 daemon REST API。
+轻量级命令行工具，直接调用 daemon REST API；优先服务 agent/Hermes/脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。
 
-#### TUI (`pandora-tui/`, Rust)
+#### TUI (`pandora-tui/`, Rust, 已归档冻结)
 
-状态：已挂起。详见 `docs/tui-visual-design.md`。
+状态：已归档冻结，不再维护，不做功能改进或视觉打磨。保留目录仅作为历史实现和 REST/WebSocket consumer 参考；接口信心由 Python contract tests 维护。
 
 技术栈：ratatui + ratatui-image + tokio + reqwest
 
-三个模式：Browse (三栏画廊浏览) → Read (双栏大图阅读) → Search (覆盖层搜索)
+核心能力：浏览、搜索、详情、在线/本地阅读、图片缓存与预载、WebSocket 下载进度、Library API 离线浏览。
 
 #### Web (`pandora-web/`, React + TypeScript)
 
-状态：开发中。
+状态：开发中但已接入真实 daemon 契约。已有 Vite/React 骨架、gallery feed、搜索/热门/关注切换、detail drawer、daemon page API reader、WebSocket 下载进度 hook；下一步重点是拆分 `App.tsx`、扩展 typed API client、补齐 favorites/history/downloads/library 视图。详见 `pandora-web/README.md`。
 
-技术栈：React 19 + Vite + TypeScript + Tailwind + Radix UI + SWR
+技术栈：React 19 + Vite + TypeScript + Radix UI + SWR + Vanilla CSS variables
 
 ---
 
@@ -284,18 +300,18 @@ daemon 暴露 30+ 个 REST 端点 + 1 个 WebSocket 端点，全部监听 `local
 |------|------|------|
 | 浏览 | `GET /api/homepage, /search, /popular, /toplist, /watched` | 画廊列表 |
 | 画廊 | `GET /api/gallery/{gid}/{token}` | 详情 (自动记录历史) |
-| 翻页 | `GET .../image/{page}`, `POST .../prefetch` | 图片 URL + 服务端预取 (自动更新书签) |
+| 翻页 | `GET .../page/{page}`, `POST .../prefetch` | 图片字节 + 服务端预取 (自动更新书签) |
 | 缩略图 | `GET .../thumb/{page}` | CSS sprite 裁剪后的单张缩略图 |
-| 交互 | `POST .../comment, .../rate, .../vote-comment` | 评论、评分、投票 |
-| 收藏 | `GET/POST /api/favorites`, `DELETE .../favorites/{gid}` | ExHentai 收藏 |
-| 下载 | `GET/POST /api/downloads`, `DELETE .../downloads/{gid}` | 下载管理 |
-| 本地库 | `GET /api/library`, `.../library/{gid}/page/{page}` | 已下载画廊浏览 |
+| 交互 | `POST .../comment, .../rate, .../vote_comment` | 评论、评分、投票 |
+| 收藏 | `GET/POST/DELETE /api/favorites` | ExHentai 收藏 |
+| 下载 | `GET/POST /api/downloads`, `DELETE .../downloads/{gid}`, `POST .../{gid}/resume`, `POST .../{gid}/retry`, `GET .../{gid}/pages` | 下载管理 |
+| 本地库 | `GET /api/library`, `GET /api/library/{gid}/file?path=...` | 已下载画廊浏览、本地文件服务 |
 | 历史 | `GET/DELETE /api/history` | 浏览历史 |
 | 本地收藏 | `GET/POST/DELETE /api/local-favorites` | 不依赖账号的本地收藏 |
 | 书签 | `GET/DELETE /api/bookmarks` | 阅读进度 |
 | 快速搜索 | `GET/POST/DELETE /api/quick-search` | 搜索预设 |
 | 过滤 | `GET/POST/PUT/DELETE /api/filters` | 过滤规则 |
-| 配置 | `GET/PUT /api/config` | 运行时配置读写 |
+| 配置 | `GET /api/health`, `GET/PUT /api/config` | 健康检查、运行时配置读写 |
 | 标签 | `GET /api/tags/suggest?q=...` | 中文标签自动补全 |
 | 图片代理 | `GET /api/image/proxy?url=...` | 统一图片代理 |
 | WebSocket | `WS /ws` | 实时下载进度事件 |
@@ -329,13 +345,15 @@ daemon 暴露 30+ 个 REST 端点 + 1 个 WebSocket 端点，全部监听 `local
 
 ```
 前端提交 → POST /api/downloads → daemon 入队
-                                  → WS 广播 "queued"
+                                  → WS 广播 "download_queued"
                                   → 异步下载循环:
                                       1. 获取画廊详情 → 保存 metadata.json
-                                      2. 下载封面 → WS "cover_done"
-                                      3. 并发下载页面 → WS "page_done" (×N)
-                                      4. 并发下载缩略图 → WS "thumb_done" (×N)
-                                      5. WS "completed" / "failed"
+                                      2. 下载封面 → WS download_progress phase=cover
+                                      3. 并发下载缩略图 → WS download_progress phase=thumbs
+                                      4. 并发下载页面 → WS download_progress phase=pages
+                                      5. WS download_complete / download_complete_with_errors
+                                         / download_paused / download_auth_failed
+                                         / download_error / download_cancelled
 前端监听 ← WS /ws ← 实时进度事件
 ```
 
@@ -343,7 +361,7 @@ daemon 暴露 30+ 个 REST 端点 + 1 个 WebSocket 端点，全部监听 `local
 
 ```
 前端请求 → GET /api/library → daemon 扫描下载目录
-         → GET /api/library/{gid}/page/{page} → 直接读取本地文件
+         → GET /api/library/{gid}/file?path=page/{page} → 直接读取本地文件
 ```
 
 ---
@@ -356,7 +374,7 @@ daemon 暴露 30+ 个 REST 端点 + 1 个 WebSocket 端点，全部监听 `local
 | Daemon | FastAPI + aiosqlite + aiofiles | 异步原生，自动 OpenAPI 文档，轻量 |
 | 数据库 | SQLite (WAL) | 单用户场景，零部署成本，嵌入式 |
 | 缓存 | 文件系统 (SHA256) | 简单可靠，重启不丢失，可配置上限 |
-| TUI | Rust + ratatui + tokio | 性能，跨平台单二进制 |
+| TUI | Rust + ratatui + tokio | 已归档冻结，仅历史参考 |
 | Web | React + TypeScript + Vite | 生态成熟，开发效率高 |
 | CLI | Python (复用 daemon 依赖) | 最小实现成本 |
 
@@ -364,16 +382,17 @@ daemon 暴露 30+ 个 REST 端点 + 1 个 WebSocket 端点，全部监听 `local
 
 ## 代码规模
 
-| 组件 | 行数 | 语言 |
-|------|------|------|
-| exhentai_api | ~1,750 | Python |
-| pandora-daemon | ~3,000 | Python |
-| pandora-tui | ~3,250 | Rust |
-| pandora-web | ~150 | TypeScript (开发中) |
-| 测试 | ~6,500 | Python |
-| **合计** | **~14,650** | — |
+当前工作区约 15K 行代码（不含 `.git`、依赖目录、构建产物与缓存目录；具体数值以 `uvx pygount --format=summary` 为准）：
 
-测试覆盖：407 pytest + 16 cargo test = 423 个测试。
+| 语言 | 文件 | 代码行 |
+|------|------|--------|
+| Python | 104+ | ~8K+ |
+| Rust | 21 | ~2K+ |
+| TS/TSX | 10+ | ~1K+ |
+| 其他配置/脚本/文档 | 若干 | 持续变化 |
+| **合计** | 240+ | ~15K |
+
+测试数量以当前 `uv run pytest`、`cargo test` 输出为准；README 不再固化易漂移的测试总数。
 
 ---
 

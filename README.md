@@ -1,6 +1,6 @@
 # Pandora
 
-Open the box. Browse, search, and download from ExHentai — daemon + multi-frontend.
+Open the box. Browse, search, and download from ExHentai — daemon + CLI + agent workflows.
 
 ## Architecture
 
@@ -9,9 +9,9 @@ exhentai_api (Python library)     -- stateless, reusable
         |
 pandora-daemon (FastAPI)          -- session, cache, download, image proxy
         | REST + WebSocket (localhost:7860)
-        |-- Rust TUI (ratatui)    -- terminal with image preview
-        |-- Web frontend          -- browser, planned
-        +-- CLI                   -- download + status
+        |-- CLI                   -- daemon-backed JSON/NDJSON workflow
+        |-- Hermes skill/plugin   -- agent automation layer
+        +-- Web frontend          -- optional browser UI, work in progress
 ```
 
 **Design principle:** frontends never access ExHentai directly. All requests go through the daemon, which handles session, caching, and rate limiting.
@@ -35,7 +35,7 @@ Async Python library. 22 API methods, 17 model types, 11 parsers, 110 tests. Ful
 
 ### pandora-daemon
 
-FastAPI service wrapping `exhentai_api`. 297 tests.
+FastAPI service wrapping `exhentai_api`.
 
 - **Image proxy** — all image types cached with SHA256 keys, LRU eviction (2 GB default)
 - **SQLite database** — browsing history, local favorites, reading bookmarks, saved searches, gallery filters, tag cache. Auto-triggers on gallery view and page prefetch
@@ -48,9 +48,9 @@ FastAPI service wrapping `exhentai_api`. 297 tests.
 
 30+ REST endpoints, WebSocket real-time events. SQLite persistence (`~/.config/pandora/pandora.db`).
 
-### Rust TUI
+### Rust TUI (Archived/Frozen)
 
-Terminal frontend built with ratatui + ratatui-image. 21 source files, 16 tests.
+The Rust TUI in `pandora-tui/` is archived and no longer maintained. It is kept as a historical/reference REST/WebSocket consumer and must not receive feature work or polish.
 
 - Three-pane layout: gallery list with covers | thumbnail grid | metadata panel
 - Reader mode with full-size page viewing (kitty/sixel/halfblocks protocol)
@@ -63,9 +63,29 @@ Terminal frontend built with ratatui + ratatui-image. 21 source files, 16 tests.
 ### CLI
 
 ```bash
-pandora dl <url>    # submit download, monitor progress with rich progress bars
-pandora status      # check download queue (active/completed/failed)
+pandora download <url>              # legacy: submit download, monitor progress
+pandora dl <url>                    # alias
+pandora download add <url|gid> [token]
+pandora download list --json
+pandora download watch [gid] --ndjson
+pandora download cancel <gid>
+pandora download resume <gid>
+pandora download retry <gid>
+pandora download pages <gid>
+pandora health --json
+pandora config --json
+pandora status --json
+pandora search "keyword" --page 0 --json
+pandora gallery <url|gid> [token] --json
+pandora library list --json
+pandora tags suggest "artist" --json
+pandora favorites list --json      # all favorites (`slot=-1`)
+pandora popular --json
+pandora toplist --tl 15 --json
+pandora watched --page 0 --json
 ```
+
+Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download watch` also supports `--ndjson` for streaming events.
 
 ## Quick Start
 
@@ -86,27 +106,29 @@ uv run python -m pandora_daemon
 # Listening on http://127.0.0.1:7860
 ```
 
-### 3. Use a frontend
+### 3. Use the CLI or optional Web frontend
 
 ```bash
-# TUI
-cd pandora-tui && cargo run --release
+# Agent/script readiness checks
+uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli config --json
+
+# Web frontend (optional)
+cd pandora-web && npm run dev
 
 # CLI
-uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abctoken/"
+uv run python -m pandora_daemon.cli search "keyword" --json
+uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abcdef0123/"
 ```
 
 ## Development
 
 ```bash
-# Python tests (407)
+# Python tests
 uv run pytest tests/ -v
 
-# Rust TUI tests (16)
-cd pandora-tui && cargo test
-
-# Build optimized TUI binary
-cd pandora-tui && cargo build --release
+# Web frontend, when changed
+cd pandora-web && npm run lint && npm run build
 ```
 
 ## API Reference
