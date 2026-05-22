@@ -43,7 +43,7 @@ FastAPI service wrapping `exhentai_api`.
 - **Thumb cropping** — CSS sprite cropping for gdtm-mode thumbnails, on-demand preview page loading
 - **Download manager** — complete offline gallery clones (metadata + cover + thumbs + pages), resume support, WebSocket progress events
 - **Library API** — browse downloaded galleries, serve local files
-- **Tag suggest** — EhTagTranslation database (~15K tags), substring search with prefix-first ranking
+- **Tag suggest/maintenance** — EhTagTranslation database (~15K tags), ETag-aware refresh, substring search with prefix-first ranking
 - **Config** — TOML-based (`~/.config/pandora/config.toml`)
 
 30+ REST endpoints, WebSocket real-time events. SQLite persistence (`~/.config/pandora/pandora.db`).
@@ -77,8 +77,11 @@ pandora health --json
 pandora config --json
 pandora status --json
 pandora search "keyword" --page 0 --json
+pandora search "female:stockings" --search-tags --json
 pandora gallery <url|gid> [token] --json
 pandora library list --json
+pandora tags status --json
+pandora tags refresh --json
 pandora tags suggest "artist" --json
 pandora favorites list --json      # all favorites (`slot=-1`)
 pandora popular --json
@@ -87,6 +90,8 @@ pandora watched --page 0 --json
 ```
 
 Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download run --ndjson` is the preferred bot path because it attaches to WebSocket first, submits the task, emits `download_submitted` or `download_already_queued`, and watches terminal WebSocket events. `download add` plus `download watch` remains available, but a late watcher can miss earlier events. In machine mode, CLI failures use a stable envelope like `{"ok": false, "error": {"code": "connect_error", "message": "..."}}`.
+
+Agent search uses scheme A intentionally: the CLI does not resolve ambiguous translated text into ExHentai tag queries. Agents should check `pandora tags status --json`, refresh if stale or unloaded, inspect `pandora tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then call `pandora search "female:stockings" --search-tags --json`. Search also exposes primitive advanced flags including `--category` (include bitmask), `--min-rating`, `--search-name`, `--search-description`, `--search-torrent`, `--search-low-power-tags`, `--disable-language-filter`, `--show-expunged`, `--min-pages`, and `--max-pages`.
 
 `pandora gallery ...` redacts daemon-only `api_uid` and `api_key` fields by default. `pandora download pages ... --json` reports public page states such as `completed` instead of the internal `done` value.
 

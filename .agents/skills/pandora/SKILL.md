@@ -102,11 +102,14 @@ Browse/read-only commands:
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
 uv run python -m pandora_daemon.cli search "keyword" --page 0 --json
+uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
 uv run python -m pandora_daemon.cli popular --json
 uv run python -m pandora_daemon.cli toplist --tl 15 --json
 uv run python -m pandora_daemon.cli watched --page 0 --json
 uv run python -m pandora_daemon.cli gallery "https://exhentai.org/g/123/abcdef0123/" --json
 uv run python -m pandora_daemon.cli gallery 123 abcdef0123 --json
+uv run python -m pandora_daemon.cli tags status --json
+uv run python -m pandora_daemon.cli tags refresh --json
 uv run python -m pandora_daemon.cli tags suggest "artist" --json
 uv run python -m pandora_daemon.cli library list --json
 uv run python -m pandora_daemon.cli favorites list --json   # all favorites (`slot=-1`)
@@ -133,6 +136,13 @@ Machine output safety:
 
 - `gallery` CLI output redacts `api_uid` and `api_key` by default.
 - `download pages --json` maps internal page state `done` to public state `completed`.
+
+Search/tag scheme A:
+
+- The CLI and daemon expose primitive interfaces only; they do not automatically rewrite Chinese or other translated text into ExHentai tag queries.
+- Agent flow: `tags status --json`, `tags refresh --json` if stale or unloaded, `tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then `search "female:stockings" --search-tags --json`.
+- Advanced search flags include `--category INT`, `--min-rating INT`, `--search-name`, `--search-tags`, `--search-description`, `--search-torrent`, `--search-low-power-tags`, `--disable-language-filter`, `--show-expunged`, `--min-pages INT`, and `--max-pages INT`.
+- `--category` is a Pandora include bitmask; the daemon converts it to ExHentai's exclude bitmask upstream.
 
 Legacy human-friendly aliases remain available:
 

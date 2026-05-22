@@ -79,6 +79,15 @@ async def search(
     page: int = 0,
     min_rating: Optional[int] = None,
     category: Optional[int] = None,
+    search_name: bool = False,
+    search_tags: bool = False,
+    search_description: bool = False,
+    search_torrent: bool = False,
+    search_low_power_tags: bool = False,
+    disable_language_filter: bool = False,
+    show_expunged: bool = False,
+    min_pages: Optional[int] = None,
+    max_pages: Optional[int] = None,
     api=Depends(get_api),
 ):
     """Search galleries with optional filters."""
@@ -89,6 +98,31 @@ async def search(
         params.advsearch = True
         params.f_sr = True
         params.f_srdd = min_rating
+    if search_name:
+        params.advsearch = True
+        params.f_sname = True
+    if search_tags:
+        params.advsearch = True
+        params.f_stags = True
+    if search_description:
+        params.advsearch = True
+        params.f_sdesc = True
+    if search_torrent:
+        params.advsearch = True
+        params.f_storr = True
+    if search_low_power_tags:
+        params.advsearch = True
+        params.f_sto = True
+    if disable_language_filter:
+        params.advsearch = True
+        params.f_sdt1 = True
+    if show_expunged:
+        params.f_sh = True
+    if min_pages is not None or max_pages is not None:
+        params.advsearch = True
+        params.f_sp = True
+        params.f_spf = min_pages
+        params.f_spt = max_pages
 
     items = await api.search(params, page=page)
     return [_gallery_item_to_dict(item) for item in items]

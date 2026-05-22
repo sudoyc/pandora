@@ -279,6 +279,109 @@ async def test_cli_machine_mode_commands_call_expected_daemon_routes(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_search_cli_forwards_advanced_params_without_tag_resolution(monkeypatch, capsys):
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, request.url.path, dict(request.url.params)))
+        assert request.url.path != "/api/tags/suggest"
+        return httpx.Response(200, json=[])
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args([
+        "search",
+        "stocking",
+        "--page",
+        "2",
+        "--category",
+        "1",
+        "--min-rating",
+        "4",
+        "--search-tags",
+        "--search-name",
+        "--show-expunged",
+        "--min-pages",
+        "10",
+        "--max-pages",
+        "30",
+        "--json",
+        "--daemon-url",
+        "http://daemon",
+    ])
+
+    code = await _run_http_command(args)
+
+    assert code == 0
+    assert seen == [(
+        "GET",
+        "/api/search",
+        {
+            "keyword": "stocking",
+            "page": "2",
+            "category": "1",
+            "min_rating": "4",
+            "search_name": "true",
+            "search_tags": "true",
+            "show_expunged": "true",
+            "min_pages": "10",
+            "max_pages": "30",
+        },
+    )]
+    assert json.loads(capsys.readouterr().out) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("argv", "expected_path", "expected_params"),
+    [
+        (["tags", "status", "--json", "--daemon-url", "http://daemon"], "/api/tags/status", {}),
+        (["tags", "refresh", "--json", "--daemon-url", "http://daemon"], "/api/tags/refresh", {}),
+        (["tags", "refresh", "--force", "--json", "--daemon-url", "http://daemon"], "/api/tags/refresh", {"force": "true"}),
+    ],
+)
+async def test_tags_status_and_refresh_cli_call_daemon(monkeypatch, capsys, argv, expected_path, expected_params):
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, request.url.path, dict(request.url.params)))
+        return httpx.Response(200, json={"ok": True, "path": request.url.path})
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args(argv)
+
+    code = await _run_http_command(args)
+
+    assert code == 0
+    assert seen == [("GET" if expected_path.endswith("/status") else "POST", expected_path, expected_params)]
+    assert json.loads(capsys.readouterr().out)["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_tags_refresh_cli_exits_nonzero_when_daemon_refresh_fails(monkeypatch, capsys):
+    def handler(request):
+        assert request.url.path == "/api/tags/refresh"
+        return httpx.Response(
+            200,
+            json={
+                "ok": False,
+                "updated": False,
+                "error": {"code": "refresh_failed", "message": "network down"},
+                "status": {"loaded": True, "entries": 6},
+            },
+        )
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args(["tags", "refresh", "--json", "--daemon-url", "http://daemon"])
+
+    code = await _run_http_command(args)
+
+    assert code == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output["ok"] is False
+    assert output["error"]["code"] == "refresh_failed"
+
+
+@pytest.mark.asyncio
 async def test_download_list_json_wraps_tasks(monkeypatch, capsys):
     def handler(request):
         assert request.url.path == "/api/downloads"

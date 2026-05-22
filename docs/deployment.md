@@ -61,6 +61,7 @@ Use these before running agent workflows:
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
 uv run python -m pandora_daemon.cli status --json
+uv run python -m pandora_daemon.cli tags status --json
 ```
 
 Expected guidance:
@@ -68,6 +69,7 @@ Expected guidance:
 - `health --json` is the minimal capability probe.
 - `config --json` exposes local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
 - `status --json` returns `{"tasks": [...]}` for queue inspection.
+- `tags status --json` returns the EhTagTranslation cache status for search agents.
 
 Machine-mode error contract:
 
@@ -123,13 +125,18 @@ Read-only agent checks:
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
 uv run python -m pandora_daemon.cli search "tag" --page 0 --json
+uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
 uv run python -m pandora_daemon.cli popular --json
 uv run python -m pandora_daemon.cli toplist --tl 15 --json
 uv run python -m pandora_daemon.cli watched --page 0 --json
 uv run python -m pandora_daemon.cli favorites list --json
 uv run python -m pandora_daemon.cli tags suggest "artist" --json
+uv run python -m pandora_daemon.cli tags status --json
+uv run python -m pandora_daemon.cli tags refresh --json
 uv run python -m pandora_daemon.cli library list --json
 ```
+
+For translated tag searches, Pandora intentionally uses scheme A. The CLI does not automatically resolve Chinese or other translated user text into ExHentai tag syntax. Agent flow: `tags status --json`, `tags refresh --json` if stale or unloaded, `tags suggest "丝袜" --json`, agent chooses a candidate such as `female:stockings`, then `search "female:stockings" --search-tags --json`.
 
 Download lifecycle checks:
 
@@ -159,6 +166,7 @@ uv run python -m pandora_daemon.cli status
 - Treat `config --json` as public/runtime-safe output, not a credential export.
 - `gallery` CLI output redacts `api_uid` and `api_key`; do not depend on those fields from CLI output.
 - `download pages --json` uses public page state `completed`; internal daemon state may still use `done`.
+- `search --category` uses Pandora include-bitmask semantics; the daemon converts to ExHentai's exclude bitmask upstream.
 - Do not expose `~/.config/pandora/config.toml` or raw proxy credentials in logs.
 - The Web frontend is optional and not required for deployment readiness.
 - The Rust TUI is archived and not part of the active deployment path.

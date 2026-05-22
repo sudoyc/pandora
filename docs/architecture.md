@@ -140,7 +140,7 @@ pandora_daemon/
     ├── filters.py      # 画廊过滤规则
     ├── config.py       # 配置读写
     ├── user.py         # 用户信息
-    ├── tags.py         # 标签自动补全
+    ├── tags.py         # 标签自动补全、状态、刷新
     └── library.py      # 已下载画廊浏览、本地文件服务
 ```
 
@@ -239,7 +239,8 @@ SQLite + aiosqlite，WAL 模式，版本迁移机制。6 张表：
 
 - 数据源：EhTagTranslation (GitHub)，约 15K 条中英文标签
 - 搜索：子串匹配，前缀优先排序
-- 缓存：本地 JSON 文件，自动从 GitHub 下载更新
+- 缓存：本地 JSON 文件 + metadata.json，ETag 感知刷新，原子写入
+- Agent 契约：采用 scheme A，daemon/CLI 只提供 `status`、`refresh`、`suggest`、`search` 原语，不自动把中文查询改写成 ExHentai 标签语法
 
 **图片服务 (`image_service.py`)**
 
@@ -269,14 +270,17 @@ pandora health --json
 pandora config --json
 pandora status --json
 pandora search "keyword" --page 0 --json
+pandora search "female:stockings" --search-tags --json
 pandora gallery <url|gid> [token] --json
 pandora library list --json
+pandora tags status --json
+pandora tags refresh --json
 pandora tags suggest "artist" --json
 pandora favorites list --json
 pandora popular --json
 ```
 
-轻量级命令行工具，直接调用 daemon REST API；优先服务 agent/Hermes/脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。`download run --ndjson` 是 bot 下载主路径：先连接 WS，再提交 `/api/downloads` 并输出 `download_submitted`，遇到 HTTP 409 活跃重复任务时输出 `download_already_queued` 并继续监听 WS 终态事件。`download add` + `download watch` 仍保留，但拆成两个命令时可能错过提交后立刻发出的事件。`gallery` CLI 输出默认移除 `api_uid`/`api_key`，`download pages --json` 将内部 `done` 映射为公开状态 `completed`。
+轻量级命令行工具，直接调用 daemon REST API；优先服务 agent/Hermes/脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。`download run --ndjson` 是 bot 下载主路径：先连接 WS，再提交 `/api/downloads` 并输出 `download_submitted`，遇到 HTTP 409 活跃重复任务时输出 `download_already_queued` 并继续监听 WS 终态事件。`download add` + `download watch` 仍保留，但拆成两个命令时可能错过提交后立刻发出的事件。`gallery` CLI 输出默认移除 `api_uid`/`api_key`，`download pages --json` 将内部 `done` 映射为公开状态 `completed`。搜索/标签采用 scheme A：CLI 不做自动标签解析，agent 应显式执行 `tags suggest`、自行选择候选，再调用 `search`。
 
 #### TUI (`pandora-tui/`, Rust, 已归档冻结)
 
@@ -314,7 +318,7 @@ daemon 暴露 30+ 个 REST 端点 + 1 个 WebSocket 端点，全部监听 `local
 | 快速搜索 | `GET/POST/DELETE /api/quick-search` | 搜索预设 |
 | 过滤 | `GET/POST/PUT/DELETE /api/filters` | 过滤规则 |
 | 配置 | `GET /api/health`, `GET/PUT /api/config` | 健康检查、运行时配置读写 |
-| 标签 | `GET /api/tags/suggest?q=...` | 中文标签自动补全 |
+| 标签 | `GET /api/tags/suggest?q=...`, `GET /api/tags/status`, `POST /api/tags/refresh` | 中文标签自动补全和缓存维护 |
 | 图片代理 | `GET /api/image/proxy?url=...` | 统一图片代理 |
 | WebSocket | `WS /ws` | 实时下载进度事件 |
 

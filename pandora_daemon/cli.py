@@ -515,6 +515,17 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser = subparsers.add_parser("search", help="Search galleries")
     search_parser.add_argument("keyword", help="Search keyword")
     search_parser.add_argument("--page", type=int, default=0)
+    search_parser.add_argument("--category", type=int)
+    search_parser.add_argument("--min-rating", type=int)
+    search_parser.add_argument("--search-name", action="store_true")
+    search_parser.add_argument("--search-tags", action="store_true")
+    search_parser.add_argument("--search-description", action="store_true")
+    search_parser.add_argument("--search-torrent", action="store_true")
+    search_parser.add_argument("--search-low-power-tags", action="store_true")
+    search_parser.add_argument("--disable-language-filter", action="store_true")
+    search_parser.add_argument("--show-expunged", action="store_true")
+    search_parser.add_argument("--min-pages", type=int)
+    search_parser.add_argument("--max-pages", type=int)
     _add_common_options(search_parser)
 
     gallery_parser = subparsers.add_parser("gallery", help="Show gallery detail")
@@ -531,6 +542,11 @@ def build_parser() -> argparse.ArgumentParser:
     tags_suggest = tags_subparsers.add_parser("suggest", help="Suggest tags")
     tags_suggest.add_argument("query")
     _add_common_options(tags_suggest)
+    tags_status = tags_subparsers.add_parser("status", help="Show tag database status")
+    _add_common_options(tags_status)
+    tags_refresh = tags_subparsers.add_parser("refresh", help="Refresh tag database")
+    tags_refresh.add_argument("--force", action="store_true")
+    _add_common_options(tags_refresh)
     _add_common_options(tags_parser)
 
     favorites_parser = subparsers.add_parser("favorites", help="Favorite gallery list")
@@ -669,7 +685,28 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                     return _dispatch_json(_normalize_download_pages_output(data))
 
             if command == "search":
-                data = await _request_json(client, "GET", "/api/search", params={"keyword": args.keyword, "page": args.page})
+                params: dict[str, Any] = {"keyword": args.keyword, "page": args.page}
+                for name in (
+                    "category",
+                    "min_rating",
+                    "min_pages",
+                    "max_pages",
+                ):
+                    value = getattr(args, name, None)
+                    if value is not None:
+                        params[name] = value
+                for name in (
+                    "search_name",
+                    "search_tags",
+                    "search_description",
+                    "search_torrent",
+                    "search_low_power_tags",
+                    "disable_language_filter",
+                    "show_expunged",
+                ):
+                    if getattr(args, name, False):
+                        params[name] = "true"
+                data = await _request_json(client, "GET", "/api/search", params=params)
                 return _dispatch_json(data) if args.json else _dispatch_json(data)
 
             if command == "gallery":
@@ -684,6 +721,16 @@ async def _run_http_command(args: argparse.Namespace) -> int:
             if command == "tags" and getattr(args, "tags_command", None) == "suggest":
                 data = await _request_json(client, "GET", "/api/tags/suggest", params={"q": args.query})
                 return _dispatch_json(data) if args.json else _dispatch_json(data)
+
+            if command == "tags" and getattr(args, "tags_command", None) == "status":
+                data = await _request_json(client, "GET", "/api/tags/status")
+                return _dispatch_json(data) if args.json else _dispatch_json(data)
+
+            if command == "tags" and getattr(args, "tags_command", None) == "refresh":
+                params = {"force": "true"} if args.force else None
+                data = await _request_json(client, "POST", "/api/tags/refresh", params=params)
+                _dispatch_json(data)
+                return 0 if not isinstance(data, dict) or data.get("ok", True) else 1
 
             if command == "favorites":
                 data = await _request_json(client, "GET", "/api/favorites", params={"slot": -1, "page": 0})

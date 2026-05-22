@@ -23,3 +23,18 @@ async def suggest_tags(
             for r in results
         ]
     }
+
+
+@router.get("/status")
+async def tag_database_status(tag_db: TagDatabase = Depends(get_tag_database)):
+    """Return tag translation database cache/load status."""
+    return tag_db.status()
+
+
+@router.post("/refresh")
+async def refresh_tag_database(
+    force: bool = Query(False, description="Force download without If-None-Match"),
+    tag_db: TagDatabase = Depends(get_tag_database),
+):
+    """Refresh the tag translation database cache."""
+    return await tag_db.refresh(force=force)

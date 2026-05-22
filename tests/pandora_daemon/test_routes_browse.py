@@ -143,6 +143,50 @@ class TestSearch:
         assert search_params.advsearch is False
         assert call_args[1]["page"] == 0
 
+    def test_search_forwards_complete_advanced_parameters(self):
+        mock_api = MagicMock()
+        mock_api.search = AsyncMock(return_value=[])
+
+        app = _make_app(mock_api)
+        client = TestClient(app)
+
+        response = client.get(
+            "/api/search"
+            "?keyword=stocking"
+            "&page=2"
+            "&category=1"
+            "&min_rating=4"
+            "&search_name=true"
+            "&search_tags=true"
+            "&search_description=true"
+            "&search_torrent=true"
+            "&search_low_power_tags=true"
+            "&disable_language_filter=true"
+            "&show_expunged=true"
+            "&min_pages=10"
+            "&max_pages=30"
+        )
+
+        assert response.status_code == 200
+        call_args = mock_api.search.call_args
+        search_params = call_args[0][0]
+        assert search_params.f_search == "stocking"
+        assert call_args[1]["page"] == 2
+        assert search_params.f_cats == 1
+        assert search_params.advsearch is True
+        assert search_params.f_sr is True
+        assert search_params.f_srdd == 4
+        assert search_params.f_sname is True
+        assert search_params.f_stags is True
+        assert search_params.f_sdesc is True
+        assert search_params.f_storr is True
+        assert search_params.f_sto is True
+        assert search_params.f_sdt1 is True
+        assert search_params.f_sh is True
+        assert search_params.f_sp is True
+        assert search_params.f_spf == 10
+        assert search_params.f_spt == 30
+
 
 class TestPopular:
     def test_popular_returns_200(self):

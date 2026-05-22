@@ -76,7 +76,7 @@ Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/homepage` | Homepage galleries |
-| GET | `/api/search?keyword=...&page=0&min_rating=...&category=...` | Search galleries |
+| GET | `/api/search?keyword=...&page=0&min_rating=...&category=...` | Search galleries; `category` is an include bitmask |
 | GET | `/api/popular` | Popular galleries |
 | GET | `/api/toplist?tl=15` | Toplist as gallery-compatible rows |
 | GET | `/api/watched?page=0` | Watched-tag galleries |
@@ -150,6 +150,8 @@ Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`
 | POST | `/api/tags` | Add account tag |
 | DELETE | `/api/tags/{tag_id}` | Delete account tag |
 | GET | `/api/tags/suggest?q=...&limit=10` | EhTagTranslation suggestions |
+| GET | `/api/tags/status` | Tag translation database cache/load status |
+| POST | `/api/tags/refresh?force=false` | Refresh tag translation database cache using ETag metadata |
 | GET | `/api/library` | Downloaded gallery metadata list |
 | GET | `/api/library/{gid}/file?path=cover` | Serve local cover |
 | GET | `/api/library/{gid}/file?path=thumb/{page}` | Serve local thumbnail |
@@ -196,6 +198,10 @@ Machine-mode errors:
 
 Current tested error codes include `connect_error`, `http_error`, `invalid_gallery_target`, `usage_error`, `websocket_error`, and `websocket_dependency_missing`.
 
+Search/tag workflow for agents uses scheme A: Pandora exposes primitive interfaces only and does not rewrite translated user text into tag queries. A bot should call `tags status`, refresh if needed, call `tags suggest`, choose the desired namespace/tag candidate itself, then call `search` with an explicit keyword such as `female:stockings` and `--search-tags`.
+
+Advanced search query parameters accepted by `/api/search` are `category`, `min_rating`, `search_name`, `search_tags`, `search_description`, `search_torrent`, `search_low_power_tags`, `disable_language_filter`, `show_expunged`, `min_pages`, and `max_pages`. `category` is passed as an include bitmask; `SearchParams.to_dict()` converts it to ExHentai's exclude bitmask before the upstream request.
+
 Current commands:
 
 ```bash
@@ -213,8 +219,11 @@ pandora download retry <gid> --json
 pandora download pages <gid> --json
 pandora status --json
 pandora search "keyword" --page 0 --json
+pandora search "female:stockings" --search-tags --json
 pandora gallery <url|gid> [token] --json
 pandora library list --json
+pandora tags status --json
+pandora tags refresh [--force] --json
 pandora tags suggest "tag" --json
 pandora favorites list --json              # fetches all favorites (`slot=-1`)
 pandora popular --json

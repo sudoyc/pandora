@@ -62,3 +62,48 @@ def test_suggest_chinese_query(app_with_tags):
     assert resp.status_code == 200
     suggestions = resp.json()["suggestions"]
     assert any(s["tag"] == "maid" for s in suggestions)
+
+
+def test_tags_status_returns_database_status(app_with_tags):
+    client = TestClient(app_with_tags)
+
+    resp = client.get("/api/tags/status")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["loaded"] is True
+    assert data["entries"] == 2
+
+
+def test_tags_refresh_passes_force_false_by_default(app_with_tags, monkeypatch):
+    calls = []
+
+    async def fake_refresh(self, *, force=False):
+        calls.append(force)
+        return {"ok": True, "updated": False, "status": {"entries": 2}}
+
+    monkeypatch.setattr(TagDatabase, "refresh", fake_refresh)
+    client = TestClient(app_with_tags)
+
+    resp = client.post("/api/tags/refresh")
+
+    assert resp.status_code == 200
+    assert resp.json()["updated"] is False
+    assert calls == [False]
+
+
+def test_tags_refresh_passes_force_true(app_with_tags, monkeypatch):
+    calls = []
+
+    async def fake_refresh(self, *, force=False):
+        calls.append(force)
+        return {"ok": True, "updated": True, "status": {"entries": 2}}
+
+    monkeypatch.setattr(TagDatabase, "refresh", fake_refresh)
+    client = TestClient(app_with_tags)
+
+    resp = client.post("/api/tags/refresh?force=true")
+
+    assert resp.status_code == 200
+    assert resp.json()["updated"] is True
+    assert calls == [True]
