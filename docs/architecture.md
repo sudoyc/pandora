@@ -19,7 +19,8 @@ Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先�
 │          消费层 (Consumers / Agent Workflows)         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
 │  │ CLI      │  │ Hermes   │  │ Web SPA  │           │
-│  │ (Python) │  │ skill/tool│ │ (React)  │           │
+│  │ (Python) │  │ skill now │ │ (React)  │           │
+│  │          │  │ thin tool │ │          │           │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘           │
 │       │              │              │                 │
 │       └──────────────┼──────────────┘                 │
@@ -51,6 +52,18 @@ Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先�
 | exhentai_api | HTTP 请求、HTML 解析、数据模型定义 | 无状态、无缓存、无配置、无持久化 |
 | pandora-daemon | 会话管理、下载队列、图片缓存、数据库持久化、配置管理 | 不做 UI 渲染 |
 | 消费层 | CLI JSON/NDJSON、Hermes 自动化、可选 Web UI | 不直接请求 ExHentai |
+
+### Hermes 集成边界
+
+当前 Hermes 集成以仓库内 `.agents/skills/pandora/SKILL.md` 为主，不引入独立 plugin/toolset 包。未来如果增加 Hermes plugin/toolset，也必须保持薄封装：只包装 `pandora` CLI 的 JSON/NDJSON 命令，或直接调用 daemon REST/WebSocket 契约。
+
+边界规则：
+
+- Hermes 不直接调用 `exhentai_api` 执行认证、搜索、下载或缓存相关用户流程。
+- Hermes 不维护第二套 credential/session/cache/download queue/bookmark/library 状态。
+- 机器输出优先使用 `--json` / `--ndjson`，不要解析 human-readable CLI 文本。
+- 复杂决策留在 agent 层；Pandora 只提供稳定原语。
+- 翻译标签搜索保持 scheme A：`tags status` → 必要时 `tags refresh` → `tags suggest` → agent 选择候选 → `search --search-tags`，不自动把中文或其他翻译文本改写为 ExHentai 标签语法。
 
 ### 为什么这样分
 

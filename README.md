@@ -10,11 +10,26 @@ exhentai_api (Python library)     -- stateless, reusable
 pandora-daemon (FastAPI)          -- session, cache, download, image proxy
         | REST + WebSocket (localhost:7860)
         |-- CLI                   -- daemon-backed JSON/NDJSON workflow
-        |-- Hermes skill/plugin   -- agent automation layer
+        |-- Hermes skill          -- agent automation layer today
+        |   thin plugin/toolset  -- optional future wrapper
         +-- Web frontend          -- optional browser UI, work in progress
 ```
 
-**Design principle:** frontends never access ExHentai directly. All requests go through the daemon, which handles session, caching, and rate limiting. Agent/bot workflows should prefer the CLI JSON/NDJSON contract over Web/TUI/client-cache work.
+**Design principle:** frontends and agents never access ExHentai directly. All requests go through the daemon, which handles session, caching, downloads, and rate limiting. Agent/bot workflows should prefer the CLI JSON/NDJSON contract over Web/TUI/client-cache work.
+
+## Hermes Integration
+
+Pandora is immediately usable from Hermes through the repo-shipped skill at `.agents/skills/pandora/SKILL.md` plus the `pandora` CLI entrypoint. There is no separate in-repo Hermes plugin/toolset package yet.
+
+The integration boundary is intentionally thin:
+
+- Hermes skills/plugins wrap `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints.
+- They must not bypass `pandora-daemon` for auth, cache, download queue, session, bookmark, or library state.
+- They must not call `exhentai_api` directly for user workflows.
+- Prefer machine output (`--json`, `--ndjson`) over parsing human text.
+- Keep complex or ambiguous choices in the agent; Pandora exposes primitives.
+
+Scheme A for translated tag search is preserved. Agents run `tags status --json`, refresh if needed, call `tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then search with `pandora search "female:stockings" --search-tags --json`. Pandora does not automatically resolve translated text into tag queries.
 
 ## Components
 
@@ -130,7 +145,7 @@ uv run python -m pandora_daemon.cli search "keyword" --json
 uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/12345/abcdef0123/" --ndjson
 ```
 
-See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes.
+See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes. See [`docs/hermes_integration.md`](docs/hermes_integration.md) for the Hermes workflow boundary and copy-pasteable agent flows.
 
 ## Development
 
@@ -144,7 +159,7 @@ cd pandora-web && npm run lint && npm run build
 
 ## API Reference
 
-Full daemon REST API and `exhentai_api` method reference in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md).
+Full daemon REST API and `exhentai_api` method reference in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/hermes_integration.md`](docs/hermes_integration.md).
 
 ## License
 

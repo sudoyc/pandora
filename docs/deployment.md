@@ -2,6 +2,8 @@
 
 Pandora is deployed as a local daemon plus a CLI. Agent workflows should target the CLI in `--json` or `--ndjson` mode.
 
+For Hermes, the repo-shipped integration surface is `.agents/skills/pandora/SKILL.md` plus these CLI/daemon contracts. There is no separate in-repo Hermes plugin/toolset package yet; future wrappers should stay thin and call the CLI or daemon instead of creating a parallel control plane.
+
 ## Prerequisites
 
 - Linux, macOS, or another environment that can run Python 3.12+
@@ -152,6 +154,32 @@ uv run python -m pandora_daemon.cli download retry 123 --json
 ```
 
 Prefer `download run --ndjson` for bots and agents. It attaches to the WebSocket stream before submitting the download, emits `download_submitted` or `download_already_queued`, then watches until a terminal event. `download add` plus `download watch` is still useful for manual composition, but a watcher started later can miss events emitted immediately after submission.
+
+Hermes-oriented bootstrap flow:
+
+```bash
+uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli status --json
+uv run python -m pandora_daemon.cli tags status --json
+```
+
+Hermes-oriented scheme A search flow:
+
+```bash
+uv run python -m pandora_daemon.cli tags status --json
+uv run python -m pandora_daemon.cli tags refresh --json   # if stale or unloaded
+uv run python -m pandora_daemon.cli tags suggest "丝袜" --json
+uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
+```
+
+Hermes-oriented download flow:
+
+```bash
+uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
+uv run python -m pandora_daemon.cli download pages 123 --json
+uv run python -m pandora_daemon.cli library list --json
+```
 
 Legacy human-oriented commands remain available:
 

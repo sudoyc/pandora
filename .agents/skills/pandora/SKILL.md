@@ -18,6 +18,8 @@ allowed-tools: Bash(uv:*), Bash(git:*), Bash(cargo:*), Bash(npm:*)
 
 Pandora is a local ExHentai/E-Hentai browser and downloader with a daemon-first, CLI/Hermes-friendly architecture. This skill is for agents that need to inspect, operate, test, or extend Pandora without relying on a human clicking through a UI.
 
+This repo ships the Hermes integration as a skill/runbook first. There is no separate Hermes plugin or toolset package to import today; use the `pandora` CLI entrypoint from `pyproject.toml` or the daemon REST/WebSocket contract directly.
+
 Priority for agent work:
 
 1. Prefer daemon REST/CLI workflows with JSON or NDJSON output.
@@ -42,6 +44,13 @@ Layer rules:
 - Consumers/agents: render or automate user actions by calling daemon REST/WS/CLI.
 - `pandora-tui/`: archived historical REST/WS consumer reference only.
 - Web/TUI/client-cache work is not the bot-first path; defer it unless explicitly requested.
+
+Future Hermes plugin/toolset boundary:
+
+- Wrap `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints only.
+- Do not import `exhentai_api` from Hermes code for auth, browse, search, cache, or downloads.
+- Do not create a second stateful layer for credentials, sessions, cache, queue, bookmarks, or library state.
+- Keep ambiguous decisions in the agent. Pandora exposes primitives and stable machine output.
 
 ## Starting and Verifying the Daemon
 
@@ -76,6 +85,14 @@ If the CLI reports it cannot connect, start the daemon first or pass:
 ```
 
 Deployment details, readiness checks, systemd examples, and smoke tests live in `docs/deployment.md`.
+
+Hermes session bootstrap:
+
+1. Confirm the repository root and use `uv`; do not use global `pip`.
+2. Start the daemon if it is not already running: `uv run python -m pandora_daemon`.
+3. Probe readiness with `health --json`, `config --json`, and `status --json`.
+4. For search agents, also run `tags status --json` before translated-tag workflows.
+5. Omit `--daemon-url` when the daemon is on the default URL; pass the actual daemon URL only when it is non-default.
 
 ## CLI Commands for Agents
 
@@ -143,6 +160,17 @@ Search/tag scheme A:
 - Agent flow: `tags status --json`, `tags refresh --json` if stale or unloaded, `tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then `search "female:stockings" --search-tags --json`.
 - Advanced search flags include `--category INT`, `--min-rating INT`, `--search-name`, `--search-tags`, `--search-description`, `--search-torrent`, `--search-low-power-tags`, `--disable-language-filter`, `--show-expunged`, `--min-pages INT`, and `--max-pages INT`.
 - `--category` is a Pandora include bitmask; the daemon converts it to ExHentai's exclude bitmask upstream.
+
+Copy-pasteable scheme A example:
+
+```bash
+uv run python -m pandora_daemon.cli tags status --json
+uv run python -m pandora_daemon.cli tags refresh --json   # if stale or unloaded
+uv run python -m pandora_daemon.cli tags suggest "丝袜" --json
+uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
+```
+
+Do not collapse this into `search "丝袜" --search-tags`; that would be an untranslated literal tag query, not automatic translated-tag resolution.
 
 Legacy human-friendly aliases remain available:
 
