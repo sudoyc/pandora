@@ -14,7 +14,7 @@ pandora-daemon (FastAPI)          -- session, cache, download, image proxy
         +-- Web frontend          -- optional browser UI, work in progress
 ```
 
-**Design principle:** frontends never access ExHentai directly. All requests go through the daemon, which handles session, caching, and rate limiting.
+**Design principle:** frontends never access ExHentai directly. All requests go through the daemon, which handles session, caching, and rate limiting. Agent/bot workflows should prefer the CLI JSON/NDJSON contract over Web/TUI/client-cache work.
 
 ## Components
 
@@ -65,6 +65,7 @@ The Rust TUI in `pandora-tui/` is archived and no longer maintained. It is kept 
 ```bash
 pandora download <url>              # legacy: submit download, monitor progress
 pandora dl <url>                    # alias
+pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token]
 pandora download list --json
 pandora download watch [gid] --ndjson
@@ -85,7 +86,9 @@ pandora toplist --tl 15 --json
 pandora watched --page 0 --json
 ```
 
-Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download watch --ndjson` is the preferred streaming machine mode. In machine mode, CLI failures use a stable envelope like `{"ok": false, "error": {"code": "connect_error", "message": "..."}}`.
+Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download run --ndjson` is the preferred bot path because it attaches to WebSocket first, submits the task, emits `download_submitted` or `download_already_queued`, and watches terminal WebSocket events. `download add` plus `download watch` remains available, but a late watcher can miss earlier events. In machine mode, CLI failures use a stable envelope like `{"ok": false, "error": {"code": "connect_error", "message": "..."}}`.
+
+`pandora gallery ...` redacts daemon-only `api_uid` and `api_key` fields by default. `pandora download pages ... --json` reports public page states such as `completed` instead of the internal `done` value.
 
 ## Quick Start
 
@@ -97,6 +100,7 @@ Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--jso
 #   [credentials]
 #   igneous = "..."
 #   ipb_member_id = "..."
+#   ipb_pass_hash = "..."  # Optional; leave empty if unused.
 ```
 
 ### 2. Start daemon
@@ -118,7 +122,7 @@ cd pandora-web && npm run dev
 
 # CLI
 uv run python -m pandora_daemon.cli search "keyword" --json
-uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abcdef0123/"
+uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/12345/abcdef0123/" --ndjson
 ```
 
 See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes.

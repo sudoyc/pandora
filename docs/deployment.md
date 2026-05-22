@@ -7,7 +7,7 @@ Pandora is deployed as a local daemon plus a CLI. Agent workflows should target 
 - Linux, macOS, or another environment that can run Python 3.12+
 - `uv`
 - Valid ExHentai/E-Hentai session cookies in config when using authenticated endpoints
-- Normal project dependencies installed by `uv`; `websockets` is required for `download watch --ndjson`
+- Normal project dependencies installed by `uv`; `websockets` is required for `download run --ndjson` and `download watch --ndjson`
 
 ## Config Location
 
@@ -23,6 +23,7 @@ Typical minimum credential setup:
 [credentials]
 igneous = "..."
 ipb_member_id = "..."
+ipb_pass_hash = "..."  # Optional; leave empty if your session does not use it.
 ```
 
 Public/safe config behavior:
@@ -133,6 +134,7 @@ uv run python -m pandora_daemon.cli library list --json
 Download lifecycle checks:
 
 ```bash
+uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
 uv run python -m pandora_daemon.cli download add "https://exhentai.org/g/123/abcdef0123/" --json
 uv run python -m pandora_daemon.cli download list --json
 uv run python -m pandora_daemon.cli download pages 123 --json
@@ -141,6 +143,8 @@ uv run python -m pandora_daemon.cli download cancel 123 --json
 uv run python -m pandora_daemon.cli download resume 123 --json
 uv run python -m pandora_daemon.cli download retry 123 --json
 ```
+
+Prefer `download run --ndjson` for bots and agents. It attaches to the WebSocket stream before submitting the download, emits `download_submitted` or `download_already_queued`, then watches until a terminal event. `download add` plus `download watch` is still useful for manual composition, but a watcher started later can miss events emitted immediately after submission.
 
 Legacy human-oriented commands remain available:
 
@@ -153,6 +157,8 @@ uv run python -m pandora_daemon.cli status
 
 - Prefer `--json` and `--ndjson` for agents and scripts.
 - Treat `config --json` as public/runtime-safe output, not a credential export.
+- `gallery` CLI output redacts `api_uid` and `api_key`; do not depend on those fields from CLI output.
+- `download pages --json` uses public page state `completed`; internal daemon state may still use `done`.
 - Do not expose `~/.config/pandora/config.toml` or raw proxy credentials in logs.
 - The Web frontend is optional and not required for deployment readiness.
 - The Rust TUI is archived and not part of the active deployment path.

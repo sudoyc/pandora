@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from exhentai_api.models.comment import GalleryComment
 from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from pandora_daemon.config import DownloadConfig, PandoraConfig
+from pandora_daemon import cli
 from pandora_daemon.cli import _machine_error
 from pandora_daemon.download import DownloadTask
 from pandora_daemon.routes.browse import _gallery_item_to_dict
@@ -189,6 +190,18 @@ def test_download_pages_contract_shape():
 
     _assert_keys(data, {"gid", "total_pages", "downloaded_pages", "failed_pages", "page_states"})
     assert isinstance(data["failed_pages"], list)
+
+
+def test_cli_gallery_contract_redacts_sensitive_api_identity():
+    data = cli._redact_sensitive_cli_output({"gid": "123", "api_uid": "uid", "api_key": "key"})
+
+    assert data == {"gid": "123"}
+
+
+def test_cli_download_pages_contract_uses_public_page_state_values():
+    data = cli._normalize_download_pages_output({"gid": "123", "page_states": {"1": "done", "2": "failed"}})
+
+    assert data["page_states"] == {"1": "completed", "2": "failed"}
 
 
 def test_library_item_contract_shape(tmp_path: Path):

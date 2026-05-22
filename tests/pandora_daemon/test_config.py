@@ -24,6 +24,7 @@ class TestDefaultConfig:
         cred = CredentialsConfig()
         assert cred.igneous == ""
         assert cred.ipb_member_id == ""
+        assert cred.ipb_pass_hash == ""
 
     def test_default_server_config(self):
         srv = ServerConfig()
@@ -77,7 +78,11 @@ class TestLoadConfig:
     def test_load_config_reads_existing(self, tmp_path):
         config_path = tmp_path / "config.toml"
         data = {
-            "credentials": {"igneous": "abc123", "ipb_member_id": "999"},
+            "credentials": {
+                "igneous": "abc123",
+                "ipb_member_id": "999",
+                "ipb_pass_hash": "synthetic_hash",
+            },
             "server": {"host": "0.0.0.0", "port": 9999},
             "download": {"path": "/custom/path", "gallery_concurrency": 5},
             "cache": {
@@ -92,6 +97,7 @@ class TestLoadConfig:
 
         assert cfg.credentials.igneous == "abc123"
         assert cfg.credentials.ipb_member_id == "999"
+        assert cfg.credentials.ipb_pass_hash == "synthetic_hash"
         assert cfg.server.host == "0.0.0.0"
         assert cfg.server.port == 9999
         assert cfg.download.path == "/custom/path"
@@ -116,6 +122,7 @@ class TestLoadConfig:
         assert cfg.server.host == "127.0.0.1"
         # Entirely missing sections fall back to defaults
         assert cfg.credentials.igneous == ""
+        assert cfg.credentials.ipb_pass_hash == ""
         assert cfg.download.path == "~/Downloads/pandora"
         assert cfg.cache.image_max_size_mb == 2048
 
@@ -157,7 +164,11 @@ class TestSaveConfig:
     def test_save_config(self, tmp_path):
         config_path = tmp_path / "subdir" / "config.toml"
         cfg = PandoraConfig(
-            credentials=CredentialsConfig(igneous="tok", ipb_member_id="42"),
+            credentials=CredentialsConfig(
+                igneous="tok",
+                ipb_member_id="42",
+                ipb_pass_hash="synthetic_hash",
+            ),
             server=ServerConfig(host="0.0.0.0", port=1234),
             download=DownloadConfig(path="/dl", gallery_concurrency=2),
             cache=CacheConfig(
@@ -175,6 +186,7 @@ class TestSaveConfig:
 
         assert data["credentials"]["igneous"] == "tok"
         assert data["credentials"]["ipb_member_id"] == "42"
+        assert data["credentials"]["ipb_pass_hash"] == "synthetic_hash"
         assert data["server"]["host"] == "0.0.0.0"
         assert data["server"]["port"] == 1234
         assert data["download"]["path"] == "/dl"
@@ -203,12 +215,17 @@ class TestToPublicDict:
 
     def test_config_to_dict_omits_credentials(self):
         cfg = PandoraConfig(
-            credentials=CredentialsConfig(igneous="secret", ipb_member_id="12345"),
+            credentials=CredentialsConfig(
+                igneous="secret",
+                ipb_member_id="12345",
+                ipb_pass_hash="synthetic_hash",
+            ),
         )
 
         public = cfg.to_public_dict()
 
         assert "credentials" not in public, "credentials section must be omitted"
+        assert "synthetic_hash" not in str(public)
         assert "server" in public
         assert "download" in public
         assert "cache" in public

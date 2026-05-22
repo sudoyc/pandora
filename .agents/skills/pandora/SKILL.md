@@ -41,6 +41,7 @@ Layer rules:
 - `pandora-daemon`: credentials, session, cache, SQLite DB, downloads, local library, config.
 - Consumers/agents: render or automate user actions by calling daemon REST/WS/CLI.
 - `pandora-tui/`: archived historical REST/WS consumer reference only.
+- Web/TUI/client-cache work is not the bot-first path; defer it unless explicitly requested.
 
 ## Starting and Verifying the Daemon
 
@@ -60,6 +61,7 @@ Basic health-style checks for agents:
 
 - `health --json` is a minimal capability probe; it intentionally omits credentials and local filesystem paths.
 - `config --json` returns local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
+- Credentials may include optional `ipb_pass_hash`; leave it unset when the current session does not require it.
 
 ```bash
 uv run python -m pandora_daemon.cli health --json
@@ -113,6 +115,8 @@ uv run python -m pandora_daemon.cli favorites list --json   # all favorites (`sl
 Download commands:
 
 ```bash
+uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
+uv run python -m pandora_daemon.cli download run 123 abcdef0123 --ndjson
 uv run python -m pandora_daemon.cli download add "https://exhentai.org/g/123/abcdef0123/" --json
 uv run python -m pandora_daemon.cli download add 123 abcdef0123 --json
 uv run python -m pandora_daemon.cli download list --json
@@ -122,6 +126,13 @@ uv run python -m pandora_daemon.cli download cancel 123 --json
 uv run python -m pandora_daemon.cli download resume 123 --json
 uv run python -m pandora_daemon.cli download retry 123 --json
 ```
+
+Prefer `download run --ndjson` for bots. It attaches to WebSocket before submitting `/api/downloads`, emits `download_submitted`, then watches events until a terminal event. If the daemon returns HTTP 409 for an already-active duplicate task, `run` emits `download_already_queued` and continues watching instead of failing. Use `download add` + `download watch` only when split control is intentional; a watcher attached later can miss early events.
+
+Machine output safety:
+
+- `gallery` CLI output redacts `api_uid` and `api_key` by default.
+- `download pages --json` maps internal page state `done` to public state `completed`.
 
 Legacy human-friendly aliases remain available:
 

@@ -21,6 +21,7 @@ class CredentialsConfig:
 
     igneous: str = ""
     ipb_member_id: str = ""
+    ipb_pass_hash: str = ""
 
 
 @dataclass
@@ -119,6 +120,7 @@ class PandoraConfig:
             "credentials": {
                 "igneous": self.credentials.igneous,
                 "ipb_member_id": self.credentials.ipb_member_id,
+                "ipb_pass_hash": self.credentials.ipb_pass_hash,
             },
             **self.to_public_dict(),
         }
@@ -144,6 +146,7 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
     credentials = CredentialsConfig(
         igneous=cred_data.get("igneous", ""),
         ipb_member_id=cred_data.get("ipb_member_id", ""),
+        ipb_pass_hash=cred_data.get("ipb_pass_hash", ""),
     )
 
     srv_data = data.get("server", {})

@@ -62,6 +62,30 @@ def _machine_error(code: str, message: str) -> dict[str, Any]:
     return {"ok": False, "error": {"code": code, "message": message}}
 
 
+def _redact_sensitive_cli_output(data: Any) -> Any:
+    """Remove daemon-only API identity fields from machine-facing CLI output."""
+    if isinstance(data, dict):
+        return {
+            key: _redact_sensitive_cli_output(value)
+            for key, value in data.items()
+            if key not in {"api_uid", "api_key"}
+        }
+    if isinstance(data, list):
+        return [_redact_sensitive_cli_output(item) for item in data]
+    return data
+
+
+def _normalize_download_pages_output(data: Any) -> Any:
+    if not isinstance(data, dict) or not isinstance(data.get("page_states"), dict):
+        return data
+    normalized = dict(data)
+    normalized["page_states"] = {
+        page: "completed" if state == "done" else state
+        for page, state in data["page_states"].items()
+    }
+    return normalized
+
+
 class PandoraArgumentParser(argparse.ArgumentParser):
     """ArgumentParser that emits JSON errors when machine output is requested."""
 
@@ -100,6 +124,10 @@ def _emit_machine_error(code: str, message: str, *, ndjson: bool = False) -> int
     return 1
 
 
+def _print_machine_event(payload: dict[str, Any], *, ndjson: bool) -> None:
+    print(_json_line(payload) if ndjson else _json_dump(payload), flush=True)
+
+
 def _is_machine_mode(args: argparse.Namespace) -> bool:
     return bool(getattr(args, "json", False) or getattr(args, "ndjson", False))
 
@@ -124,6 +152,18 @@ _DOWNLOAD_FAILURE_EVENTS = {
 _DOWNLOAD_TERMINAL_EVENTS = _DOWNLOAD_SUCCESS_EVENTS | _DOWNLOAD_FAILURE_EVENTS
 
 
+async def _consume_download_events(messages: Any, gid: str | None = None, ndjson: bool = False) -> int:
+    async for message in messages:
+        event = json.loads(message)
+        if gid is not None and str(event.get("gid")) != gid:
+            continue
+        print(json.dumps(event, ensure_ascii=False) if ndjson else _json_dump(event), flush=True)
+        event_name = event.get("event")
+        if event_name in _DOWNLOAD_TERMINAL_EVENTS:
+            return 0 if event_name in _DOWNLOAD_SUCCESS_EVENTS else 1
+    return 0
+
+
 async def _watch_download_events(
     daemon_url: str,
     gid: str | None = None,
@@ -135,14 +175,7 @@ async def _watch_download_events(
         import websockets
 
         async with websockets.connect(ws_url) as ws:
-            async for message in ws:
-                event = json.loads(message)
-                if gid is not None and str(event.get("gid")) != gid:
-                    continue
-                print(json.dumps(event, ensure_ascii=False) if ndjson else _json_dump(event), flush=True)
-                event_name = event.get("event")
-                if event_name in _DOWNLOAD_TERMINAL_EVENTS:
-                    return 0 if event_name in _DOWNLOAD_SUCCESS_EVENTS else 1
+            return await _consume_download_events(ws, gid=gid, ndjson=ndjson)
     except KeyboardInterrupt:
         return 130
     except ImportError:
@@ -160,6 +193,63 @@ async def _watch_download_events(
         Console().print(f"[red]WebSocket error: {e}[/red]")
         return 1
     return 0
+
+
+async def _run_download_run(client: httpx.AsyncClient, daemon_url: str, args: argparse.Namespace) -> int:
+    gid, token = resolve_gallery_target(args.target, args.token)
+    ndjson = bool(getattr(args, "ndjson", False))
+    json_output = bool(getattr(args, "json", False))
+    ws_url = daemon_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+
+    try:
+        import websockets
+
+        async with websockets.connect(ws_url) as ws:
+            response = await client.post("/api/downloads", json={"gid": gid, "token": token})
+
+            if response.status_code == 409:
+                detail = response.json().get("detail", response.text)
+                _print_machine_event(
+                    {
+                        "event": "download_already_queued",
+                        "gid": gid,
+                        "status": "already_queued",
+                        "detail": detail,
+                    },
+                    ndjson=ndjson,
+                )
+            else:
+                response.raise_for_status()
+                data = response.json()
+                _print_machine_event(
+                    {
+                        "event": "download_submitted",
+                        "gid": str(data.get("gid", gid)),
+                        "status": data.get("status", "queued"),
+                        "title": data.get("title", gid),
+                    },
+                    ndjson=ndjson,
+                )
+
+            return await _consume_download_events(ws, gid=gid, ndjson=ndjson)
+    except KeyboardInterrupt:
+        return 130
+    except ImportError:
+        if ndjson:
+            return _emit_machine_error("websocket_dependency_missing", "websockets not installed", ndjson=True)
+        if json_output:
+            return _emit_machine_error("websocket_dependency_missing", "websockets not installed")
+        Console().print("[red]websockets not installed[/red]")
+        return 1
+    except httpx.HTTPError:
+        raise
+    except Exception as e:
+        if ndjson:
+            return _emit_machine_error("websocket_error", str(e), ndjson=True)
+        if json_output:
+            return _emit_machine_error("websocket_error", str(e))
+        Console().print(f"[red]WebSocket error: {e}[/red]")
+        return 1
 
 
 async def download_command(target: str, daemon_url: str, token: str | None = None) -> int:
@@ -336,7 +426,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=float, default=argparse.SUPPRESS, help="Request timeout in seconds")
 
 
-_DOWNLOAD_SUBCOMMANDS = {"add", "list", "watch", "cancel", "resume", "retry", "pages"}
+_DOWNLOAD_SUBCOMMANDS = {"add", "run", "list", "watch", "cancel", "resume", "retry", "pages"}
 
 
 def _normalize_argv(argv: list[str] | None = None) -> list[str]:
@@ -380,6 +470,12 @@ def build_parser() -> argparse.ArgumentParser:
     download_add.add_argument("target", help="Gallery URL or gid")
     download_add.add_argument("token", nargs="?", help="Gallery token when using gid")
     _add_common_options(download_add)
+
+    download_run = download_subparsers.add_parser("run", help="Submit and watch a gallery download")
+    download_run.add_argument("target", help="Gallery URL or gid")
+    download_run.add_argument("token", nargs="?", help="Gallery token when using gid")
+    download_run.add_argument("--ndjson", action="store_true", help="Emit newline-delimited JSON events")
+    _add_common_options(download_run)
 
     download_list = download_subparsers.add_parser("list", help="List download tasks")
     _add_common_options(download_list)
@@ -550,6 +646,9 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                     data = await _request_json(client, "POST", "/api/downloads", json={"gid": gid, "token": token})
                     return _dispatch_json(data)
 
+                if download_command_name == "run":
+                    return await _run_download_run(client, daemon_url, args)
+
                 if download_command_name == "list":
                     tasks = await _download_statuses(client)
                     return _dispatch_json({"tasks": tasks} if args.json else tasks)
@@ -567,7 +666,7 @@ async def _run_http_command(args: argparse.Namespace) -> int:
 
                 if download_command_name == "pages":
                     data = await _request_json(client, "GET", f"/api/downloads/{args.gid}/pages")
-                    return _dispatch_json(data)
+                    return _dispatch_json(_normalize_download_pages_output(data))
 
             if command == "search":
                 data = await _request_json(client, "GET", "/api/search", params={"keyword": args.keyword, "page": args.page})
@@ -576,7 +675,7 @@ async def _run_http_command(args: argparse.Namespace) -> int:
             if command == "gallery":
                 gid, token = resolve_gallery_target(args.target, args.token)
                 data = await _request_json(client, "GET", f"/api/gallery/{gid}/{token}")
-                return _dispatch_json(data) if args.json else _dispatch_json(data)
+                return _dispatch_json(_redact_sensitive_cli_output(data))
 
             if command == "library":
                 data = await _request_json(client, "GET", "/api/library")

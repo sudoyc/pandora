@@ -9,6 +9,29 @@ async def test_client_headers():
     assert client.cookies["igneous"] == "test_ig"
     assert client.cookies["ipb_member_id"] == "123"
     assert "User-Agent" in client.headers
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_includes_ipb_pass_hash_when_configured():
+    client = ExhentaiClient(
+        igneous="synthetic_ig",
+        ipb_member_id="123",
+        ipb_pass_hash="synthetic_hash",
+    )
+
+    assert client.cookies["igneous"] == "synthetic_ig"
+    assert client.cookies["ipb_member_id"] == "123"
+    assert client.cookies["ipb_pass_hash"] == "synthetic_hash"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_omits_empty_ipb_pass_hash_cookie():
+    client = ExhentaiClient(ipb_pass_hash="")
+
+    assert "ipb_pass_hash" not in client.cookies
+    await client.aclose()
 
 @pytest.mark.asyncio
 async def test_client_context_manager():

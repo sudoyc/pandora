@@ -9,7 +9,7 @@ All methods are async.
 ```python
 from exhentai_api import ExhentaiAPI, ExhentaiClient
 
-client = ExhentaiClient(igneous="...", ipb_member_id="...")
+client = ExhentaiClient(igneous="...", ipb_member_id="...", ipb_pass_hash="...")
 api = ExhentaiAPI(client=client)
 
 async with ExhentaiAPI(client=client) as api:
@@ -60,7 +60,7 @@ async with ExhentaiAPI(client=client) as api:
 ## Main data models
 
 - `GalleryListItem`: `gid`, `token`, `title`, `category`, `uploader`, `thumb_url`, `posted`, `rating`, `pages`, `rated`, dimensions, `url` property.
-- `GalleryDetail`: metadata, tags, page counts, preview/thumb data, comments, API keys, archive/torrent fields.
+- `GalleryDetail`: metadata, tags, page counts, preview/thumb data, comments, API keys, archive/torrent fields. CLI machine output redacts `api_uid` and `api_key` by default.
 - `ImageDetail`: `gid`, `page`, `image_url`, `nl` reload token.
 - `FavoritesResponse`: `categories`, `galleries`.
 - `DownloadTask` (daemon): `gid`, `token`, `title`, `status`, progress counters, output path, page states.
@@ -68,6 +68,8 @@ async with ExhentaiAPI(client=client) as api:
 ## Daemon REST API
 
 Default base URL: `http://127.0.0.1:7860`.
+
+Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`. `igneous` and `ipb_member_id` are the usual minimum; `ipb_pass_hash` is optional and should be left empty when the session does not require it. Public config and CLI machine output never expose raw credential values.
 
 ### Browse
 
@@ -182,7 +184,9 @@ Global options on daemon-backed commands:
 - `--json`
 - `--timeout 30`
 
-For `download watch`, use `--ndjson` as the preferred streaming machine mode. `--json` is accepted for JSON error envelopes, while successful watch output is still event-by-event.
+For bots, use `download run <url|gid> [token] --ndjson` as the supported successful streaming machine mode. It attaches to `WS /ws` before posting `/api/downloads`, emits a `download_submitted` machine event, and then watches until a terminal event. If `/api/downloads` returns HTTP 409 for an already-active task, `download run` emits `download_already_queued` and continues watching instead of failing. `download add` plus `download watch` remains available, but a late watcher can miss events emitted between the two commands.
+
+`download watch --json` is accepted for JSON error envelopes, while successful watch output is still event-by-event. `download pages --json` normalizes internal page state `done` to public state `completed`.
 
 Machine-mode errors:
 
@@ -199,6 +203,7 @@ pandora health --json
 pandora config --json
 pandora download <url>              # legacy interactive path; submits and monitors via WebSocket
 pandora dl <url>
+pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token] --json
 pandora download list --json
 pandora download watch [gid] --ndjson

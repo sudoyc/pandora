@@ -18,12 +18,14 @@ _NO_RETRY = (AuthenticationError, ImageLimitError, GalleryNotFoundError, Gallery
 
 class ExhentaiClient:
     def __init__(self, igneous: str = "", ipb_member_id: str = "",
-                 proxy: str = "", timeout: int = 30):
+                 ipb_pass_hash: str = "", proxy: str = "", timeout: int = 30):
         self.cookies = {}
         if igneous:
             self.cookies["igneous"] = igneous
         if ipb_member_id:
             self.cookies["ipb_member_id"] = ipb_member_id
+        if ipb_pass_hash:
+            self.cookies["ipb_pass_hash"] = ipb_pass_hash
 
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",

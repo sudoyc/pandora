@@ -1,3 +1,4 @@
+import json
 import pytest
 import httpx
 from unittest.mock import MagicMock, patch
@@ -78,7 +79,7 @@ def test_build_parser_exposes_download_management_subcommands():
         action.choices for action in download_parser._actions if hasattr(action, "choices") and action.choices
     )
 
-    assert set(download_subcommands) >= {"add", "list", "watch", "cancel", "resume", "retry", "pages"}
+    assert set(download_subcommands) >= {"add", "run", "list", "watch", "cancel", "resume", "retry", "pages"}
 
 
 def test_normalize_argv_preserves_legacy_download_url_form():
@@ -94,6 +95,11 @@ def test_normalize_argv_preserves_legacy_dl_url_form():
 def test_normalize_argv_leaves_download_subcommands_unchanged():
     argv = _normalize_argv(["download", "list", "--json"])
     assert argv == ["download", "list", "--json"]
+
+
+def test_normalize_argv_leaves_download_run_unchanged():
+    argv = _normalize_argv(["download", "run", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--ndjson"])
+    assert argv == ["download", "run", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--ndjson"]
 
 
 def test_normalize_argv_leaves_parent_options_before_download_subcommand_unchanged():
@@ -127,6 +133,16 @@ class _FakeWebSocket:
             return next(self._messages)
         except StopIteration:
             raise StopAsyncIteration
+
+
+class _RecordingFakeWebSocket(_FakeWebSocket):
+    def __init__(self, messages, events):
+        super().__init__(messages)
+        self._events = events
+
+    async def __aenter__(self):
+        self._events.append("ws_enter")
+        return await super().__aenter__()
 
 
 @pytest.mark.asyncio
@@ -314,6 +330,120 @@ async def test_download_watch_json_machine_errors_use_error_envelope(capsys):
     assert '"code": "websocket_error"' in out
 
 
+@pytest.mark.asyncio
+async def test_download_run_ndjson_submits_emits_submitted_then_watches(monkeypatch, capsys):
+    requests = []
+
+    def handler(request):
+        requests.append((request.method, request.url.path, json.loads(request.content.decode())))
+        assert request.url.path == "/api/downloads"
+        return httpx.Response(200, json={"gid": "1234567", "status": "queued", "title": "Queued"})
+
+    _mock_http_client(monkeypatch, handler)
+    fake_connect = MagicMock(return_value=_FakeWebSocket(['{"event":"download_complete","gid":"1234567","path":"/tmp/out"}']))
+    with patch.dict("sys.modules", {"websockets": type("Ws", (), {"connect": fake_connect})}):
+        args = build_parser().parse_args([
+            "download",
+            "run",
+            "https://exhentai.org/g/1234567/a1b2c3d4e5/",
+            "--ndjson",
+            "--daemon-url",
+            "http://daemon",
+        ])
+        code = await _run_http_command(args)
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert code == 0
+    assert requests == [("POST", "/api/downloads", {"gid": "1234567", "token": "a1b2c3d4e5"})]
+    assert lines[0] == {"event": "download_submitted", "gid": "1234567", "status": "queued", "title": "Queued"}
+    assert lines[1] == {"event": "download_complete", "gid": "1234567", "path": "/tmp/out"}
+
+
+@pytest.mark.asyncio
+async def test_download_run_ndjson_attaches_websocket_before_submit(monkeypatch, capsys):
+    events = []
+
+    def handler(request):
+        events.append("post")
+        assert request.url.path == "/api/downloads"
+        return httpx.Response(200, json={"gid": "1234567", "status": "queued", "title": "Queued"})
+
+    _mock_http_client(monkeypatch, handler)
+    fake_connect = MagicMock(return_value=_RecordingFakeWebSocket(['{"event":"download_complete","gid":"1234567"}'], events))
+    with patch.dict("sys.modules", {"websockets": type("Ws", (), {"connect": fake_connect})}):
+        args = build_parser().parse_args([
+            "download",
+            "run",
+            "https://exhentai.org/g/1234567/a1b2c3d4e5/",
+            "--ndjson",
+            "--daemon-url",
+            "http://daemon",
+        ])
+        code = await _run_http_command(args)
+
+    assert code == 0
+    assert events == ["ws_enter", "post"]
+    assert [json.loads(line)["event"] for line in capsys.readouterr().out.strip().splitlines()] == [
+        "download_submitted",
+        "download_complete",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_download_run_duplicate_409_emits_already_queued_and_watches(monkeypatch, capsys):
+    def handler(request):
+        assert request.url.path == "/api/downloads"
+        return httpx.Response(409, json={"detail": "Download already queued"})
+
+    _mock_http_client(monkeypatch, handler)
+    fake_connect = MagicMock(return_value=_FakeWebSocket(['{"event":"download_complete","gid":"1234567"}']))
+    with patch.dict("sys.modules", {"websockets": type("Ws", (), {"connect": fake_connect})}):
+        args = build_parser().parse_args([
+            "download",
+            "run",
+            "1234567",
+            "a1b2c3d4e5",
+            "--ndjson",
+            "--daemon-url",
+            "http://daemon",
+        ])
+        code = await _run_http_command(args)
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert code == 0
+    assert lines[0] == {
+        "event": "download_already_queued",
+        "gid": "1234567",
+        "status": "already_queued",
+        "detail": "Download already queued",
+    }
+    assert lines[1] == {"event": "download_complete", "gid": "1234567"}
+
+
+@pytest.mark.asyncio
+async def test_download_run_json_websocket_failure_uses_error_envelope(monkeypatch, capsys):
+    def handler(request):
+        raise AssertionError("download run must not submit after websocket attach fails")
+
+    _mock_http_client(monkeypatch, handler)
+    fake_connect = MagicMock(side_effect=RuntimeError("socket boom"))
+    with patch.dict("sys.modules", {"websockets": type("Ws", (), {"connect": fake_connect})}):
+        args = build_parser().parse_args([
+            "download",
+            "run",
+            "https://exhentai.org/g/1234567/a1b2c3d4e5/",
+            "--json",
+            "--daemon-url",
+            "http://daemon",
+        ])
+        code = await _run_http_command(args)
+
+    out = capsys.readouterr().out
+    assert code == 1
+    assert '"ok": false' in out
+    assert '"code": "websocket_error"' in out
+
+
 def test_machine_error_envelope_shape():
     assert _machine_error("connect_error", "Cannot connect") == {
         "ok": False,
@@ -383,6 +513,54 @@ async def test_http_status_error_json_uses_error_envelope_for_download_pages(mon
     assert code == 1
     assert out.startswith("{")
     assert '"code": "http_error"' in out
+
+
+@pytest.mark.asyncio
+async def test_gallery_json_redacts_sensitive_api_identity(monkeypatch, capsys):
+    def handler(request):
+        assert request.url.path == "/api/gallery/1234567/a1b2c3d4e5"
+        return httpx.Response(200, json={"gid": "1234567", "api_uid": "uid", "api_key": "key", "title": "Detail"})
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args(["gallery", "1234567", "a1b2c3d4e5", "--json", "--daemon-url", "http://daemon"])
+
+    code = await _run_http_command(args)
+    data = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert data == {"gid": "1234567", "title": "Detail"}
+
+
+@pytest.mark.asyncio
+async def test_gallery_default_output_redacts_sensitive_api_identity(monkeypatch, capsys):
+    def handler(request):
+        assert request.url.path == "/api/gallery/1234567/a1b2c3d4e5"
+        return httpx.Response(200, json={"gid": "1234567", "api_uid": "uid", "api_key": "key", "title": "Detail"})
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args(["gallery", "1234567", "a1b2c3d4e5", "--daemon-url", "http://daemon"])
+
+    code = await _run_http_command(args)
+    data = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert data == {"gid": "1234567", "title": "Detail"}
+
+
+@pytest.mark.asyncio
+async def test_download_pages_json_normalizes_done_to_completed(monkeypatch, capsys):
+    def handler(request):
+        assert request.url.path == "/api/downloads/123/pages"
+        return httpx.Response(200, json={"gid": "123", "page_states": {"1": "done", "2": "failed"}})
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args(["download", "pages", "123", "--json", "--daemon-url", "http://daemon"])
+
+    code = await _run_http_command(args)
+    data = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert data["page_states"] == {"1": "completed", "2": "failed"}
 
 
 def test_parser_usage_error_json_uses_error_envelope(capsys):

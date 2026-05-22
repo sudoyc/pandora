@@ -26,6 +26,7 @@ class TestBuildState:
             mock_config = MagicMock()
             mock_config.credentials.igneous = "test"
             mock_config.credentials.ipb_member_id = "test"
+            mock_config.credentials.ipb_pass_hash = "synthetic_hash"
             mock_load.return_value = mock_config
 
             mock_db = AsyncMock()
@@ -61,6 +62,7 @@ class TestBuildState:
             mock_config = MagicMock()
             mock_config.credentials.igneous = "test"
             mock_config.credentials.ipb_member_id = "test"
+            mock_config.credentials.ipb_pass_hash = "synthetic_hash"
             mock_config.network.proxy = "socks5://127.0.0.1:1080"
             mock_config.network.timeout = 60
             mock_load.return_value = mock_config
@@ -78,6 +80,7 @@ class TestBuildState:
             mock_client_cls.assert_called_once_with(
                 igneous="test",
                 ipb_member_id="test",
+                ipb_pass_hash="synthetic_hash",
                 proxy="socks5://127.0.0.1:1080",
                 timeout=60,
             )

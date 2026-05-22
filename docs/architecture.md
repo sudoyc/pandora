@@ -8,7 +8,7 @@
 
 Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先方向是稳定的 daemon + CLI + Hermes agent/plugin 契约。名字取自潘多拉之盒与 Sad Panda 的双关。
 
-核心目标：通过本地 daemon 提供认证、缓存、下载、数据库与图片代理能力；CLI/Hermes 使用稳定 JSON/NDJSON 契约自动化操作。Web 是可选人类 UI，`pandora-tui/` 已归档冻结。
+核心目标：通过本地 daemon 提供认证、缓存、下载、数据库与图片代理能力；CLI/Hermes 使用稳定 JSON/NDJSON 契约自动化操作。Bot 优先使用 `download run --ndjson`。Web 是可选人类 UI，`pandora-tui/` 已归档冻结，客户端缓存/预取重构不属于当前主线。
 
 ---
 
@@ -154,6 +154,7 @@ pandora_daemon/
 [credentials]
 igneous = "..."
 ipb_member_id = "..."
+ipb_pass_hash = "..."  # 可选；会话不需要时留空
 
 [server]
 host = "127.0.0.1"
@@ -256,6 +257,7 @@ SQLite + aiosqlite，WAL 模式，版本迁移机制。6 张表：
 ```bash
 pandora download <url>              # 兼容旧入口：提交并用 rich/websocket 监控
 pandora dl <url>                    # 同上 (别名)
+pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token]
 pandora download list --json
 pandora download watch [gid] --ndjson
@@ -274,7 +276,7 @@ pandora favorites list --json
 pandora popular --json
 ```
 
-轻量级命令行工具，直接调用 daemon REST API；优先服务 agent/Hermes/脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。
+轻量级命令行工具，直接调用 daemon REST API；优先服务 agent/Hermes/脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。`download run --ndjson` 是 bot 下载主路径：先连接 WS，再提交 `/api/downloads` 并输出 `download_submitted`，遇到 HTTP 409 活跃重复任务时输出 `download_already_queued` 并继续监听 WS 终态事件。`download add` + `download watch` 仍保留，但拆成两个命令时可能错过提交后立刻发出的事件。`gallery` CLI 输出默认移除 `api_uid`/`api_key`，`download pages --json` 将内部 `done` 映射为公开状态 `completed`。
 
 #### TUI (`pandora-tui/`, Rust, 已归档冻结)
 
@@ -286,7 +288,7 @@ pandora popular --json
 
 #### Web (`pandora-web/`, React + TypeScript)
 
-状态：开发中但已接入真实 daemon 契约。已有 Vite/React 骨架、gallery feed、搜索/热门/关注切换、detail drawer、daemon page API reader、WebSocket 下载进度 hook；下一步重点是拆分 `App.tsx`、扩展 typed API client、补齐 favorites/history/downloads/library 视图。详见 `pandora-web/README.md`。
+状态：可选人类 UI，不是 bot/agent 主路径。当前 bot 合约清理不扩展 Web、TUI 或客户端缓存策略；Web 继续只消费 daemon REST/WS。详见 `pandora-web/README.md`。
 
 技术栈：React 19 + Vite + TypeScript + Radix UI + SWR + Vanilla CSS variables
 
