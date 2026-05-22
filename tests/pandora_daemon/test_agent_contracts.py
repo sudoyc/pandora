@@ -285,12 +285,34 @@ def test_websocket_event_contract_examples():
         {"event": "download_cancelled", "gid": "123"},
         {"event": "download_paused", "gid": "123", "reason": "image_limit"},
         {"event": "download_auth_failed", "gid": "123", "error": "auth"},
+        {"event": "pdf_export_started", "gid": "123"},
+        {"event": "pdf_export_complete", "gid": "123", "path": "/downloads/123-Download/exports/123.pdf", "password_protected": True},
+        {"event": "pdf_export_error", "gid": "123", "error": "boom"},
     ]
 
     for event in examples:
         assert "event" in event
         assert "type" not in event
         assert isinstance(event["gid"], str)
+
+
+def test_pdf_export_event_schema_and_agent_docs_exist():
+    schema_path = Path("docs/agent/schemas/pdf-export-event.schema.json")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    assert "pdf_export_complete" in schema["properties"]["event"]["enum"]
+
+    contract = Path("docs/agent/contract.md").read_text(encoding="utf-8")
+    library_workflow = Path("docs/agent/workflows/library.md").read_text(encoding="utf-8")
+    skill = Path(".agents/skills/pandora/SKILL.md").read_text(encoding="utf-8")
+
+    for text in (contract, library_workflow, skill):
+        assert "library export-pdf" in text
+        assert "pdf_export_complete" in text
+        assert "password" in text
+
+    assert "secret-pass" not in contract
+    assert "secret-pass" not in library_workflow
+    assert "secret-pass" not in skill
 
 
 def test_cli_machine_error_envelope_contract_shape():

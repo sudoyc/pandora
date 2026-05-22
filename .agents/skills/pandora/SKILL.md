@@ -155,6 +155,7 @@ uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli download cancel 123 --json
 uv run python -m pandora_daemon.cli download resume 123 --json
 uv run python -m pandora_daemon.cli download retry 123 --json
+uv run python -m pandora_daemon.cli library export-pdf 123 --password "PDF_PASSWORD" --json
 ```
 
 Prefer `download run --ndjson` for bots. It attaches to WebSocket before submitting `/api/downloads`, emits `download_submitted`, then watches events until a terminal event. If the daemon returns HTTP 409 for an already-active duplicate task, `run` emits `download_already_queued` and continues watching instead of failing. Use `download add` + `download watch` only when split control is intentional; a watcher attached later can miss early events.
@@ -221,6 +222,14 @@ CLI watcher exit semantics:
 - `download_cancelled`: exit 1
 - `download_paused`: exit 1
 - `download_auth_failed`: exit 1
+
+Library PDF export hook summary:
+
+- CLI entry: `library export-pdf <gid> --password "PDF_PASSWORD" --json`
+- REST entry: `POST /api/library/{gid}/export/pdf`
+- Hook events: `pdf_export_started`, `pdf_export_complete`, `pdf_export_error`
+- `pdf_export_complete` is the success signal for bots.
+- Password handling and full hook contract live in `docs/agent/contract.md` and `docs/agent/workflows/library.md`.
 
 ## Download State Rules
 

@@ -27,7 +27,10 @@ Hermes is one packaged consumer of this Agent Pack through `.agents/skills/pando
 - [`safety.md`](safety.md) documents credentials, privacy, state, and mutation boundaries.
 - [`workflows/`](workflows/) contains task-level runbooks.
 - [`snippets/`](snippets/) contains standalone prompt blocks.
+- [`snippets/library-export-agent.md`](snippets/library-export-agent.md) is the PDF export-specific agent prompt block.
 - [`schemas/`](schemas/) contains lightweight JSON Schemas for common machine envelopes.
+
+When adding a new bot-visible capability or hook, document it in the Agent Pack first (`contract.md`, relevant workflow, and schema/snippet as needed). The Hermes/Pandora skill may summarize it, but should not be the only delivery surface.
 
 ## Quick Agent Bootstrap
 

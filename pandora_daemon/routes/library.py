@@ -10,9 +10,22 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel
 from starlette.requests import Request
 
+from pandora_daemon.pdf_export import (
+    PdfExportError,
+    execute_gallery_pdf_export,
+    plan_gallery_pdf_export,
+)
+
 router = APIRouter(prefix="/api/library", tags=["library"])
+
+
+class PdfExportBody(BaseModel):
+    password: str | None = None
+    output_name: str | None = None
+    include_cover: bool = False
 
 
 def _find_gallery_dir(download_path: Path, gid: str) -> Path | None:
@@ -59,6 +72,60 @@ async def list_library(request: Request):
         except (json.JSONDecodeError, OSError):
             continue
     return galleries
+
+
+@router.post("/{gid}/export/pdf")
+async def export_library_pdf(gid: str, body: PdfExportBody, request: Request):
+    if not gid.isdigit():
+        raise HTTPException(status_code=400, detail="Invalid gallery ID")
+
+    config = request.app.state.pandora.config
+    download_path = Path(config.download.path).expanduser()
+    gallery_dir = _find_gallery_dir(download_path, gid)
+    if gallery_dir is None:
+        raise HTTPException(status_code=404, detail=f"Gallery {gid} not found")
+
+    ws = getattr(request.app.state.pandora, "ws", None)
+
+    try:
+        plan = plan_gallery_pdf_export(
+            gallery_dir,
+            gid,
+            output_name=body.output_name,
+            include_cover=body.include_cover,
+        )
+    except PdfExportError as exc:
+        if ws is not None:
+            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
+        raise HTTPException(status_code=400, detail="PDF export failed") from exc
+    except Exception as exc:
+        if ws is not None:
+            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
+        raise HTTPException(status_code=500, detail="PDF export failed") from exc
+
+    if ws is not None:
+        await ws.broadcast({"event": "pdf_export_started", "gid": gid})
+
+    try:
+        result = execute_gallery_pdf_export(plan, password=body.password)
+    except PdfExportError as exc:
+        if ws is not None:
+            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
+        raise HTTPException(status_code=400, detail="PDF export failed") from exc
+    except Exception as exc:
+        if ws is not None:
+            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
+        raise HTTPException(status_code=500, detail="PDF export failed") from exc
+
+    payload = result.to_dict()
+    if ws is not None:
+        await ws.broadcast({
+            "event": "pdf_export_complete",
+            "gid": gid,
+            "path": payload["path"],
+            "password_protected": payload["password_protected"],
+        })
+    return payload
 
 
 @router.get("/{gid}/file")

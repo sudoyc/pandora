@@ -115,6 +115,28 @@ def test_parent_json_option_before_download_subcommand_is_preserved():
     assert args.json is True
 
 
+def test_build_parser_exposes_library_export_pdf_subcommand_with_password_entry():
+    args = build_parser().parse_args([
+        "library",
+        "export-pdf",
+        "12345",
+        "--password",
+        "secret-pass",
+        "--output-name",
+        "comic.pdf",
+        "--include-cover",
+        "--json",
+    ])
+
+    assert args.command == "library"
+    assert args.library_command == "export-pdf"
+    assert args.gid == "12345"
+    assert args.password == "secret-pass"
+    assert args.output_name == "comic.pdf"
+    assert args.include_cover is True
+    assert args.json is True
+
+
 class _FakeWebSocket:
     def __init__(self, messages):
         self._messages = iter(messages)
@@ -230,6 +252,7 @@ async def test_config_json_calls_daemon_config_without_credentials(monkeypatch, 
         (["search", "tag", "--page", "2", "--json", "--daemon-url", "http://daemon"], "GET", "/api/search", None),
         (["gallery", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--json", "--daemon-url", "http://daemon"], "GET", "/api/gallery/1234567/a1b2c3d4e5", None),
         (["library", "list", "--json", "--daemon-url", "http://daemon"], "GET", "/api/library", None),
+        (["library", "export-pdf", "12345", "--password", "secret-pass", "--output-name", "comic.pdf", "--json", "--daemon-url", "http://daemon"], "POST", "/api/library/12345/export/pdf", {"password": "secret-pass", "output_name": "comic.pdf"}),
         (["tags", "suggest", "artist", "--json", "--daemon-url", "http://daemon"], "GET", "/api/tags/suggest", None),
         (["favorites", "list", "--json", "--daemon-url", "http://daemon"], "GET", "/api/favorites", None),
         (["popular", "--json", "--daemon-url", "http://daemon"], "GET", "/api/popular", None),
@@ -394,6 +417,43 @@ async def test_download_list_json_wraps_tasks(monkeypatch, capsys):
 
     assert code == 0
     assert '"tasks"' in _json_out(capsys)
+
+
+@pytest.mark.asyncio
+async def test_library_export_pdf_json_does_not_echo_password(monkeypatch, capsys):
+    def handler(request):
+        assert request.url.path == "/api/library/12345/export/pdf"
+        assert json.loads(request.content.decode()) == {"password": "secret-pass"}
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "gid": "12345",
+                "format": "pdf",
+                "path": "/downloads/12345-Test/exports/12345.pdf",
+                "password_protected": True,
+            },
+        )
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args([
+        "library",
+        "export-pdf",
+        "12345",
+        "--password",
+        "secret-pass",
+        "--json",
+        "--daemon-url",
+        "http://daemon",
+    ])
+
+    code = await _run_http_command(args)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "secret-pass" not in output
+    data = json.loads(output)
+    assert data["password_protected"] is True
 
 
 @pytest.mark.asyncio

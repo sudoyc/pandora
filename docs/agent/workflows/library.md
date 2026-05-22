@@ -33,7 +33,31 @@ Inspect download queue:
 ```bash
 uv run python -m pandora_daemon.cli download list --json
 uv run python -m pandora_daemon.cli download pages 123 --json
+uv run python -m pandora_daemon.cli library export-pdf 123 --password "PDF_PASSWORD" --json
 ```
+
+## PDF Export Hook
+
+PDF export uses the same daemon/WebSocket boundary as download monitoring.
+
+REST endpoint:
+
+```text
+POST /api/library/{gid}/export/pdf
+```
+
+Hook events:
+
+```json
+{"event":"pdf_export_started","gid":"123"}
+{"event":"pdf_export_complete","gid":"123","path":"/path/to/file.pdf","password_protected":true}
+{"event":"pdf_export_error","gid":"123","error":"..."}
+```
+
+Notes:
+- Use the explicit CLI/REST password entry only when a protected PDF is required.
+- Do not echo or persist the password in your own agent state.
+- Treat `pdf_export_complete` as success and `pdf_export_error` as failure.
 
 ## State Boundary
 

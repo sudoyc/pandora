@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/pdf-export-event.schema.json",
+  "title": "Pandora PDF Export Event",
+  "type": "object",
+  "required": ["event", "gid"],
+  "additionalProperties": true,
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": [
+        "pdf_export_started",
+        "pdf_export_complete",
+        "pdf_export_error"
+      ]
+    },
+    "gid": {"type": "string"},
+    "path": {"type": "string"},
+    "password_protected": {"type": "boolean"},
+    "error": {"type": "string"}
+  },
+  "not": {"required": ["type"]}
+}

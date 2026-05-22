@@ -124,6 +124,40 @@ uv run python -m pandora_daemon.cli download pages 123 --json
 
 Public page state values include `completed` and `failed`. The CLI maps internal daemon state `done` to public state `completed`.
 
+## Library PDF Export
+
+```bash
+uv run python -m pandora_daemon.cli library export-pdf 123 --password "PDF_PASSWORD" --json
+```
+
+REST:
+
+```text
+POST /api/library/{gid}/export/pdf
+```
+
+Request body fields:
+
+- `password` — optional PDF open password.
+- `output_name` — optional filename ending in `.pdf`.
+- `include_cover` — optional boolean to prepend cover as page 1 when present.
+
+Export hook events on `WS /ws`:
+
+```json
+{"event":"pdf_export_started","gid":"123"}
+{"event":"pdf_export_complete","gid":"123","path":"/path/to/file.pdf","password_protected":true}
+{"event":"pdf_export_error","gid":"123","error":"..."}
+```
+
+Bot success criteria:
+
+- CLI/REST response includes `ok: true`, `format: "pdf"`, `path`, and `password_protected`.
+- `pdf_export_complete` means export finished successfully.
+- Never echo or log the password in prompts, events, JSON output, or docs.
+
+Schema: [`schemas/pdf-export-event.schema.json`](schemas/pdf-export-event.schema.json).
+
 ## Tag Search Contract
 
 Pandora uses Scheme A for translated tags. The daemon and CLI expose primitives only; agents choose candidates.

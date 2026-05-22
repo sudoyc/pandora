@@ -533,8 +533,16 @@ def build_parser() -> argparse.ArgumentParser:
     gallery_parser.add_argument("token", nargs="?", help="Gallery token when using gid")
     _add_common_options(gallery_parser)
 
-    library_parser = subparsers.add_parser("library", help="List downloaded galleries")
-    library_parser.add_argument("subcommand", nargs="?", default="list")
+    library_parser = subparsers.add_parser("library", help="List and export downloaded galleries")
+    library_subparsers = library_parser.add_subparsers(dest="library_command", parser_class=PandoraArgumentParser)
+    library_list = library_subparsers.add_parser("list", help="List downloaded galleries")
+    _add_common_options(library_list)
+    library_export_pdf = library_subparsers.add_parser("export-pdf", help="Export a downloaded gallery to PDF")
+    library_export_pdf.add_argument("gid", help="Gallery ID")
+    library_export_pdf.add_argument("--password", help="Optional PDF open password")
+    library_export_pdf.add_argument("--output-name", help="Optional output PDF filename")
+    library_export_pdf.add_argument("--include-cover", action="store_true", help="Include cover image as the first PDF page when present")
+    _add_common_options(library_export_pdf)
     _add_common_options(library_parser)
 
     tags_parser = subparsers.add_parser("tags", help="Tag utilities")
@@ -603,9 +611,6 @@ def _resolve_command_name(command: str | None) -> str | None:
 
 def _handle_local_passthrough(args: argparse.Namespace) -> int:
     console = Console()
-    if args.command == "library":
-        console.print("[yellow]library list is provided by the daemon API, not the CLI yet[/yellow]")
-        return 1
     if args.command == "favorites":
         console.print("[yellow]favorites list is provided by the daemon API, not the CLI yet[/yellow]")
         return 1
@@ -715,8 +720,20 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                 return _dispatch_json(_redact_sensitive_cli_output(data))
 
             if command == "library":
-                data = await _request_json(client, "GET", "/api/library")
-                return _dispatch_json(data) if args.json else _dispatch_json(data)
+                library_command = getattr(args, "library_command", None) or "list"
+                if library_command == "list":
+                    data = await _request_json(client, "GET", "/api/library")
+                    return _dispatch_json(data) if args.json else _dispatch_json(data)
+                if library_command == "export-pdf":
+                    body = {}
+                    if getattr(args, "password", None):
+                        body["password"] = args.password
+                    if getattr(args, "output_name", None):
+                        body["output_name"] = args.output_name
+                    if getattr(args, "include_cover", False):
+                        body["include_cover"] = True
+                    data = await _request_json(client, "POST", f"/api/library/{args.gid}/export/pdf", json=body)
+                    return _dispatch_json(data) if args.json else _dispatch_json(data)
 
             if command == "tags" and getattr(args, "tags_command", None) == "suggest":
                 data = await _request_json(client, "GET", "/api/tags/suggest", params={"q": args.query})
