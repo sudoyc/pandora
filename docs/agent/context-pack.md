@@ -41,6 +41,12 @@ failure/non-success: `download_complete_with_errors`, `download_error`, `downloa
 Inspect follow-up state with `download pages <gid> --json`, `download list --json`, and `library list --json`.
 ```
 
+## Bug Fix Context
+
+```text
+When a deployed bot or agent shows a bug, triage the failing layer first, then add a regression test before changing the implementation. Prefer the narrowest reproducible command in CLI or daemon form, and validate the real bot/deployment path after local checks.
+```
+
 ## State Boundary Context
 
 ```text

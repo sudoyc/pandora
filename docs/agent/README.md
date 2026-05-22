@@ -57,6 +57,9 @@ Prefer installed `pandora ...` commands when Pandora is installed as a CLI packa
 - Downloads: [`workflows/download.md`](workflows/download.md)
 - Library: [`workflows/library.md`](workflows/library.md)
 - Failure recovery: [`workflows/failure-recovery.md`](workflows/failure-recovery.md)
+- Bug triage: [`workflows/bug-triage.md`](workflows/bug-triage.md)
+- Bug fix lifecycle: [`workflows/bug-fix-lifecycle.md`](workflows/bug-fix-lifecycle.md)
+- Bug fix snippet: [`snippets/bug-fix-agent.md`](snippets/bug-fix-agent.md)
 
 ## Core Rule
 
