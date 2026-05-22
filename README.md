@@ -85,7 +85,7 @@ pandora toplist --tl 15 --json
 pandora watched --page 0 --json
 ```
 
-Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download watch` also supports `--ndjson` for streaming events.
+Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download watch --ndjson` is the preferred streaming machine mode. In machine mode, CLI failures use a stable envelope like `{"ok": false, "error": {"code": "connect_error", "message": "..."}}`.
 
 ## Quick Start
 
@@ -121,6 +121,8 @@ uv run python -m pandora_daemon.cli search "keyword" --json
 uv run python -m pandora_daemon.cli dl "https://exhentai.org/g/12345/abcdef0123/"
 ```
 
+See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes.
+
 ## Development
 
 ```bash
@@ -133,7 +135,7 @@ cd pandora-web && npm run lint && npm run build
 
 ## API Reference
 
-Full daemon REST API and `exhentai_api` method reference in [`docs/`](docs/).
+Full daemon REST API and `exhentai_api` method reference in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md).
 
 ## License
 

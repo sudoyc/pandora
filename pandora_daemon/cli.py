@@ -7,7 +7,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 from rich.console import Console
@@ -54,6 +54,34 @@ def _json_dump(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
+def _json_line(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _machine_error(code: str, message: str) -> dict[str, Any]:
+    return {"ok": False, "error": {"code": code, "message": message}}
+
+
+class PandoraArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that emits JSON errors when machine output is requested."""
+
+    _current_argv: list[str] = []
+
+    def parse_args(self, args=None, namespace=None):
+        type(self)._current_argv = list(sys.argv[1:] if args is None else args)
+        return super().parse_args(args, namespace)
+
+    def error(self, message: str) -> NoReturn:
+        argv = type(self)._current_argv
+        machine_mode = "--json" in argv or "--ndjson" in argv
+        ndjson = "--ndjson" in argv
+        if machine_mode:
+            payload = _machine_error("usage_error", message)
+            print(_json_line(payload) if ndjson else _json_dump(payload))
+            self.exit(2)
+        super().error(message)
+
+
 def _load_daemon_config(config_path: Path | str | None = None):
     return load_config(_default_config_path() if config_path is None else config_path)
 
@@ -64,6 +92,20 @@ async def _request_json(client: httpx.AsyncClient, method: str, path: str, **kwa
     if not response.content:
         return None
     return response.json()
+
+
+def _emit_machine_error(code: str, message: str, *, ndjson: bool = False) -> int:
+    payload = _machine_error(code, message)
+    print(_json_line(payload) if ndjson else _json_dump(payload))
+    return 1
+
+
+def _is_machine_mode(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "json", False) or getattr(args, "ndjson", False))
+
+
+def _machine_ndjson(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "ndjson", False))
 
 
 async def _download_statuses(client: httpx.AsyncClient) -> list[dict[str, Any]]:
@@ -82,7 +124,12 @@ _DOWNLOAD_FAILURE_EVENTS = {
 _DOWNLOAD_TERMINAL_EVENTS = _DOWNLOAD_SUCCESS_EVENTS | _DOWNLOAD_FAILURE_EVENTS
 
 
-async def _watch_download_events(daemon_url: str, gid: str | None = None, ndjson: bool = False) -> int:
+async def _watch_download_events(
+    daemon_url: str,
+    gid: str | None = None,
+    ndjson: bool = False,
+    json_output: bool = False,
+) -> int:
     ws_url = daemon_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
     try:
         import websockets
@@ -99,9 +146,17 @@ async def _watch_download_events(daemon_url: str, gid: str | None = None, ndjson
     except KeyboardInterrupt:
         return 130
     except ImportError:
+        if ndjson:
+            return _emit_machine_error("websocket_dependency_missing", "websockets not installed", ndjson=True)
+        if json_output:
+            return _emit_machine_error("websocket_dependency_missing", "websockets not installed")
         Console().print("[red]websockets not installed[/red]")
         return 1
     except Exception as e:
+        if ndjson:
+            return _emit_machine_error("websocket_error", str(e), ndjson=True)
+        if json_output:
+            return _emit_machine_error("websocket_error", str(e))
         Console().print(f"[red]WebSocket error: {e}[/red]")
         return 1
     return 0
@@ -276,9 +331,9 @@ async def status_command(daemon_url: str) -> int:
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--daemon-url", default=None, help="Daemon base URL")
-    parser.add_argument("--json", action="store_true", help="Output JSON")
-    parser.add_argument("--timeout", type=float, default=30.0, help="Request timeout in seconds")
+    parser.add_argument("--daemon-url", default=argparse.SUPPRESS, help="Daemon base URL")
+    parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Output JSON")
+    parser.add_argument("--timeout", type=float, default=argparse.SUPPRESS, help="Request timeout in seconds")
 
 
 _DOWNLOAD_SUBCOMMANDS = {"add", "list", "watch", "cancel", "resume", "retry", "pages"}
@@ -287,25 +342,39 @@ _DOWNLOAD_SUBCOMMANDS = {"add", "list", "watch", "cancel", "resume", "retry", "p
 def _normalize_argv(argv: list[str] | None = None) -> list[str]:
     """Rewrite legacy `download <url>` / `dl <url>` into `download legacy <url>`."""
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) >= 2 and args[0] in {"download", "dl"} and args[1] not in _DOWNLOAD_SUBCOMMANDS:
-        return [args[0], "legacy", *args[1:]]
+    if len(args) < 2 or args[0] not in {"download", "dl"}:
+        return args
+
+    idx = 1
+    options_with_values = {"--daemon-url", "--timeout"}
+    while idx < len(args) and args[idx].startswith("-"):
+        option = args[idx]
+        idx += 1
+        if option in options_with_values and idx < len(args):
+            idx += 1
+
+    if idx < len(args) and args[idx] not in _DOWNLOAD_SUBCOMMANDS:
+        return [*args[:idx], "legacy", *args[idx:]]
     return args
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
-    parser = argparse.ArgumentParser(
+    parser = PandoraArgumentParser(
         prog="pandora",
         description="Pandora CLI — ExHentai daemon client",
     )
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", parser_class=PandoraArgumentParser)
 
     download_parser = subparsers.add_parser(
         "download",
         aliases=["dl"],
         help="Manage gallery downloads",
     )
-    download_subparsers = download_parser.add_subparsers(dest="download_command")
+    download_subparsers = download_parser.add_subparsers(
+        dest="download_command",
+        parser_class=PandoraArgumentParser,
+    )
 
     download_add = download_subparsers.add_parser("add", help="Submit a gallery download")
     download_add.add_argument("target", help="Gallery URL or gid")
@@ -362,7 +431,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(library_parser)
 
     tags_parser = subparsers.add_parser("tags", help="Tag utilities")
-    tags_subparsers = tags_parser.add_subparsers(dest="tags_command")
+    tags_subparsers = tags_parser.add_subparsers(dest="tags_command", parser_class=PandoraArgumentParser)
     tags_suggest = tags_subparsers.add_parser("suggest", help="Suggest tags")
     tags_suggest.add_argument("query")
     _add_common_options(tags_suggest)
@@ -384,6 +453,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(watched_parser)
 
     return parser
+
+
+def _finalize_common_option_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    if not hasattr(args, "daemon_url"):
+        args.daemon_url = None
+    if not hasattr(args, "json"):
+        args.json = False
+    if not hasattr(args, "timeout"):
+        args.timeout = 30.0
+    return args
 
 
 def _resolve_daemon_url(args: argparse.Namespace) -> str:
@@ -428,8 +507,11 @@ def _handle_local_passthrough(args: argparse.Namespace) -> int:
 
 
 async def _run_http_command(args: argparse.Namespace) -> int:
+    _finalize_common_option_defaults(args)
     command = _resolve_command_name(args.command)
     daemon_url = _resolve_daemon_url(args)
+    machine_mode = _is_machine_mode(args)
+    machine_ndjson = _machine_ndjson(args)
 
     try:
         async with httpx.AsyncClient(base_url=daemon_url, timeout=_client_timeout(args)) as client:
@@ -473,7 +555,7 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                     return _dispatch_json({"tasks": tasks} if args.json else tasks)
 
                 if download_command_name == "watch":
-                    return await _watch_download_events(daemon_url, args.gid, args.ndjson)
+                    return await _watch_download_events(daemon_url, args.gid, args.ndjson, args.json)
 
                 if download_command_name == "cancel":
                     data = await _request_json(client, "DELETE", f"/api/downloads/{args.gid}")
@@ -520,12 +602,20 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                 data = await _request_json(client, "GET", "/api/watched", params={"page": args.page})
                 return _dispatch_json(data) if args.json else _dispatch_json(data)
     except (httpx.ConnectError, httpx.TimeoutException):
+        if machine_mode:
+            return _emit_machine_error("connect_error", f"Cannot connect to daemon at {daemon_url}", ndjson=machine_ndjson)
         Console().print(f"[red]Cannot connect to daemon at {daemon_url}[/red]")
         return 1
     except httpx.HTTPStatusError as e:
-        Console().print(f"[red]HTTP error: {e.response.status_code} {e.response.text}[/red]")
+        message = f"{e.response.status_code} {e.response.text}"
+        if machine_mode:
+            return _emit_machine_error("http_error", message, ndjson=machine_ndjson)
+        Console().print(f"[red]HTTP error: {message}[/red]")
         return 1
     except ValueError as e:
+        code = "invalid_gallery_target" if command in {"gallery", "download"} else "invalid_argument"
+        if machine_mode:
+            return _emit_machine_error(code, str(e), ndjson=machine_ndjson)
         Console().print(f"[red]{e}[/red]")
         return 1
 
@@ -535,6 +625,7 @@ async def _run_http_command(args: argparse.Namespace) -> int:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args(_normalize_argv())
+    _finalize_common_option_defaults(args)
 
     if not getattr(args, "command", None):
         parser.print_help()

@@ -174,11 +174,23 @@ Download event examples:
 
 ## CLI
 
+Deployment, daemon startup, readiness checks, and systemd examples live in [`docs/deployment.md`](deployment.md).
+
 Global options on daemon-backed commands:
 
 - `--daemon-url http://127.0.0.1:7860`
 - `--json`
 - `--timeout 30`
+
+For `download watch`, use `--ndjson` as the preferred streaming machine mode. `--json` is accepted for JSON error envelopes, while successful watch output is still event-by-event.
+
+Machine-mode errors:
+
+```json
+{"ok": false, "error": {"code": "http_error", "message": "503 daemon unavailable"}}
+```
+
+Current tested error codes include `connect_error`, `http_error`, `invalid_gallery_target`, `usage_error`, `websocket_error`, and `websocket_dependency_missing`.
 
 Current commands:
 

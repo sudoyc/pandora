@@ -59,7 +59,7 @@ http://127.0.0.1:7860
 Basic health-style checks for agents:
 
 - `health --json` is a minimal capability probe; it intentionally omits credentials and local filesystem paths.
-- `config --json` returns public runtime config; credentials are omitted and proxy secrets are redacted.
+- `config --json` returns local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
 
 ```bash
 uv run python -m pandora_daemon.cli health --json
@@ -73,9 +73,26 @@ If the CLI reports it cannot connect, start the daemon first or pass:
 --daemon-url http://127.0.0.1:7860
 ```
 
+Deployment details, readiness checks, systemd examples, and smoke tests live in `docs/deployment.md`.
+
 ## CLI Commands for Agents
 
 Use JSON/NDJSON when scripting or delegating.
+
+When `--json` or `--ndjson` is set and a command fails, the CLI emits a stable machine-facing envelope:
+
+```json
+{"ok": false, "error": {"code": "connect_error", "message": "Cannot connect to daemon at http://127.0.0.1:7860"}}
+```
+
+Current tested error codes:
+
+- `connect_error`
+- `http_error`
+- `invalid_gallery_target`
+- `usage_error`
+- `websocket_error`
+- `websocket_dependency_missing`
 
 Browse/read-only commands:
 

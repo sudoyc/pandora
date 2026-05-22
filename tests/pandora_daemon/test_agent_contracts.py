@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from exhentai_api.models.comment import GalleryComment
 from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from pandora_daemon.config import DownloadConfig, PandoraConfig
+from pandora_daemon.cli import _machine_error
 from pandora_daemon.download import DownloadTask
 from pandora_daemon.routes.browse import _gallery_item_to_dict
 from pandora_daemon.routes.gallery import _detail_to_dict
@@ -277,3 +278,12 @@ def test_websocket_event_contract_examples():
         assert "event" in event
         assert "type" not in event
         assert isinstance(event["gid"], str)
+
+
+def test_cli_machine_error_envelope_contract_shape():
+    data = _machine_error("connect_error", "Cannot connect to daemon at http://127.0.0.1:7860")
+
+    _assert_keys(data, {"ok", "error"})
+    assert data["ok"] is False
+    _assert_keys(data["error"], {"code", "message"})
+    assert data["error"]["code"] == "connect_error"
