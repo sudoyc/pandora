@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/search-response.schema.json",
+  "title": "Pandora Gallery List Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "gid",
+      "token",
+      "title",
+      "category",
+      "uploader",
+      "thumb_url",
+      "posted",
+      "rating",
+      "pages",
+      "rated",
+      "thumb_width",
+      "thumb_height",
+      "url"
+    ],
+    "additionalProperties": true,
+    "properties": {
+      "gid": {"type": "string"},
+      "token": {"type": "string"},
+      "title": {"type": "string"},
+      "category": {"type": "string"},
+      "uploader": {"type": "string"},
+      "thumb_url": {"type": "string"},
+      "posted": {"type": "string"},
+      "rating": {"type": "number"},
+      "pages": {"type": "integer"},
+      "rated": {"type": "boolean"},
+      "thumb_width": {"type": "integer"},
+      "thumb_height": {"type": "integer"},
+      "url": {"type": "string"}
+    }
+  }
+}

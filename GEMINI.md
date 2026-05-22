@@ -1,16 +1,16 @@
 # Pandora Project Context
 
 ## Project Overview
-Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for CLI JSON/NDJSON and Hermes agent/plugin workflows. It consists of the reusable Python API library (`exhentai_api`), the local FastAPI daemon (`pandora-daemon`), a daemon-backed CLI, an optional Web frontend, and an archived Rust TUI.
+Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for CLI JSON/NDJSON and generic Agent Pack workflows. It consists of the reusable Python API library (`exhentai_api`), the local FastAPI daemon (`pandora-daemon`), a daemon-backed CLI, the multi-agent docs under `docs/agent/`, a Hermes skill as one packaged consumer, an optional Web frontend, and an archived Rust TUI.
 
 *Note: The `ARCHITECTURE.md` file in the project root is a detailed research report on the `Ehviewer_CN_SXJ` Android application, which serves as the reference implementation and inspiration for Pandora's API and data models.*
 
 ### Architecture
 - **exhentai_api (Python)**: The core, stateless abstraction over the ExHentai site.
 - **pandora-daemon (Python/FastAPI)**: The intermediary that handles sessions, caching, database persistence (SQLite), download management, and provides a proxy for images. It runs a REST + WebSocket API on `localhost:7860`. All frontends MUST communicate with ExHentai through this daemon.
-- **CLI / Hermes workflows**: Primary integration surface for agents and scripts. Use `health --json`, `config --json`, REST, and WebSocket/NDJSON events.
+- **Agent Pack + CLI workflows**: Primary integration surface for agents and scripts. Use `docs/agent/` for reusable context/snippets/schemas, and use CLI `health --json`, `config --json`, REST, and WebSocket/NDJSON events for machine operations.
 - **pandora-tui (Rust)**: Archived/frozen. Do not improve or extend it; keep only as historical REST/WS consumer reference.
-- **Web Frontend**: Optional human UI, lower priority than daemon/CLI/Hermes contracts.
+- **Web Frontend**: Optional human UI, lower priority than daemon/CLI/Agent Pack contracts.
 
 ### Core Principles
 - **No Direct Access:** Frontends NEVER access ExHentai directly. All traffic is routed through `pandora-daemon`.
@@ -20,7 +20,7 @@ Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for
 ## Current Status
 - **exhentai_api**: Completed. (22 API methods, 17 model types, 11 parsers, fully tested).
 - **pandora-daemon**: Completed. (Proxy, SQLite DB, Background prefetch, Download manager, WebSocket events).
-- **CLI/Hermes contracts**: **Current objective.**
+- **Agent Pack/CLI contracts**: **Current objective.** Generic multi-agent context, workflows, snippets, schemas, and daemon-backed machine commands live under `docs/agent/`; Hermes skill consumes them as one package.
 - **pandora-tui**: Archived/frozen.
 - **Web Frontend**: Optional WIP.
 
@@ -50,5 +50,5 @@ uv run python -m pandora_daemon.cli status --json
 
 ## Next Steps
 1. Keep daemon REST and CLI JSON/NDJSON contracts stable and covered by tests.
-2. Package common flows in the Hermes skill/plugin layer without exposing credentials.
+2. Keep `docs/agent/` as the generic multi-agent pack; any Hermes/plugin/toolset wrapper must remain thin and daemon-backed.
 3. Treat Web as optional and TUI as archived/frozen.

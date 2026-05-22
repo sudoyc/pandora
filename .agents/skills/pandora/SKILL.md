@@ -16,15 +16,25 @@ allowed-tools: Bash(uv:*), Bash(git:*), Bash(cargo:*), Bash(npm:*)
 
 ## Overview
 
-Pandora is a local ExHentai/E-Hentai browser and downloader with a daemon-first, CLI/Hermes-friendly architecture. This skill is for agents that need to inspect, operate, test, or extend Pandora without relying on a human clicking through a UI.
+Pandora is a local ExHentai/E-Hentai browser and downloader with a daemon-first, Agent Pack-friendly architecture. This skill is for agents that need to inspect, operate, test, or extend Pandora without relying on a human clicking through a UI.
 
-This repo ships the Hermes integration as a skill/runbook first. There is no separate Hermes plugin or toolset package to import today; use the `pandora` CLI entrypoint from `pyproject.toml` or the daemon REST/WebSocket contract directly.
+The canonical generic agent documentation is the Pandora Agent Pack under `docs/agent/`. This Hermes skill is one packaged consumer of that Agent Pack, not the source of truth and not a state layer. There is no separate Hermes plugin or toolset package to import today; use the `pandora` CLI entrypoint from `pyproject.toml` or the daemon REST/WebSocket contract directly.
+
+Agent Pack references:
+
+- `docs/agent/README.md` — overview and workflow index.
+- `docs/agent/context-pack.md` — copy-pasteable base context blocks.
+- `docs/agent/contract.md` — CLI/REST/WebSocket machine contract.
+- `docs/agent/safety.md` — credential, privacy, mutation, and state boundaries.
+- `docs/agent/workflows/` — bootstrap, search, tag resolution, gallery inspection, downloads, library, failure recovery.
+- `docs/agent/snippets/` — standalone prompt snippets for different agent roles.
+- `docs/agent/schemas/` — lightweight JSON Schemas for common machine envelopes.
 
 Priority for agent work:
 
 1. Prefer daemon REST/CLI workflows with JSON or NDJSON output.
 2. Keep `exhentai_api` stateless.
-3. Treat Hermes skills/plugins as thin wrappers around daemon REST or CLI JSON/NDJSON.
+3. Treat Hermes skills/plugins as thin wrappers around the generic Agent Pack, daemon REST, or CLI JSON/NDJSON.
 4. Keep frontends thin: they call daemon REST + WebSocket only.
 5. Do not bypass the daemon from CLI/Web or any future plugin.
 6. Treat `pandora-tui/` as archived/frozen; do not improve it.
@@ -34,7 +44,7 @@ Priority for agent work:
 ```text
 exhentai_api (stateless Python library)
         -> pandora-daemon (FastAPI + SQLite + cache + downloads)
-        -> consumers (Python CLI, Hermes skill/plugin, optional React web)
+        -> consumers (Python CLI, Agent Pack, Hermes skill/plugin, optional React web)
 ```
 
 Layer rules:
@@ -47,7 +57,7 @@ Layer rules:
 
 Future Hermes plugin/toolset boundary:
 
-- Wrap `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints only.
+- Wrap `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints only, following `docs/agent/`.
 - Do not import `exhentai_api` from Hermes code for auth, browse, search, cache, or downloads.
 - Do not create a second stateful layer for credentials, sessions, cache, queue, bookmarks, or library state.
 - Keep ambiguous decisions in the agent. Pandora exposes primitives and stable machine output.
@@ -86,7 +96,7 @@ If the CLI reports it cannot connect, start the daemon first or pass:
 
 Deployment details, readiness checks, systemd examples, and smoke tests live in `docs/deployment.md`.
 
-Hermes session bootstrap:
+Hermes session bootstrap, based on `docs/agent/workflows/bootstrap.md`:
 
 1. Confirm the repository root and use `uv`; do not use global `pip`.
 2. Start the daemon if it is not already running: `uv run python -m pandora_daemon`.
@@ -182,6 +192,8 @@ pandora status
 
 ## Download Event Contract
 
+The full generic contract lives in `docs/agent/contract.md` and `docs/agent/schemas/download-event.schema.json`.
+
 WebSocket path:
 
 ```text
@@ -254,7 +266,7 @@ cd pandora-web && npm run lint && npm run build
 2. Treating `download_paused` as non-terminal leaves CLI/agents hanging.
 3. JSON persistence turns dict keys into strings; convert `page_states` keys back to `int` on load.
 4. Existing page files must update progress counters, or resumed downloads under-report completion.
-5. Web work is not the default priority for agent automation; prefer CLI/daemon/Hermes first.
+5. Web work is not the default priority for agent automation; prefer CLI/daemon/Agent Pack workflows first.
 6. TUI work is not active; preserve it only as archived reference unless explicitly instructed otherwise.
 7. On Arch/PEP-668 environments use `uv`; do not install dependencies with global `pip`.
 

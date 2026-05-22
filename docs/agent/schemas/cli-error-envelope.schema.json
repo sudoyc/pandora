@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/cli-error-envelope.schema.json",
+  "title": "Pandora CLI Error Envelope",
+  "type": "object",
+  "required": ["ok", "error"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {"const": false},
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "connect_error",
+            "http_error",
+            "invalid_gallery_target",
+            "usage_error",
+            "websocket_error",
+            "websocket_dependency_missing"
+          ]
+        },
+        "message": {"type": "string"}
+      }
+    }
+  }
+}

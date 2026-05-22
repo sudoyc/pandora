@@ -6,9 +6,9 @@
 
 ## 项目定位
 
-Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先方向是稳定的 daemon + CLI + Hermes agent/plugin 契约。名字取自潘多拉之盒与 Sad Panda 的双关。
+Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先方向是稳定的 daemon + CLI + Agent Pack 契约。名字取自潘多拉之盒与 Sad Panda 的双关。
 
-核心目标：通过本地 daemon 提供认证、缓存、下载、数据库与图片代理能力；CLI/Hermes 使用稳定 JSON/NDJSON 契约自动化操作。Bot 优先使用 `download run --ndjson`。Web 是可选人类 UI，`pandora-tui/` 已归档冻结，客户端缓存/预取重构不属于当前主线。
+核心目标：通过本地 daemon 提供认证、缓存、下载、数据库与图片代理能力；CLI 与通用 Agent Pack 使用稳定 JSON/NDJSON、REST、WebSocket 契约自动化操作。Hermes skill 是 Agent Pack 的首个打包消费者。Bot 优先使用 `download run --ndjson`。Web 是可选人类 UI，`pandora-tui/` 已归档冻结，客户端缓存/预取重构不属于当前主线。
 
 ---
 
@@ -18,9 +18,9 @@ Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先�
 ┌─────────────────────────────────────────────────────┐
 │          消费层 (Consumers / Agent Workflows)         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
-│  │ CLI      │  │ Hermes   │  │ Web SPA  │           │
-│  │ (Python) │  │ skill now │ │ (React)  │           │
-│  │          │  │ thin tool │ │          │           │
+│  │ CLI      │  │ Agents   │  │ Web SPA  │           │
+│  │ (Python) │  │ Pack +   │ │ (React)  │           │
+│  │          │  │ Hermes   │ │          │           │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘           │
 │       │              │              │                 │
 │       └──────────────┼──────────────┘                 │
@@ -51,19 +51,20 @@ Pandora 是一个 ExHentai/E-Hentai 画廊浏览器与下载器，当前优先�
 |---|---|---|
 | exhentai_api | HTTP 请求、HTML 解析、数据模型定义 | 无状态、无缓存、无配置、无持久化 |
 | pandora-daemon | 会话管理、下载队列、图片缓存、数据库持久化、配置管理 | 不做 UI 渲染 |
-| 消费层 | CLI JSON/NDJSON、Hermes 自动化、可选 Web UI | 不直接请求 ExHentai |
+| 消费层 | CLI JSON/NDJSON、Agent Pack 自动化、Hermes skill、可选 Web UI | 不直接请求 ExHentai |
 
-### Hermes 集成边界
+### Agent Pack 集成边界
 
-当前 Hermes 集成以仓库内 `.agents/skills/pandora/SKILL.md` 为主，不引入独立 plugin/toolset 包。未来如果增加 Hermes plugin/toolset，也必须保持薄封装：只包装 `pandora` CLI 的 JSON/NDJSON 命令，或直接调用 daemon REST/WebSocket 契约。
+当前通用 agent 契约以 `docs/agent/` 下的 Pandora Agent Pack 为准。Hermes 通过仓库内 `.agents/skills/pandora/SKILL.md` 消费该 Agent Pack，不引入独立 plugin/toolset 包。未来如果增加 Hermes plugin/toolset 或其他 agent wrapper，也必须保持薄封装：只包装 `pandora` CLI 的 JSON/NDJSON 命令，或直接调用 daemon REST/WebSocket 契约。
 
 边界规则：
 
-- Hermes 不直接调用 `exhentai_api` 执行认证、搜索、下载或缓存相关用户流程。
-- Hermes 不维护第二套 credential/session/cache/download queue/bookmark/library 状态。
+- Agent、Hermes skill、未来 wrappers 不直接调用 `exhentai_api` 执行认证、搜索、下载或缓存相关用户流程。
+- Agent、Hermes skill、未来 wrappers 不维护第二套 credential/session/cache/download queue/bookmark/library 状态。
 - 机器输出优先使用 `--json` / `--ndjson`，不要解析 human-readable CLI 文本。
 - 复杂决策留在 agent 层；Pandora 只提供稳定原语。
 - 翻译标签搜索保持 scheme A：`tags status` → 必要时 `tags refresh` → `tags suggest` → agent 选择候选 → `search --search-tags`，不自动把中文或其他翻译文本改写为 ExHentai 标签语法。
+- 通用文档见 `docs/agent/README.md`；Hermes-specific 打包说明见 `docs/hermes_integration.md`。
 
 ### 为什么这样分
 
@@ -293,7 +294,7 @@ pandora favorites list --json
 pandora popular --json
 ```
 
-轻量级命令行工具，直接调用 daemon REST API；优先服务 agent/Hermes/脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。`download run --ndjson` 是 bot 下载主路径：先连接 WS，再提交 `/api/downloads` 并输出 `download_submitted`，遇到 HTTP 409 活跃重复任务时输出 `download_already_queued` 并继续监听 WS 终态事件。`download add` + `download watch` 仍保留，但拆成两个命令时可能错过提交后立刻发出的事件。`gallery` CLI 输出默认移除 `api_uid`/`api_key`，`download pages --json` 将内部 `done` 映射为公开状态 `completed`。搜索/标签采用 scheme A：CLI 不做自动标签解析，agent 应显式执行 `tags suggest`、自行选择候选，再调用 `search`。
+轻量级命令行工具，直接调用 daemon REST API；优先服务 Agent Pack、Hermes、脚本化场景，因此新增命令默认支持 JSON/NDJSON 输出。`download run --ndjson` 是 bot 下载主路径：先连接 WS，再提交 `/api/downloads` 并输出 `download_submitted`，遇到 HTTP 409 活跃重复任务时输出 `download_already_queued` 并继续监听 WS 终态事件。`download add` + `download watch` 仍保留，但拆成两个命令时可能错过提交后立刻发出的事件。`gallery` CLI 输出默认移除 `api_uid`/`api_key`，`download pages --json` 将内部 `done` 映射为公开状态 `completed`。搜索/标签采用 scheme A：CLI 不做自动标签解析，agent 应显式执行 `tags suggest`、自行选择候选，再调用 `search`。
 
 #### TUI (`pandora-tui/`, Rust, 已归档冻结)
 

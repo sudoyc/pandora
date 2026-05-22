@@ -3,7 +3,7 @@
 日期: 2026-04-06
 范围: 审计报告 `docs/tui-audit-2026-04-05.md` 中 19 个 bug 的历史修复方案
 状态: 已归档。`pandora-tui/` 已冻结且不再维护；本文不再作为待执行开发计划。
-依据: 历史审计记录；当前优先保障 daemon/CLI/Hermes 契约。
+依据: 历史审计记录；当前优先保障 daemon/CLI/Agent Pack 契约。
 
 > 不要继续实现本文的 TUI 修复项。若旧 TUI 暴露出 daemon API 契约问题，请把契约固化到 `tests/pandora_daemon/`，而不是维护 TUI。
 

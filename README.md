@@ -10,20 +10,23 @@ exhentai_api (Python library)     -- stateless, reusable
 pandora-daemon (FastAPI)          -- session, cache, download, image proxy
         | REST + WebSocket (localhost:7860)
         |-- CLI                   -- daemon-backed JSON/NDJSON workflow
-        |-- Hermes skill          -- agent automation layer today
-        |   thin plugin/toolset  -- optional future wrapper
+        |-- Agent Pack            -- generic daemon-backed agent workflows
+        |   |-- Hermes skill      -- first packaged consumer
+        |   +-- thin wrappers     -- optional future consumers
         +-- Web frontend          -- optional browser UI, work in progress
 ```
 
-**Design principle:** frontends and agents never access ExHentai directly. All requests go through the daemon, which handles session, caching, downloads, and rate limiting. Agent/bot workflows should prefer the CLI JSON/NDJSON contract over Web/TUI/client-cache work.
+**Design principle:** frontends and agents never access ExHentai directly. All requests go through the daemon, which handles session, caching, downloads, and rate limiting. Agent/bot workflows should prefer the generic [Pandora Agent Pack](docs/agent/README.md) and CLI JSON/NDJSON contract over Web/TUI/client-cache work.
 
-## Hermes Integration
+## Agent Pack
 
-Pandora is immediately usable from Hermes through the repo-shipped skill at `.agents/skills/pandora/SKILL.md` plus the `pandora` CLI entrypoint. There is no separate in-repo Hermes plugin/toolset package yet.
+Pandora's canonical agent-facing integration is the [Pandora Agent Pack](docs/agent/README.md). It documents reusable context, contracts, workflows, snippets, JSON schemas, and safety boundaries for Hermes, OpenCode, Codex, Claude, MCP-style wrappers, shell scripts, and future thin plugins.
 
-The integration boundary is intentionally thin:
+Hermes is one packaged consumer through `.agents/skills/pandora/SKILL.md`; see [Hermes integration](docs/hermes_integration.md) for Hermes-specific packaging notes. There is no separate in-repo Hermes plugin/toolset package yet.
 
-- Hermes skills/plugins wrap `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints.
+The agent boundary is intentionally thin:
+
+- Agents and wrappers consume `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints.
 - They must not bypass `pandora-daemon` for auth, cache, download queue, session, bookmark, or library state.
 - They must not call `exhentai_api` directly for user workflows.
 - Prefer machine output (`--json`, `--ndjson`) over parsing human text.
@@ -145,7 +148,7 @@ uv run python -m pandora_daemon.cli search "keyword" --json
 uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/12345/abcdef0123/" --ndjson
 ```
 
-See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes. See [`docs/hermes_integration.md`](docs/hermes_integration.md) for the Hermes workflow boundary and copy-pasteable agent flows.
+See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes. See [`docs/agent/README.md`](docs/agent/README.md) for generic agent workflows and [`docs/hermes_integration.md`](docs/hermes_integration.md) for Hermes-specific packaging guidance.
 
 ## Development
 
@@ -159,7 +162,7 @@ cd pandora-web && npm run lint && npm run build
 
 ## API Reference
 
-Full daemon REST API and `exhentai_api` method reference in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/hermes_integration.md`](docs/hermes_integration.md).
+Full daemon REST API and `exhentai_api` method reference in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/agent/README.md`](docs/agent/README.md). Hermes-specific packaging guidance lives in [`docs/hermes_integration.md`](docs/hermes_integration.md).
 
 ## License
 
