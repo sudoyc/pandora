@@ -503,7 +503,7 @@ async def test_download_run_ndjson_submits_emits_submitted_then_watches(monkeypa
         return httpx.Response(200, json={"gid": "1234567", "status": "queued", "title": "Queued"})
 
     _mock_http_client(monkeypatch, handler)
-    fake_connect = MagicMock(return_value=_FakeWebSocket(['{"event":"download_complete","gid":"1234567","path":"/tmp/out"}']))
+    fake_connect = MagicMock(return_value=_FakeWebSocket(['{"event":"download_complete","gid":"1234567"}']))
     with patch.dict("sys.modules", {"websockets": type("Ws", (), {"connect": fake_connect})}):
         args = build_parser().parse_args([
             "download",
@@ -519,7 +519,7 @@ async def test_download_run_ndjson_submits_emits_submitted_then_watches(monkeypa
     assert code == 0
     assert requests == [("POST", "/api/downloads", {"gid": "1234567", "token": "a1b2c3d4e5"})]
     assert lines[0] == {"event": "download_submitted", "gid": "1234567", "status": "queued", "title": "Queued"}
-    assert lines[1] == {"event": "download_complete", "gid": "1234567", "path": "/tmp/out"}
+    assert lines[1] == {"event": "download_complete", "gid": "1234567"}
 
 
 @pytest.mark.asyncio

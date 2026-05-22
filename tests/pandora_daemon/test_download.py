@@ -128,6 +128,25 @@ def test_download_task_to_dict():
     assert d["thumb_urls"] == []
 
 
+def test_download_task_to_public_dict_redacts_internal_fields():
+    task = DownloadTask(
+        gid="42",
+        token="xyz",
+        title="Gallery 42",
+        total_pages=5,
+        output_dir="/tmp/42",
+    )
+    d = task.to_public_dict()
+    assert isinstance(d, dict)
+    assert d["gid"] == "42"
+    assert d["title"] == "Gallery 42"
+    assert "token" not in d
+    assert "output_dir" not in d
+    assert "viewer_urls" not in d
+    assert "thumb_urls" not in d
+    assert "thumb_sprites" not in d
+
+
 # ---------------------------------------------------------------------------
 # DownloadManager.submit
 # ---------------------------------------------------------------------------
@@ -232,6 +251,78 @@ async def test_cancel_nonexistent(mock_api, mock_ws, mock_image_service, downloa
     result = await manager.cancel("999")
 
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_submit_clears_cancelled_state_for_same_gid(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    await manager.submit("123", "abc")
+    await manager.cancel("123")
+    manager._download_gallery = AsyncMock()
+
+    await manager.submit("123", "abc")
+    await manager.start()
+
+    try:
+        await asyncio.wait_for(manager._queue.join(), timeout=1)
+    finally:
+        await manager.shutdown()
+
+    assert "123" not in manager._cancelled
+    assert manager._download_gallery.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_resume_clears_cancelled_state_for_same_gid(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    manager._tasks["123"] = DownloadTask(
+        gid="123",
+        token="abc",
+        title="Test Gallery",
+        total_pages=3,
+        output_dir=str(Path(download_config.path) / "123-Test Gallery"),
+        status="paused",
+    )
+    manager._cancelled.add("123")
+    manager._download_gallery = AsyncMock()
+
+    assert await manager.resume("123") is True
+    await manager.start()
+
+    try:
+        await asyncio.wait_for(manager._queue.join(), timeout=1)
+    finally:
+        await manager.shutdown()
+
+    assert "123" not in manager._cancelled
+    assert manager._download_gallery.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_clears_cancelled_state_for_same_gid(mock_api, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    manager._tasks["123"] = DownloadTask(
+        gid="123",
+        token="abc",
+        title="Test Gallery",
+        total_pages=3,
+        output_dir=str(Path(download_config.path) / "123-Test Gallery"),
+        status="completed_with_errors",
+        failed_pages=[2],
+    )
+    manager._cancelled.add("123")
+    manager._download_gallery = AsyncMock()
+
+    assert await manager.retry_failed("123") is True
+    await manager.start()
+
+    try:
+        await asyncio.wait_for(manager._queue.join(), timeout=1)
+    finally:
+        await manager.shutdown()
+
+    assert "123" not in manager._cancelled
+    assert manager._download_gallery.await_count >= 1
 
 
 # ---------------------------------------------------------------------------

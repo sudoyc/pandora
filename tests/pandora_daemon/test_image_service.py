@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections import namedtuple
+import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -38,71 +40,140 @@ def mock_cache():
     return cache
 
 
+@pytest.fixture
+def allow_public_dns():
+    addr = namedtuple("Addr", "family type proto canonname sockaddr")
+
+    def _mock(host, *args, **kwargs):
+        if host in {"exhentai.org", "e-hentai.org", "ehgt.org"}:
+            return [addr(0, 0, 0, "", ("93.184.216.34", 0))]
+        raise socket.gaierror()
+
+    with patch("pandora_daemon.image_service.socket.getaddrinfo", side_effect=_mock):
+        yield
+
+
 class TestProxyImage:
     @pytest.mark.asyncio
-    async def test_proxy_cache_hit(self, mock_api, mock_cache, cache_config):
+    async def test_proxy_cache_hit(self, mock_api, mock_cache, cache_config, allow_public_dns):
         mock_cache.get_image = AsyncMock(return_value=b"cached_bytes")
         svc = ImageService(mock_api, mock_cache, cache_config)
 
-        result = await svc.proxy_image("https://example.com/img.jpg")
+        result = await svc.proxy_image("https://exhentai.org/images/img.jpg")
 
         assert result == b"cached_bytes"
-        mock_cache.get_image.assert_awaited_once_with("https://example.com/img.jpg")
+        mock_cache.get_image.assert_awaited_once_with("https://exhentai.org/images/img.jpg")
 
     @pytest.mark.asyncio
-    async def test_proxy_cache_miss_fetches(self, mock_api, mock_cache, cache_config):
+    async def test_proxy_cache_miss_fetches(self, mock_api, mock_cache, cache_config, allow_public_dns):
         mock_cache.get_image = AsyncMock(return_value=None)
         resp = MagicMock()
         resp.raise_for_status = MagicMock()
-        resp.content = b"fetched_bytes"
-        mock_api.client.session.get = AsyncMock(return_value=resp)
+        resp.content = b"\xff\xd8\xfffetched_bytes"
+        resp.headers = {"content-type": "image/jpeg"}
+        mock_api.client.session = MagicMock()
 
         svc = ImageService(mock_api, mock_cache, cache_config)
-        result = await svc.proxy_image("https://example.com/img.jpg")
+        with patch("pandora_daemon.image_service.httpx.AsyncClient") as mock_client_cls:
+            client = AsyncMock()
+            client.cookies = MagicMock()
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = False
+            client.get = AsyncMock(return_value=resp)
+            mock_client_cls.return_value = client
 
-        assert result == b"fetched_bytes"
-        mock_cache.put_image.assert_awaited_once_with("https://example.com/img.jpg", b"fetched_bytes")
+            result = await svc.proxy_image("https://exhentai.org/images/img.jpg")
+
+        assert result == b"\xff\xd8\xfffetched_bytes"
+        mock_cache.put_image.assert_awaited_once_with("https://exhentai.org/images/img.jpg", b"\xff\xd8\xfffetched_bytes")
+        mock_api.client.session.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_proxy_rejects_non_allowlisted_host(self, mock_api, mock_cache, cache_config):
+        svc = ImageService(mock_api, mock_cache, cache_config)
+
+        with pytest.raises(PermissionError):
+            await svc.proxy_image("https://example.com/img.jpg")
+
+    @pytest.mark.asyncio
+    async def test_proxy_rejects_credentials(self, mock_api, mock_cache, cache_config, allow_public_dns):
+        svc = ImageService(mock_api, mock_cache, cache_config)
+
+        with pytest.raises(PermissionError):
+            await svc.proxy_image("https://user:pass@exhentai.org/img.jpg")
 
 
 class TestGetPageImage:
     @pytest.mark.asyncio
-    async def test_page_image_cached(self, mock_api, mock_cache, cache_config):
+    async def test_page_image_cached(self, mock_api, mock_cache, cache_config, allow_public_dns):
         svc = ImageService(mock_api, mock_cache, cache_config)
-        svc._page_url_cache["123:1"] = "https://cdn.example.com/full.jpg"
+        svc._page_url_cache["123:1"] = "https://ehgt.org/full.jpg"
         mock_cache.get_image = AsyncMock(return_value=b"page_bytes")
 
         result = await svc.get_page_image("123", "abc", 1)
 
         assert result == b"page_bytes"
-        mock_cache.get_image.assert_awaited_once_with("https://cdn.example.com/full.jpg")
+        mock_cache.get_image.assert_awaited_once_with("https://ehgt.org/full.jpg")
 
     @pytest.mark.asyncio
-    async def test_page_image_not_cached(self, mock_api, mock_cache, cache_config):
+    async def test_page_image_not_cached(self, mock_api, mock_cache, cache_config, allow_public_dns):
         detail = MagicMock()
         detail.viewer_urls = ["https://exhentai.org/s/imgkey1/123-1"]
         detail.pages = 1
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
-        viewer_html = '<html><body><img id="img" src="https://cdn.example.com/full.jpg" /><script>nl(\'nltoken\')</script></body></html>'
+        viewer_html = '<html><body><img id="img" src="https://ehgt.org/full.jpg" /><script>nl(\'nltoken\')</script></body></html>'
         mock_api.client.get_html = AsyncMock(return_value=viewer_html)
 
         mock_cache.get_image = AsyncMock(return_value=None)
         img_resp = MagicMock()
         img_resp.raise_for_status = MagicMock()
-        img_resp.content = b"image_data"
+        img_resp.content = b"\xff\xd8\xffimage_data"
+        img_resp.headers = {"content-type": "image/jpeg"}
+        mock_api.client.session = MagicMock()
         mock_api.client.session.get = AsyncMock(return_value=img_resp)
 
-        svc = ImageService(mock_api, mock_cache, cache_config)
-        result = await svc.get_page_image("123", "abc", 1)
+        with patch("pandora_daemon.image_service.httpx.AsyncClient") as mock_client_cls:
+            client = AsyncMock()
+            client.cookies = MagicMock()
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = False
+            client.get = AsyncMock(return_value=img_resp)
+            mock_client_cls.return_value = client
 
-        assert result == b"image_data"
-        mock_cache.put_image.assert_awaited_once_with("https://cdn.example.com/full.jpg", b"image_data")
-        assert svc._page_url_cache["123:1"] == "https://cdn.example.com/full.jpg"
+            svc = ImageService(mock_api, mock_cache, cache_config)
+            result = await svc.get_page_image("123", "abc", 1)
+
+        assert result == b"\xff\xd8\xffimage_data"
+        mock_cache.put_image.assert_awaited_once_with("https://ehgt.org/full.jpg", b"\xff\xd8\xffimage_data")
+        mock_api.client.session.get.assert_not_called()
+        assert svc._page_url_cache["123:1"] == "https://ehgt.org/full.jpg"
+
+    @pytest.mark.asyncio
+    async def test_proxy_rejects_redirect_to_non_allowlisted_host(self, mock_api, mock_cache, cache_config, allow_public_dns):
+        mock_cache.get_image = AsyncMock(return_value=None)
+        first = MagicMock()
+        first.status_code = 302
+        first.headers = {"location": "https://example.com/img.jpg"}
+        first.url = "https://exhentai.org/images/img.jpg"
+
+        with patch("pandora_daemon.image_service.httpx.AsyncClient") as mock_client_cls:
+            client = AsyncMock()
+            client.cookies = MagicMock()
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = False
+            client.get = AsyncMock(return_value=first)
+            mock_client_cls.return_value = client
+
+            svc = ImageService(mock_api, mock_cache, cache_config)
+
+            with pytest.raises(PermissionError):
+                await svc.proxy_image("https://exhentai.org/images/img.jpg")
 
 
 class TestPrefetch:
     @pytest.mark.asyncio
-    async def test_prefetch_schedules_tasks(self, mock_api, mock_cache, cache_config):
+    async def test_prefetch_schedules_tasks(self, mock_api, mock_cache, cache_config, allow_public_dns):
         detail = MagicMock()
         detail.viewer_urls = [f"https://exhentai.org/s/key{i}/123-{i+1}" for i in range(10)]
         mock_cache.get_gallery = MagicMock(return_value=detail)
@@ -120,7 +191,7 @@ class TestPrefetch:
         await svc.shutdown()
 
     @pytest.mark.asyncio
-    async def test_prefetch_clamps_to_bounds(self, mock_api, mock_cache, cache_config):
+    async def test_prefetch_clamps_to_bounds(self, mock_api, mock_cache, cache_config, allow_public_dns):
         detail = MagicMock()
         detail.viewer_urls = [f"https://exhentai.org/s/key{i}/123-{i+1}" for i in range(5)]
         mock_cache.get_gallery = MagicMock(return_value=detail)

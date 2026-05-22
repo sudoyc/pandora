@@ -1,6 +1,6 @@
 ---
 name: pandora
-description: Use when operating or modifying Pandora via agents: daemon lifecycle, CLI JSON/NDJSON workflows, download state handling, and repository verification.
+description: "Use when operating or modifying Pandora via agents: daemon lifecycle, CLI JSON/NDJSON workflows, download state handling, and repository verification."
 version: 1.0.0
 author: Pandora maintainers
 license: MIT
@@ -9,7 +9,7 @@ metadata:
   hermes:
     tags: [pandora, cli, daemon, agent-workflow, downloads]
     related_skills: [github-pr-workflow, test-driven-development]
-allowed-tools: Bash(uv:*), Bash(git:*), Bash(cargo:*), Bash(npm:*)
+allowed-tools: "Bash(uv:*), Bash(git:*), Bash(cargo:*), Bash(npm:*)"
 ---
 
 # Pandora Agent Skill

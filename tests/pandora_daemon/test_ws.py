@@ -60,7 +60,7 @@ class TestBroadcast:
         await manager.connect(ws1)
         await manager.connect(ws2)
 
-        event = {"event": "download_progress", "gid": "123", "page": 5, "total": 20}
+        event = {"event": "download_complete", "gid": "123"}
         await manager.broadcast(event)
 
         ws1.send_json.assert_called_once_with(event)

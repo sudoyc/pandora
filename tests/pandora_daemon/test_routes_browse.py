@@ -286,11 +286,11 @@ class TestImageProxy:
         app = _make_app(mock_api, mock_image_service=mock_image_service)
         client = TestClient(app)
 
-        response = client.get("/api/image/proxy?url=https://example.com/img.jpg")
+        response = client.get("/api/image/proxy?url=https://exhentai.org/images/img.jpg")
 
         assert response.status_code == 200
         assert response.content == b"\xff\xd8\xff\xe0cached"
-        mock_image_service.proxy_image.assert_awaited_once_with("https://example.com/img.jpg")
+        mock_image_service.proxy_image.assert_awaited_once_with("https://exhentai.org/images/img.jpg")
 
     def test_image_proxy_missing_url(self):
         """Request without url parameter returns 422."""
@@ -301,3 +301,30 @@ class TestImageProxy:
         response = client.get("/api/image/proxy")
 
         assert response.status_code == 422
+
+    def test_image_proxy_rejects_non_allowlisted_url(self):
+        mock_api = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.proxy_image.side_effect = PermissionError("nope")
+
+        app = _make_app(mock_api, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/image/proxy?url=https://example.com/img.jpg")
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid image URL"
+        mock_image_service.proxy_image.assert_called_once_with("https://example.com/img.jpg")
+
+    def test_image_proxy_hides_fetch_errors(self):
+        mock_api = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.proxy_image.side_effect = RuntimeError("upstream failure leaked")
+
+        app = _make_app(mock_api, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/image/proxy?url=https://exhentai.org/images/img.jpg")
+
+        assert response.status_code == 502
+        assert response.json()["detail"] == "Failed to fetch image"

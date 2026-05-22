@@ -104,7 +104,6 @@ def test_gallery_detail_contract_shape():
         data,
         {
             "gid",
-            "token",
             "title",
             "title_jpn",
             "category",
@@ -116,18 +115,19 @@ def test_gallery_detail_contract_shape():
             "posted",
             "favorite_slot",
             "preview_pages",
-            "thumb_urls",
             "rating",
             "rating_count",
             "favorite_count",
             "torrent_count",
             "comments",
             "comments_has_more",
-            "api_uid",
-            "api_key",
             "url",
         },
     )
+    assert "token" not in data
+    assert "thumb_urls" not in data
+    assert "api_uid" not in data
+    assert "api_key" not in data
     assert isinstance(data["tags"], dict)
     assert isinstance(data["comments"], list)
     assert data["comments"][0]["id"] == 7
@@ -146,16 +146,14 @@ def test_download_task_contract_shape():
     task.page_states = {1: "done", 5: "failed"}
     task.failed_pages = [5]
 
-    data = task.to_dict()
+    data = task.to_public_dict()
 
     _assert_keys(
         data,
         {
             "gid",
-            "token",
             "title",
             "total_pages",
-            "output_dir",
             "status",
             "downloaded_pages",
             "downloaded_thumbs",
@@ -163,13 +161,15 @@ def test_download_task_contract_shape():
             "metadata_saved",
             "error",
             "created_at",
-            "viewer_urls",
-            "thumb_urls",
-            "thumb_sprites",
             "page_states",
             "failed_pages",
         },
     )
+    assert "token" not in data
+    assert "output_dir" not in data
+    assert "viewer_urls" not in data
+    assert "thumb_urls" not in data
+    assert "thumb_sprites" not in data
     assert isinstance(data["page_states"], dict)
     assert json.loads(json.dumps(data))["page_states"]["5"] == "failed"
 
@@ -279,7 +279,7 @@ def test_websocket_event_contract_examples():
     examples = [
         {"event": "download_queued", "gid": "123", "title": "Download"},
         {"event": "download_progress", "gid": "123", "phase": "pages", "page": 1, "total": 5},
-        {"event": "download_complete", "gid": "123", "path": "/downloads/123-Download"},
+        {"event": "download_complete", "gid": "123"},
         {"event": "download_complete_with_errors", "gid": "123", "failed_pages": [5]},
         {"event": "download_error", "gid": "123", "error": "boom"},
         {"event": "download_cancelled", "gid": "123"},
@@ -294,6 +294,8 @@ def test_websocket_event_contract_examples():
         assert "event" in event
         assert "type" not in event
         assert isinstance(event["gid"], str)
+        if event["event"].startswith("download_"):
+            assert "path" not in event
 
 
 def test_pdf_export_event_schema_and_agent_docs_exist():

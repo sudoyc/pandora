@@ -195,19 +195,45 @@ class TestUpdateConfig:
         assert resp.status_code == 200
         assert state.config.cache.gallery_ttl_seconds == 600
 
-    def test_update_config_ignores_unknown_keys(self, tmp_path):
+    def test_update_config_rejects_unknown_nested_keys(self, tmp_path):
         config_path = tmp_path / "config.toml"
-        app, state = _make_app(config_path=config_path)
+        app, _ = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config"):
+        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
             resp = client.put("/api/config", json={"server": {"nonexistent_key": "value"}})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 422
+        mock_save.assert_not_called()
+
+    def test_update_config_rejects_unknown_top_level_section(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        app, _ = _make_app(config_path=config_path)
+        client = TestClient(app)
+
+        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+            resp = client.put("/api/config", json={"credentials": {"igneous": "secret"}})
+
+        assert resp.status_code == 422
+        mock_save.assert_not_called()
+
+    def test_update_config_rejects_invalid_port(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        app, _ = _make_app(config_path=config_path)
+        client = TestClient(app)
+
+        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+            resp = client.put("/api/config", json={"server": {"port": 0}})
+
+        assert resp.status_code == 422
+        mock_save.assert_not_called()
 
     def test_update_config_response_omits_credentials(self, tmp_path):
         config_path = tmp_path / "config.toml"
-        app, _ = _make_app(config_path=config_path)
+        config = PandoraConfig(
+            credentials=CredentialsConfig(igneous="secret-igneous", ipb_member_id="secret-member"),
+        )
+        app, _ = _make_app(config=config, config_path=config_path)
         client = TestClient(app)
 
         with patch("pandora_daemon.routes.config_routes.save_config"):
@@ -215,6 +241,32 @@ class TestUpdateConfig:
 
         data = resp.json()
         assert "credentials" not in data
+        assert "secret-igneous" not in resp.text
+        assert "secret-member" not in resp.text
+
+    def test_update_config_rejects_null_section(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        app, state = _make_app(config_path=config_path)
+        client = TestClient(app)
+
+        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+            resp = client.put("/api/config", json={"server": None})
+
+        assert resp.status_code == 422
+        assert state.config.server.port == 7860
+        mock_save.assert_not_called()
+
+    def test_update_config_rejects_null_field_value(self, tmp_path):
+        config_path = tmp_path / "config.toml"
+        app, state = _make_app(config_path=config_path)
+        client = TestClient(app)
+
+        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+            resp = client.put("/api/config", json={"server": {"port": None}})
+
+        assert resp.status_code == 422
+        assert state.config.server.port == 7860
+        mock_save.assert_not_called()
 
     def test_update_config_passes_config_path_to_save(self, tmp_path):
         config_path = tmp_path / "config.toml"

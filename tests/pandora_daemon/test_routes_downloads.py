@@ -55,10 +55,14 @@ class TestSubmitDownload:
         assert response.status_code == 200
         data = response.json()
         assert data["gid"] == "123"
-        assert data["token"] == "abc"
         assert data["title"] == "Test Gallery"
         assert data["total_pages"] == 10
         assert data["status"] == "queued"
+        assert "token" not in data
+        assert "output_dir" not in data
+        assert "viewer_urls" not in data
+        assert "thumb_urls" not in data
+        assert "thumb_sprites" not in data
 
     def test_submit_download_calls_downloads_submit_with_correct_args(self):
         mock_downloads = MagicMock()
@@ -105,6 +109,11 @@ class TestListDownloads:
         assert len(data) == 1
         assert data[0]["gid"] == "123"
         assert data[0]["title"] == "Test Gallery"
+        assert "token" not in data[0]
+        assert "output_dir" not in data[0]
+        assert "viewer_urls" not in data[0]
+        assert "thumb_urls" not in data[0]
+        assert "thumb_sprites" not in data[0]
 
     def test_get_downloads_returns_empty_list_when_no_tasks(self):
         mock_downloads = MagicMock()

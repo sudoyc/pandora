@@ -9,9 +9,15 @@ from pandora_daemon.dependencies import get_db
 router = APIRouter(prefix="/api/history", tags=["history"])
 
 
+def _public_history_item(item: dict) -> dict:
+    public = dict(item)
+    public.pop("token", None)
+    return public
+
+
 @router.get("")
 async def get_history(limit: int = 50, offset: int = 0, db: PandoraDB = Depends(get_db)):
-    return await db.get_history(limit, offset)
+    return [_public_history_item(item) for item in await db.get_history(limit, offset)]
 
 
 @router.delete("")

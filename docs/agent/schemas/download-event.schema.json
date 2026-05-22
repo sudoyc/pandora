@@ -28,10 +28,20 @@
     "phase": {"type": "string", "enum": ["cover", "thumbs", "pages"]},
     "page": {"type": "integer"},
     "total": {"type": "integer"},
-    "path": {"type": "string"},
     "failed_pages": {"type": "array", "items": {"type": "integer"}},
     "error": {"type": "string"},
     "reason": {"type": "string"}
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"event": {"const": "download_complete"}},
+        "required": ["event"]
+      },
+      "then": {
+        "not": {"required": ["path"]}
+      }
+    }
+  ],
   "not": {"required": ["type"]}
 }

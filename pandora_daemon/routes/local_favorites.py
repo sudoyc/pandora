@@ -23,9 +23,15 @@ class AddFavoriteBody(BaseModel):
     pages: int = 0
 
 
+def _public_favorite(item: dict) -> dict:
+    public = dict(item)
+    public.pop("token", None)
+    return public
+
+
 @router.get("")
 async def list_favorites(limit: int = 50, offset: int = 0, db: PandoraDB = Depends(get_db)):
-    return await db.get_local_favorites(limit, offset)
+    return [_public_favorite(item) for item in await db.get_local_favorites(limit, offset)]
 
 
 @router.post("")

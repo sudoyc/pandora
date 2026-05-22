@@ -5,14 +5,131 @@ Coordinates image proxy, caching, page resolution, and prefetching.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
+import socket
+from urllib.parse import urljoin, urlsplit
 
+import httpx
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.config import CacheConfig
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_IMAGE_HOSTS = (
+    "e-hentai.org",
+    "exhentai.org",
+    "ehgt.org",
+    "ehgt.org.gslb.e-hentai.org",
+)
+_MAX_REDIRECTS = 5
+_MAX_PROXY_IMAGE_BYTES = 50 * 1024 * 1024
+_IMAGE_MAGIC_PREFIXES = (
+    b"\xff\xd8\xff",  # JPEG
+    b"\x89PNG\r\n\x1a\n",
+    b"GIF87a",
+    b"GIF89a",
+    b"RIFF",  # WEBP starts with RIFF....WEBP
+)
+
+
+def _host_is_allowed(host: str) -> bool:
+    return any(host == base or host.endswith(f".{base}") for base in _ALLOWED_IMAGE_HOSTS)
+
+
+def _host_looks_public(host: str) -> bool:
+    if host == "localhost" or host.endswith(".localhost"):
+        return False
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return addr.is_global
+
+
+def _host_resolves_to_public_ip(host: str) -> bool:
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return False
+
+    seen = False
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        seen = True
+        try:
+            addr = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            return False
+        if not addr.is_global:
+            return False
+    return seen
+
+
+def _validate_proxy_url(url: str) -> None:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https":
+        raise ValueError("Only https image URLs are allowed")
+    if parsed.username or parsed.password:
+        raise PermissionError("Credentials are not allowed in image URLs")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Image URL must include a host")
+    if not _host_looks_public(host.lower()):
+        raise PermissionError("Image host is not allowed")
+    if not _host_is_allowed(host.lower()):
+        raise PermissionError("Image host is not allowed")
+    if not _host_resolves_to_public_ip(host):
+        raise PermissionError("Image host resolves to a restricted address")
+
+
+def _validate_response_peer(resp: httpx.Response) -> None:
+    """Best-effort guard against DNS rebinding between validation and connect."""
+    extensions = getattr(resp, "extensions", {})
+    if not isinstance(extensions, dict):
+        return
+    stream = extensions.get("network_stream")
+    if stream is None:
+        return
+    try:
+        peername = stream.get_extra_info("peername")
+    except Exception:
+        return
+    if not peername:
+        return
+    try:
+        addr = ipaddress.ip_address(peername[0])
+    except (ValueError, TypeError):
+        raise PermissionError("Image host connected to a restricted address")
+    if not addr.is_global:
+        raise PermissionError("Image host connected to a restricted address")
+
+
+def _validate_image_response(resp: httpx.Response) -> bytes:
+    length = resp.headers.get("content-length")
+    if length is not None:
+        try:
+            if int(length) > _MAX_PROXY_IMAGE_BYTES:
+                raise RuntimeError("Image response is too large")
+        except ValueError:
+            raise RuntimeError("Invalid image response length") from None
+
+    content_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type and not content_type.startswith("image/"):
+        raise RuntimeError("Image response has invalid content type")
+
+    data = resp.content
+    if len(data) > _MAX_PROXY_IMAGE_BYTES:
+        raise RuntimeError("Image response is too large")
+    if data and not data.startswith(_IMAGE_MAGIC_PREFIXES):
+        raise RuntimeError("Image response has invalid image signature")
+    if data.startswith(b"RIFF") and data[8:12] != b"WEBP":
+        raise RuntimeError("Image response has invalid image signature")
+    return data
 
 
 class ImageService:
@@ -27,16 +144,38 @@ class ImageService:
         self._semaphore = asyncio.Semaphore(4)
 
     async def proxy_image(self, url: str) -> bytes:
-        """Generic image proxy with caching."""
+        """Restricted public image proxy with caching."""
+        _validate_proxy_url(url)
         cached = await self._cache.get_image(url)
         if cached is not None:
             return cached
 
-        resp = await self._api.client.session.get(url)
-        resp.raise_for_status()
-        data = resp.content
+        data = await self._fetch_public_image(url)
         await self._cache.put_image(url, data)
         return data
+
+    async def _fetch_public_image(self, url: str) -> bytes:
+        """Fetch a validated public image URL without ExHentai cookies."""
+        _validate_proxy_url(url)
+        current_url = url
+        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
+            for _ in range(_MAX_REDIRECTS + 1):
+                client.cookies.clear()
+                resp = await client.get(current_url)
+                client.cookies.clear()
+                _validate_response_peer(resp)
+                if resp.status_code in {301, 302, 303, 307, 308}:
+                    location = resp.headers.get("location")
+                    if not location:
+                        raise RuntimeError("Image redirect missing location")
+                    next_url = urljoin(str(resp.url), location)
+                    _validate_proxy_url(next_url)
+                    current_url = next_url
+                    continue
+                resp.raise_for_status()
+                return _validate_image_response(resp)
+
+        raise RuntimeError("Too many redirects")
 
     async def get_page_image(self, gid: str, token: str, page: int) -> bytes:
         """Get full-size image for a gallery page. Cache-first."""
@@ -74,6 +213,8 @@ class ImageService:
         if not image_url:
             raise RuntimeError(f"Could not resolve image URL for page {page}")
 
+        _validate_proxy_url(image_url)
+
         # Cache the CDN URL mapping
         self._page_url_cache[page_key] = image_url
 
@@ -82,10 +223,8 @@ class ImageService:
         if cached is not None:
             return cached
 
-        # Fetch the actual image
-        resp = await self._api.client.session.get(image_url)
-        resp.raise_for_status()
-        data = resp.content
+        # Fetch the actual image without sending ExHentai cookies to the image host.
+        data = await self._fetch_public_image(image_url)
         await self._cache.put_image(image_url, data)
         return data
 

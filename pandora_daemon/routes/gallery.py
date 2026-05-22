@@ -5,6 +5,7 @@ torrents, and archives.
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 from pandora_daemon.dependencies import get_api, get_cache, get_image_service, get_db
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +64,6 @@ def _comment_to_dict(c) -> dict:
 def _detail_to_dict(d) -> dict:
     return {
         "gid": d.gid,
-        "token": d.token,
         "title": d.title,
         "title_jpn": d.title_jpn,
         "category": d.category,
@@ -74,15 +75,12 @@ def _detail_to_dict(d) -> dict:
         "posted": d.posted,
         "favorite_slot": d.favorite_slot,
         "preview_pages": d.preview_pages,
-        "thumb_urls": d.thumb_urls,
         "rating": d.rating,
         "rating_count": d.rating_count,
         "favorite_count": d.favorite_count,
         "torrent_count": d.torrent_count,
         "comments": [_comment_to_dict(c) for c in d.comments],
         "comments_has_more": d.comments_has_more,
-        "api_uid": d.api_uid,
-        "api_key": d.api_key,
         "url": d.url,
     }
 
@@ -203,10 +201,12 @@ async def get_page_image(gid: str, token: str, page: int, image_service=Depends(
     """Return full-size image bytes for a gallery page."""
     try:
         data = await image_service.get_page_image(gid, token, page)
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+    except (ValueError, RuntimeError):
+        logger.warning("Invalid page image request gid=%s page=%s", gid, page, exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid page image request")
+    except Exception:
+        logger.exception("Failed to fetch page image gid=%s page=%s", gid, page)
+        raise HTTPException(status_code=502, detail="Failed to fetch page image")
     # Detect media type from magic bytes
     if data[:4] == b"\x89PNG":
         media_type = "image/png"

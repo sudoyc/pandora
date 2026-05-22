@@ -90,7 +90,6 @@ class TestGalleryDetail:
         assert response.status_code == 200
         data = response.json()
         assert data["gid"] == "123"
-        assert data["token"] == "abc"
         assert data["title"] == "Test"
         assert data["title_jpn"] == "テスト"
         assert data["category"] == "Manga"
@@ -98,8 +97,10 @@ class TestGalleryDetail:
         assert data["pages"] == 10
         assert data["rating"] == 4.5
         assert data["rating_count"] == 100
-        assert data["api_uid"] == "uid1"
-        assert data["api_key"] == "key1"
+        assert "token" not in data
+        assert "thumb_urls" not in data
+        assert "api_uid" not in data
+        assert "api_key" not in data
         assert data["url"] == "https://exhentai.org/g/123/abc/"
         mock_api.get_gallery_details.assert_called_once_with("123", "abc")
         mock_cache.put_gallery.assert_called_once_with(detail)
@@ -125,7 +126,7 @@ class TestGalleryDetail:
         mock_api.get_gallery_details.assert_not_called()
         mock_cache.get_gallery.assert_called_once_with("123", "abc")
 
-    def test_gallery_detail_includes_thumb_urls(self):
+    def test_gallery_detail_does_not_expose_internal_fields(self):
         mock_api = AsyncMock()
         detail = _make_detail()
         detail.thumb_urls = ["https://ex.com/t1.jpg", "https://ex.com/t2.jpg"]
@@ -137,8 +138,28 @@ class TestGalleryDetail:
         resp = client.get("/api/gallery/123/abc")
         assert resp.status_code == 200
         data = resp.json()
-        assert "thumb_urls" in data
-        assert data["thumb_urls"] == ["https://ex.com/t1.jpg", "https://ex.com/t2.jpg"]
+        assert "token" not in data
+        assert "thumb_urls" not in data
+        assert "api_uid" not in data
+        assert "api_key" not in data
+
+    def test_gallery_detail_does_not_expose_api_identity(self):
+        mock_api = MagicMock()
+        detail = _make_detail()
+        mock_api.get_gallery_details = AsyncMock(return_value=detail)
+        mock_cache = _make_cache_miss()
+
+        app = _make_app(mock_api, mock_cache)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "token" not in data
+        assert "thumb_urls" not in data
+        assert "api_uid" not in data
+        assert "api_key" not in data
 
 
 class TestCommentGallery:
@@ -361,6 +382,40 @@ class TestPageImage:
         response = client.get("/api/gallery/123/abc/page/99")
 
         assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid page image request"
+        assert "Page 99 out of range" not in response.json()["detail"]
+
+    def test_page_image_runtime_error_is_sanitized_to_bad_request(self):
+        mock_api = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_page_image = AsyncMock(
+            side_effect=RuntimeError("viewer token leaked")
+        )
+
+        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/page/5")
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid page image request"
+        assert "viewer token leaked" not in response.json()["detail"]
+
+    def test_page_image_upstream_failure_hides_exception_detail(self):
+        mock_api = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_page_image = AsyncMock(side_effect=Exception("upstream token leaked"))
+
+        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/page/5")
+
+        assert response.status_code == 502
+        assert response.json()["detail"] == "Failed to fetch page image"
+        assert "upstream token leaked" not in response.json()["detail"]
 
 
 class TestPrefetch:

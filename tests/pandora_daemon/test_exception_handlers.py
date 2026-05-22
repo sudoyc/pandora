@@ -52,7 +52,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 401
         data = resp.json()
         assert data["error"] == "auth"
-        assert "Sad Panda" in data["detail"]
+        assert data["detail"] == "Authentication failed"
+        assert "Sad Panda" not in data["detail"]
 
     def test_gallery_not_found_returns_404(self, app):
         app.set_exception(GalleryNotFoundError("Gallery removed"))
@@ -60,6 +61,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 404
         data = resp.json()
         assert data["error"] == "gallery_not_found"
+        assert data["detail"] == "Gallery not found"
+        assert "Gallery removed" not in data["detail"]
 
     def test_image_limit_returns_429(self, app):
         app.set_exception(ImageLimitError("Limit exceeded"))
@@ -67,6 +70,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 429
         data = resp.json()
         assert data["error"] == "image_limit"
+        assert data["detail"] == "Image limit reached"
+        assert "Limit exceeded" not in data["detail"]
 
     def test_offensive_returns_451(self, app):
         app.set_exception(GalleryOffensiveError("Offensive content"))
@@ -74,6 +79,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 451
         data = resp.json()
         assert data["error"] == "offensive"
+        assert data["detail"] == "Gallery unavailable"
+        assert "Offensive content" not in data["detail"]
 
     def test_parse_error_returns_502(self, app):
         app.set_exception(ParseError("Parse failed"))
@@ -81,6 +88,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 502
         data = resp.json()
         assert data["error"] == "parse"
+        assert data["detail"] == "Upstream response parse failed"
+        assert "Parse failed" not in data["detail"]
 
     def test_network_error_returns_502(self, app):
         app.set_exception(NetworkError("Timeout"))
@@ -88,6 +97,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 502
         data = resp.json()
         assert data["error"] == "network"
+        assert data["detail"] == "Upstream network request failed"
+        assert "Timeout" not in data["detail"]
 
     def test_base_exhentai_error_returns_500(self, app):
         app.set_exception(ExhentaiError("Unknown exhentai error"))
@@ -95,6 +106,8 @@ class TestExceptionHandlers:
         assert resp.status_code == 500
         data = resp.json()
         assert data["error"] == "exhentai"
+        assert data["detail"] == "Upstream request failed"
+        assert "Unknown exhentai error" not in data["detail"]
 
     def test_generic_runtime_error_returns_500_no_error_field(self, app):
         app.set_exception(RuntimeError("Something broke"))
@@ -102,4 +115,14 @@ class TestExceptionHandlers:
         assert resp.status_code == 500
         data = resp.json()
         assert "error" not in data
-        assert "Something broke" in data["detail"]
+        assert data["detail"] == "Internal server error"
+        assert "Something broke" not in data["detail"]
+
+    def test_generic_exception_returns_502_no_error_field(self, app):
+        app.set_exception(Exception("Connection details leaked"))
+        resp = app.get()
+        assert resp.status_code == 502
+        data = resp.json()
+        assert "error" not in data
+        assert data["detail"] == "Bad gateway"
+        assert "Connection details leaked" not in data["detail"]

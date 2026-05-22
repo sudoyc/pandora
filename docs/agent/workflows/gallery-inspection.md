@@ -33,7 +33,7 @@ pandora gallery 123 abcdef0123 --json
 
 ## Redaction Boundary
 
-CLI `gallery --json` redacts `api_uid` and `api_key` by default. Do not persist or expose daemon-internal identity fields from REST detail responses.
+CLI `gallery --json` redacts `api_uid` and `api_key` by default. Use gallery detail for user-facing metadata and route identifiers only. Daemon-internal helper fields from REST detail responses, including `api_uid`, `api_key`, `viewer_urls`, `thumb_urls`, and `thumb_sprites`, are internal-only and should not be persisted or exposed.
 
 ## Follow-Up Workflows
 

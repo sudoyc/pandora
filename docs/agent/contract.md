@@ -73,7 +73,7 @@ uv run python -m pandora_daemon.cli gallery "https://exhentai.org/g/123/abcdef01
 uv run python -m pandora_daemon.cli gallery 123 abcdef0123 --json
 ```
 
-CLI gallery output redacts daemon-only `api_uid` and `api_key` by default. REST detail responses may contain daemon-internal fields required by daemon routes; agents should not persist or expose them.
+CLI gallery output redacts daemon-only `api_uid` and `api_key` by default. Treat gallery detail as a user-facing metadata surface plus route identifiers. Daemon-internal helper fields such as `api_uid`, `api_key`, `viewer_urls`, `thumb_urls`, and `thumb_sprites` are internal-only and not part of the public stable contract.
 
 ## Download Events
 
@@ -90,7 +90,7 @@ Common events:
 ```json
 {"event":"download_queued","gid":"123","title":"..."}
 {"event":"download_progress","gid":"123","phase":"pages","page":5,"total":20}
-{"event":"download_complete","gid":"123","path":"/path/to/gallery"}
+{"event":"download_complete","gid":"123"}
 {"event":"download_complete_with_errors","gid":"123","failed_pages":[7]}
 {"event":"download_error","gid":"123","error":"..."}
 {"event":"download_cancelled","gid":"123"}
@@ -123,6 +123,8 @@ uv run python -m pandora_daemon.cli download pages 123 --json
 ```
 
 Public page state values include `completed` and `failed`. The CLI maps internal daemon state `done` to public state `completed`.
+
+Download status/detail surfaces are public machine interfaces for download state, not daemon-local bookkeeping. Fields such as `token` and daemon-local output directory/path values are internal-only and not part of the public stable contract.
 
 ## Library PDF Export
 

@@ -27,6 +27,16 @@ from pandora_daemon.db import PandoraDB
 
 logger = logging.getLogger(__name__)
 
+AUTH_ERROR_DETAIL = "Authentication failed"
+GALLERY_NOT_FOUND_DETAIL = "Gallery not found"
+IMAGE_LIMIT_DETAIL = "Image limit reached"
+OFFENSIVE_DETAIL = "Gallery unavailable"
+PARSE_ERROR_DETAIL = "Upstream response parse failed"
+NETWORK_ERROR_DETAIL = "Upstream network request failed"
+EXHENTAI_ERROR_DETAIL = "Upstream request failed"
+RUNTIME_ERROR_DETAIL = "Internal server error"
+GENERIC_ERROR_DETAIL = "Bad gateway"
+
 async def _cache_eviction_loop(cache: CacheManager, interval: int) -> None:
     """Background loop: periodically prune expired galleries and evict images."""
     while True:
@@ -87,43 +97,62 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     from pandora_daemon.routes import router
+    from fastapi.middleware.cors import CORSMiddleware
+
     app = FastAPI(title="pandora-daemon", lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.exception_handler(AuthenticationError)
     async def auth_error_handler(request: Request, exc: AuthenticationError):
-        return JSONResponse(status_code=401, content={"error": "auth", "detail": str(exc)})
+        logger.warning("Authentication error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=401, content={"error": "auth", "detail": AUTH_ERROR_DETAIL})
 
     @app.exception_handler(GalleryNotFoundError)
     async def gallery_not_found_handler(request: Request, exc: GalleryNotFoundError):
-        return JSONResponse(status_code=404, content={"error": "gallery_not_found", "detail": str(exc)})
+        logger.warning("Gallery not found on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=404, content={"error": "gallery_not_found", "detail": GALLERY_NOT_FOUND_DETAIL})
 
     @app.exception_handler(ImageLimitError)
     async def image_limit_handler(request: Request, exc: ImageLimitError):
-        return JSONResponse(status_code=429, content={"error": "image_limit", "detail": str(exc)})
+        logger.warning("Image limit error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=429, content={"error": "image_limit", "detail": IMAGE_LIMIT_DETAIL})
 
     @app.exception_handler(GalleryOffensiveError)
     async def offensive_handler(request: Request, exc: GalleryOffensiveError):
-        return JSONResponse(status_code=451, content={"error": "offensive", "detail": str(exc)})
+        logger.warning("Offensive gallery error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=451, content={"error": "offensive", "detail": OFFENSIVE_DETAIL})
 
     @app.exception_handler(ParseError)
     async def parse_error_handler(request: Request, exc: ParseError):
-        return JSONResponse(status_code=502, content={"error": "parse", "detail": str(exc)})
+        logger.exception("Parse error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=502, content={"error": "parse", "detail": PARSE_ERROR_DETAIL})
 
     @app.exception_handler(NetworkError)
     async def network_error_handler(request: Request, exc: NetworkError):
-        return JSONResponse(status_code=502, content={"error": "network", "detail": str(exc)})
+        logger.exception("Network error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=502, content={"error": "network", "detail": NETWORK_ERROR_DETAIL})
 
     @app.exception_handler(ExhentaiError)
     async def exhentai_error_handler(request: Request, exc: ExhentaiError):
-        return JSONResponse(status_code=500, content={"error": "exhentai", "detail": str(exc)})
+        logger.exception("Exhentai error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=500, content={"error": "exhentai", "detail": EXHENTAI_ERROR_DETAIL})
 
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, exc: RuntimeError):
-        return JSONResponse(status_code=500, content={"detail": str(exc)})
+        logger.exception("Runtime error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=500, content={"detail": RUNTIME_ERROR_DETAIL})
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        logger.exception("Unhandled error on %s", request.url.path, exc_info=exc)
+        return JSONResponse(status_code=502, content={"detail": GENERIC_ERROR_DETAIL})
 
     app.include_router(router)
     return app

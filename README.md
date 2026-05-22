@@ -111,7 +111,7 @@ Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--jso
 
 Agent search uses scheme A intentionally: the CLI does not resolve ambiguous translated text into ExHentai tag queries. Agents should check `pandora tags status --json`, refresh if stale or unloaded, inspect `pandora tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then call `pandora search "female:stockings" --search-tags --json`. Search also exposes primitive advanced flags including `--category` (include bitmask), `--min-rating`, `--search-name`, `--search-description`, `--search-torrent`, `--search-low-power-tags`, `--disable-language-filter`, `--show-expunged`, `--min-pages`, and `--max-pages`.
 
-`pandora gallery ...` redacts daemon-only `api_uid` and `api_key` fields by default. `pandora download pages ... --json` reports public page states such as `completed` instead of the internal `done` value.
+`pandora gallery ...` redacts daemon-only `api_uid` and `api_key` fields by default. Public gallery machine surfaces expose user-facing metadata and route identifiers such as `gid` and `token`. Public download machine surfaces expose download state, not daemon-internal helper fields such as `viewer_urls`, `thumb_urls`, `thumb_sprites`, download-task `token`, or local output directory/path values. `pandora download pages ... --json` reports public page states such as `completed` instead of the internal `done` value.
 
 ## Quick Start
 

@@ -23,7 +23,7 @@ async def submit_download(body: SubmitBody, downloads: DownloadManager = Depends
     """Submit a gallery for download."""
     try:
         task = await downloads.submit(body.gid, body.token)
-        return task.to_dict()
+        return task.to_public_dict()
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -32,7 +32,7 @@ async def submit_download(body: SubmitBody, downloads: DownloadManager = Depends
 async def list_downloads(downloads: DownloadManager = Depends(get_downloads)):
     """Return all known download tasks."""
     tasks = downloads.status()
-    return [t.to_dict() for t in tasks]
+    return [t.to_public_dict() for t in tasks]
 
 
 @router.delete("/{gid}")

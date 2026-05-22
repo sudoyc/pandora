@@ -60,10 +60,10 @@ async with ExhentaiAPI(client=client) as api:
 ## Main data models
 
 - `GalleryListItem`: `gid`, `token`, `title`, `category`, `uploader`, `thumb_url`, `posted`, `rating`, `pages`, `rated`, dimensions, `url` property.
-- `GalleryDetail`: metadata, tags, page counts, preview/thumb data, comments, API keys, archive/torrent fields. CLI machine output redacts `api_uid` and `api_key` by default.
+- `GalleryDetail`: metadata, tags, page counts, comments, and archive/torrent metadata. Daemon-internal helper fields used by the daemon, including `api_uid`, `api_key`, `viewer_urls`, `thumb_urls`, and `thumb_sprites`, are internal-only and not part of the public agent contract. CLI machine output redacts `api_uid` and `api_key` by default.
 - `ImageDetail`: `gid`, `page`, `image_url`, `nl` reload token.
 - `FavoritesResponse`: `categories`, `galleries`.
-- `DownloadTask` (daemon): `gid`, `token`, `title`, `status`, progress counters, output path, page states.
+- `DownloadTask` (daemon): `gid`, `title`, `status`, progress counters, and page states on public machine surfaces. Daemon-local fields such as `token` and output directory/path values are internal-only and not part of the public stable contract.
 
 ## Daemon REST API
 
@@ -142,7 +142,7 @@ Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`
 |---|---|---|
 | GET | `/api/health` | Minimal daemon health and capability probe; omits credentials and local paths |
 | GET | `/api/config` | Public config; omits credentials and redacts proxy secrets |
-| PUT | `/api/config` | Update server/download/cache config |
+| PUT | `/api/config` | Update a validated subset of public server/download/cache config fields; not an arbitrary dict patch |
 | GET | `/api/home` | User home/image limits; live endpoint needs re-check |
 | POST | `/api/home/reset_limit` | Reset image limit; live endpoint needs re-check |
 | GET | `/api/profile` | User profile; forum endpoint may return 403 |
@@ -168,7 +168,7 @@ Download event examples:
 {"event":"download_progress","gid":"123","phase":"cover"}
 {"event":"download_progress","gid":"123","phase":"thumbs","page":5,"total":20}
 {"event":"download_progress","gid":"123","phase":"pages","page":5,"total":20}
-{"event":"download_complete","gid":"123","path":"/path/to/gallery"}
+{"event":"download_complete","gid":"123"}
 {"event":"download_complete_with_errors","gid":"123","failed_pages":[7,12]}
 {"event":"download_error","gid":"123","error":"..."}
 {"event":"download_cancelled","gid":"123"}
@@ -188,7 +188,7 @@ Global options on daemon-backed commands:
 
 For bots, use `download run <url|gid> [token] --ndjson` as the supported successful streaming machine mode. It attaches to `WS /ws` before posting `/api/downloads`, emits a `download_submitted` machine event, and then watches until a terminal event. If `/api/downloads` returns HTTP 409 for an already-active task, `download run` emits `download_already_queued` and continues watching instead of failing. `download add` plus `download watch` remains available, but a late watcher can miss events emitted between the two commands.
 
-`download watch --json` is accepted for JSON error envelopes, while successful watch output is still event-by-event. `download pages --json` normalizes internal page state `done` to public state `completed`.
+`download watch --json` is accepted for JSON error envelopes, while successful watch output is still event-by-event. `download pages --json` normalizes internal page state `done` to public state `completed`. Public REST/CLI download surfaces do not expose daemon-local output directory/path fields as public contract; treat any such values as internal-only.
 
 Machine-mode errors:
 

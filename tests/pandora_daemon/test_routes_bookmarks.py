@@ -42,6 +42,9 @@ class TestListBookmarks:
         data = response.json()
         assert isinstance(data, list)
         assert data[0]["gid"] == "123"
+        assert data[0]["title"] == "Test Gallery"
+        assert data[0]["page"] == 5
+        assert "token" not in data[0]
 
     def test_returns_empty_list(self):
         mock_db = MagicMock()
@@ -81,8 +84,11 @@ class TestGetOneBookmark:
         response = client.get("/api/bookmarks/123")
 
         assert response.status_code == 200
-        assert response.json()["gid"] == "123"
-        assert response.json()["page"] == 5
+        data = response.json()
+        assert data["gid"] == "123"
+        assert data["page"] == 5
+        assert data["total"] == 20
+        assert "token" not in data
 
     def test_returns_404_when_not_found(self):
         mock_db = MagicMock()

@@ -47,6 +47,9 @@ class TestGetHistory:
         data = response.json()
         assert isinstance(data, list)
         assert data[0]["gid"] == "123"
+        assert data[0]["title"] == "Test Gallery"
+        assert data[0]["read_page"] == 5
+        assert "token" not in data[0]
 
     def test_returns_empty_list(self):
         mock_db = MagicMock()

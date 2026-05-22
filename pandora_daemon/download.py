@@ -62,6 +62,23 @@ class DownloadTask:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    def to_public_dict(self) -> dict:
+        """Return the public REST/WS-safe download status shape."""
+        return {
+            "gid": self.gid,
+            "title": self.title,
+            "total_pages": self.total_pages,
+            "status": self.status,
+            "downloaded_pages": self.downloaded_pages,
+            "downloaded_thumbs": self.downloaded_thumbs,
+            "cover_downloaded": self.cover_downloaded,
+            "metadata_saved": self.metadata_saved,
+            "error": self.error,
+            "created_at": self.created_at,
+            "page_states": self.page_states,
+            "failed_pages": self.failed_pages,
+        }
+
 
 class DownloadManager:
     """Produces complete offline gallery clones with metadata, covers, thumbs, and pages."""
@@ -107,6 +124,8 @@ class DownloadManager:
             existing = self._tasks.get(gid)
             if existing and existing.status in ("queued", "downloading"):
                 raise ValueError(f"Gallery {gid} is already queued or downloading")
+
+            self._cancelled.discard(gid)
 
             detail = await self._api.get_gallery_details(gid, token)
 
@@ -159,6 +178,7 @@ class DownloadManager:
         task = self._tasks.get(gid)
         if task is None or task.status != "paused":
             return False
+        self._cancelled.discard(gid)
         task.status = "queued"
         await self._queue.put(gid)
         self._save_state()
@@ -171,6 +191,7 @@ class DownloadManager:
             return False
         if not task.failed_pages:
             return False
+        self._cancelled.discard(gid)
         task.status = "queued"
         await self._queue.put(gid)
         self._save_state()
@@ -424,7 +445,7 @@ class DownloadManager:
             elif task.gid not in self._cancelled:
                 task.status = "completed"
                 await self._ws.broadcast(
-                    {"event": "download_complete", "gid": task.gid, "path": task.output_dir}
+                    {"event": "download_complete", "gid": task.gid}
                 )
 
         except AuthenticationError as e:
