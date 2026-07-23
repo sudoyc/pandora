@@ -3,7 +3,7 @@
 ## Project Overview
 Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for CLI JSON/NDJSON and generic Agent Pack workflows. It consists of the reusable Python API library (`exhentai_api`), the local FastAPI daemon (`pandora-daemon`), a daemon-backed CLI, the multi-agent docs under `docs/agent/`, a Hermes skill as one packaged consumer, an optional Web frontend, and an archived Rust TUI.
 
-*Note: The `ARCHITECTURE.md` file in the project root is a detailed research report on the `Ehviewer_CN_SXJ` Android application, which serves as the reference implementation and inspiration for Pandora's API and data models.*
+*Note: `ARCHITECTURE.md` points to the canonical library under `docs/architecture/`. The Android reference-project research is historical material under `docs/archive/reference/`.*
 
 ### Architecture
 - **exhentai_api (Python)**: The core, stateless abstraction over the ExHentai site.
@@ -18,9 +18,9 @@ Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for
 - **Database Driven:** History, favorites, bookmarks, and tag caching are persisted in an SQLite database managed by the daemon.
 
 ## Current Status
-- **exhentai_api**: Completed. (22 API methods, 17 model types, 11 parsers, fully tested).
-- **pandora-daemon**: Completed. (Proxy, SQLite DB, Background prefetch, Download manager, WebSocket events).
-- **Agent Pack/CLI contracts**: **Current objective.** Generic multi-agent context, workflows, snippets, schemas, and daemon-backed machine commands live under `docs/agent/`; Hermes skill consumes them as one package.
+- **exhentai_api**: Core surface implemented and fixture-tested; upstream compatibility remains ongoing maintenance.
+- **pandora-daemon**: Core service implemented; current reliability work is tracked in `docs/roadmap.md`.
+- **Agent Pack/CLI contracts**: Generic multi-agent context, workflows, snippets, schemas, and daemon-backed machine commands live under `docs/agent/`; Hermes skill consumes them as one package.
 - **pandora-tui**: Archived/frozen.
 - **Web Frontend**: Optional WIP.
 

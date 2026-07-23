@@ -18,6 +18,14 @@ pandora-daemon (FastAPI)          -- session, cache, download, image proxy
 
 **Design principle:** frontends and agents never access ExHentai directly. All requests go through the daemon, which handles session, caching, downloads, and rate limiting. Agent/bot workflows should prefer the generic [Pandora Agent Pack](docs/agent/README.md) and CLI JSON/NDJSON contract over Web/TUI/client-cache work.
 
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Current system architecture](docs/architecture/system-overview.md)
+- [Architecture decisions](docs/architecture/decisions.md)
+- [Development roadmap](docs/roadmap.md)
+- [Historical documentation](docs/archive/README.md)
+
 ## Agent Pack
 
 Pandora's canonical agent-facing integration is the [Pandora Agent Pack](docs/agent/README.md). It documents reusable context, contracts, workflows, snippets, JSON schemas, and safety boundaries for Hermes, OpenCode, Codex, Claude, MCP-style wrappers, shell scripts, and future thin plugins.
@@ -38,7 +46,7 @@ Scheme A for translated tag search is preserved. Agents run `tags status --json`
 
 ### exhentai_api
 
-Async Python library. 22 API methods, 17 model types, 11 parsers, 110 tests. Fully aligned with the Android EhViewer reference project.
+Async Python library. 22 API methods, 17 model types, 11 parsers, 112 tests. Its behavior is fixture-tested against the Android reference project; live upstream compatibility remains an explicit maintenance concern.
 
 | Category | Methods |
 |----------|---------|
@@ -61,7 +69,7 @@ FastAPI service wrapping `exhentai_api`.
 - **Thumb cropping** — CSS sprite cropping for gdtm-mode thumbnails, on-demand preview page loading
 - **Download manager** — complete offline gallery clones (metadata + cover + thumbs + pages), resume support, WebSocket progress events
 - **Library API** — browse downloaded galleries, serve local files
-- **Tag suggest/maintenance** — EhTagTranslation database (~15K tags), ETag-aware refresh, substring search with prefix-first ranking
+- **Tag suggest/maintenance** — versioned EhTagTranslation database, ETag-aware refresh, substring search with prefix-first ranking
 - **Config** — TOML-based (`~/.config/pandora/config.toml`)
 
 30+ REST endpoints, WebSocket real-time events. SQLite persistence (`~/.config/pandora/pandora.db`).
@@ -162,7 +170,7 @@ cd pandora-web && npm run lint && npm run build
 
 ## API Reference
 
-Full daemon REST API and `exhentai_api` method reference in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/agent/README.md`](docs/agent/README.md). Hermes-specific packaging guidance lives in [`docs/hermes_integration.md`](docs/hermes_integration.md).
+Start from the [`docs/` index](docs/README.md). Full daemon REST API and `exhentai_api` method reference live in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/agent/README.md`](docs/agent/README.md). Hermes-specific packaging guidance lives in [`docs/hermes_integration.md`](docs/hermes_integration.md).
 
 ## License
 

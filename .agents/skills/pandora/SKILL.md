@@ -206,7 +206,7 @@ Daemon event discriminator is `event`, not `type`.
 Terminal download events:
 
 ```json
-{"event":"download_complete","gid":"123","path":"..."}
+{"event":"download_complete","gid":"123"}
 {"event":"download_complete_with_errors","gid":"123","failed_pages":[7]}
 {"event":"download_error","gid":"123","error":"..."}
 {"event":"download_cancelled","gid":"123"}

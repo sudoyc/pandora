@@ -20,7 +20,7 @@ async with ExhentaiAPI(client=client) as api:
 
 | Method | Description |
 |---|---|
-| `get_homepage(page=0)` | Main gallery list |
+| `get_homepage()` | Main gallery list |
 | `search(params, page=0)` | Advanced gallery search |
 | `get_popular()` | Popular galleries |
 | `get_toplist(tl="15")` | Toplist rankings; currently E-Hentai host only in live probing |
