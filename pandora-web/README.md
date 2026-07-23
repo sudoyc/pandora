@@ -1,73 +1,80 @@
-# React + TypeScript + Vite
+# Pandora Web Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite frontend for Pandora. The web app talks only to the local `pandora-daemon` REST and WebSocket API; it never requests ExHentai directly.
 
-Currently, two official plugins are available:
+## Current state
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Implemented:
 
-## React Compiler
+- Vite/React project scaffold
+- gallery feed with paginated search/watched views and single-page homepage/popular views
+- homepage / popular / watched / search view switching
+- gallery cards using the daemon image proxy (`/api/image/proxy`)
+- gallery detail drawer backed by `/api/gallery/{gid}/{token}`
+- fullscreen reader backed by `/api/gallery/{gid}/{token}/page/{page}`
+- WebSocket hook for daemon download events using the `event` field
+- recent download progress panel
+- CSS variable based dark theme
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Still intentionally lightweight / next refactor targets:
 
-## Expanding the ESLint configuration
+- `src/App.tsx` still owns layout, sidebar state, search form, search history, gallery selection, and download progress rendering; split it before adding more views.
+- WebSocket progress state is live-event only; reconcile with `/api/downloads` on load/reconnect.
+- Add dedicated pages for favorites, history, downloads, and local library.
+- Add component tests or Playwright smoke checks once the view split lands.
+- Generated `dist/` and `node_modules/` are ignored under `pandora-web/.gitignore` and should not be treated as source.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Run
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Start daemon first:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+uv run python -m pandora_daemon
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Then run the web app:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd pandora-web
+npm run dev
 ```
+
+Default daemon target: `http://127.0.0.1:7860`.
+
+Override in development if needed:
+
+```bash
+VITE_PANDORA_DAEMON_URL=http://127.0.0.1:7860 npm run dev
+```
+
+## Build / lint
+
+```bash
+cd pandora-web
+npm run build
+npm run lint
+```
+
+## Recommended next refactor
+
+1. Split `App.tsx`:
+   - `components/layout/AppShell.tsx`
+   - `components/layout/Sidebar.tsx`
+   - `components/search/SearchBar.tsx`
+   - `features/gallery/GalleryFeed.tsx`
+   - `features/downloads/DownloadProgressPanel.tsx`
+2. Expand `src/api/client.ts` into a typed API client:
+   - `apiGet<T>()`, `apiPost<T>()`, `apiDelete<T>()`
+   - explicit error type for non-2xx responses
+   - typed helpers for downloads/favorites/library
+3. Introduce route/view state:
+   - home
+   - search
+   - popular
+   - watched
+   - favorites
+   - history
+   - downloads
+   - library
+4. Make `useGalleries` accept a typed source/query object instead of `(mode, keyword)`.
+5. Add smoke tests for: gallery feed load, search, drawer open, reader image URL, WS event reducer.
