@@ -1777,6 +1777,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
  "toml",
  "unicode-width",
  "urlencoding",
@@ -3154,6 +3155,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
