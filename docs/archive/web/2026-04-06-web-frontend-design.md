@@ -1,7 +1,7 @@
 # Pandora Web Frontend Design Specification
 
 **Date:** 2026-04-06
-**Status:** Approved
+**Status:** Archived; current Web status is documented in [`../../../pandora-web/README.md`](../../../pandora-web/README.md), and future work in [`../../roadmap.md`](../../roadmap.md).
 
 ## 1. Objective
 Design and implement a modern, high-performance web frontend for Pandora, providing a seamless browsing, searching, and reading experience for ExHentai content. The frontend will communicate exclusively with the local `pandora-daemon` via REST APIs and WebSockets.

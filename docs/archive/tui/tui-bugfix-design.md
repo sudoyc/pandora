@@ -1,7 +1,7 @@
 # pandora-tui Bug 修复设计文档
 
 日期: 2026-04-06
-范围: 审计报告 `docs/tui-audit-2026-04-05.md` 中 19 个 bug 的历史修复方案
+范围: 同目录 `tui-audit-2026-04-05.md` 中 19 个 bug 的历史修复方案
 状态: 已归档。`pandora-tui/` 已冻结且不再维护；本文不再作为待执行开发计划。
 依据: 历史审计记录；当前优先保障 daemon/CLI/Agent Pack 契约。
 

@@ -1,5 +1,8 @@
 # Pandora — 架构设计文档
 
+> 已归档：本文是 2026-05 的系统快照，包含已经变化的字段、规模和未来设想。
+> 当前架构见 [`../../architecture/system-overview.md`](../../architecture/system-overview.md)。
+
 > Open the box. Browse, search, and download from ExHentai.
 
 ---

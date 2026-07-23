@@ -4,7 +4,7 @@
 
 > Historical note: the original execution handoff has been disabled because this plan is no longer active.
 
-**Goal:** Fix all 19 bugs from the TUI audit report (`docs/tui-audit-2026-04-05.md`), grouped into 4 batches by severity.
+**Goal:** Fix all 19 bugs from the archived TUI audit report (`tui-audit-2026-04-05.md`), grouped into 4 batches by severity.
 
 **Architecture:** Batch-sequential fixes across 12 Rust source files. Batch 1 (CRITICAL) prevents panics/terminal corruption. Batch 2 (HIGH) adds CancellationToken-based task lifecycle and WS backoff. Batch 3 (MEDIUM) improves HTTP error handling and display correctness. Batch 4 (LOW) polishes edge cases.
 

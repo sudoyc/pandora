@@ -1,5 +1,8 @@
 # Pandora Web Frontend Implementation Plan
 
+> Archived: the scaffold was implemented and the plan no longer represents current requirements. See
+> [`../../../pandora-web/README.md`](../../../pandora-web/README.md) and [`../../roadmap.md`](../../roadmap.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a modern, feature-rich React web frontend for Pandora that interacts with the local daemon.
