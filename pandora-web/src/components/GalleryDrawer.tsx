@@ -2,43 +2,87 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useState } from 'react';
+import useSWR from 'swr';
+import { fetcher, imageProxyUrl } from '../api/client';
+import type { GalleryDetail } from '../models';
 import { Reader } from './Reader';
 
-export const GalleryDrawer = ({ open, onOpenChange, gid, token }: any) => {
-  const [readerOpen, setReaderOpen] = useState(false);
+type GalleryDrawerProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  gid: string;
+  token: string;
+};
 
-  // Temporary mock images for demonstration
-  const dummyImages = [
-    'https://via.placeholder.com/800x1200?text=Page+1',
-    'https://via.placeholder.com/800x1200?text=Page+2',
-    'https://via.placeholder.com/800x1200?text=Page+3',
-  ];
+export const GalleryDrawer = ({ open, onOpenChange, gid, token }: GalleryDrawerProps) => {
+  const [readerOpen, setReaderOpen] = useState(false);
+  const { data: detail, error, isLoading } = useSWR<GalleryDetail>(
+    open ? `/gallery/${gid}/${token}` : null,
+    fetcher,
+  );
 
   return (
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal>
-          <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-          <Dialog.Content style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 'var(--drawer-width)', background: 'var(--bg-sidebar)', padding: '20px' }}>
+          <Dialog.Overlay className="drawer-overlay" />
+          <Dialog.Content className="drawer-content">
             <Tabs.Root defaultValue="info">
-              <Tabs.List style={{ display: 'flex', gap: '20px', borderBottom: '1px solid #444', marginBottom: '10px' }}>
+              <Tabs.List className="drawer-tabs">
                 <Tabs.Trigger value="info">Info</Tabs.Trigger>
-                <Tabs.Trigger value="previews">Previews</Tabs.Trigger>
+                <Tabs.Trigger value="tags">Tags</Tabs.Trigger>
                 <Tabs.Trigger value="comments">Comments</Tabs.Trigger>
               </Tabs.List>
-              <Tabs.Content value="info">
-                 {/* Fetch and show detail here */}
-                 <div style={{ marginBottom: '20px' }}>GID: {gid} / Token: {token}</div>
-                 <button onClick={() => setReaderOpen(true)} style={{ marginRight: '10px' }}>Read</button>
-                 <Dialog.Close>Close</Dialog.Close>
+
+              <Tabs.Content value="info" className="drawer-panel">
+                {isLoading && <div className="muted">Loading gallery detail...</div>}
+                {error && <div className="error-text">Failed to load: {String(error)}</div>}
+                {detail && (
+                  <>
+                    {detail.cover_url && (
+                      <img src={imageProxyUrl(detail.cover_url)} alt={detail.title} className="drawer-cover" />
+                    )}
+                    <h2>{detail.title}</h2>
+                    {detail.title_jpn && <div className="muted">{detail.title_jpn}</div>}
+                    <div className="detail-grid">
+                      <span>Category</span><strong>{detail.category}</strong>
+                      <span>Uploader</span><strong>{detail.uploader}</strong>
+                      <span>Pages</span><strong>{detail.pages}</strong>
+                      <span>Rating</span><strong>{detail.rating} ({detail.rating_count})</strong>
+                      <span>Size</span><strong>{detail.size}</strong>
+                    </div>
+                    <div className="drawer-actions">
+                      <button type="button" onClick={() => setReaderOpen(true)}>Read</button>
+                      <Dialog.Close asChild><button type="button">Close</button></Dialog.Close>
+                    </div>
+                  </>
+                )}
+              </Tabs.Content>
+
+              <Tabs.Content value="tags" className="drawer-panel">
+                {detail && Object.entries(detail.tags).map(([namespace, tags]) => (
+                  <div key={namespace} className="tag-row">
+                    <strong>{namespace}</strong>
+                    <div>{tags.map((tag) => <span key={tag} className="tag-pill">{tag}</span>)}</div>
+                  </div>
+                ))}
+              </Tabs.Content>
+
+              <Tabs.Content value="comments" className="drawer-panel">
+                {detail?.comments.length ? detail.comments.map((comment) => (
+                  <article key={comment.id} className="comment-card">
+                    <strong>{comment.user}</strong>
+                    <p>{comment.comment}</p>
+                  </article>
+                )) : <div className="muted">No comments loaded.</div>}
               </Tabs.Content>
             </Tabs.Root>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
-      {readerOpen && (
-        <Reader images={dummyImages} onClose={() => setReaderOpen(false)} />
+      {readerOpen && detail && (
+        <Reader gid={gid} token={token} pages={detail.pages} onClose={() => setReaderOpen(false)} />
       )}
     </>
   );

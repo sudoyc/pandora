@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import './styles/variables.css';
 import { useGalleries } from './hooks/useGalleries';
 import type { GalleryListItem } from './models';
@@ -6,107 +7,101 @@ import { GalleryCard } from './components/GalleryCard';
 import { GalleryDrawer } from './components/GalleryDrawer';
 import { useWebSocket } from './hooks/useWebSocket';
 
+type GalleryMode = 'homepage' | 'search' | 'popular' | 'watched';
+
 function App() {
-  const { galleries, loadMore, isLoading } = useGalleries();
-  const [selectedGallery, setSelectedGallery] = useState<{gid: string, token: string} | null>(null);
+  const [mode, setMode] = useState<GalleryMode>('homepage');
+  const [query, setQuery] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [selectedGallery, setSelectedGallery] = useState<{ gid: string; token: string } | null>(null);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('searchHistory') || '[]') as string[];
+    } catch {
+      return [];
+    }
+  });
+  const { galleries, loadMore, hasMore, isLoading, error } = useGalleries(mode, query);
   const downloadMessages = useWebSocket();
 
-  useEffect(() => {
-    const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
-    setSearchHistory(history);
-  }, []);
+  const handleSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const nextQuery = searchTerm.trim();
+    if (!nextQuery) return;
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchTerm.trim()) return;
-    
-    const newHistory = [searchTerm, ...searchHistory.filter(s => s !== searchTerm)].slice(0, 10);
+    const newHistory = [nextQuery, ...searchHistory.filter((item) => item !== nextQuery)].slice(0, 10);
     setSearchHistory(newHistory);
     localStorage.setItem('searchHistory', JSON.stringify(newHistory));
-    // Trigger actual search logic if needed, or just log for now
-    console.log('Searching for:', searchTerm);
+    setQuery(nextQuery);
+    setMode('search');
+  };
+
+  const switchMode = (nextMode: GalleryMode) => {
+    setMode(nextMode);
+    if (nextMode !== 'search') setQuery('');
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
-      <aside style={{ 
-        width: 'var(--sidebar-width)', 
-        backgroundColor: 'var(--glass-bg)', 
-        backdropFilter: 'var(--glass-blur)',
-        borderRight: '1px solid #333',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 10
-      }}>
-        <nav style={{ flex: 1 }}>
-          <div style={{ padding: '20px', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent)' }}>Pandora</div>
-          <ul style={{ listStyle: 'none', padding: '0 20px', margin: 0 }}>
-            <li style={{ padding: '10px 0', cursor: 'pointer', color: 'var(--accent)' }}>Browse</li>
-            <li style={{ padding: '10px 0', cursor: 'pointer' }}>Favorites</li>
-            <li style={{ padding: '10px 0', cursor: 'pointer' }}>History</li>
-            <li style={{ padding: '10px 0', cursor: 'pointer' }}>Downloads</li>
-          </ul>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <nav className="sidebar-nav">
+          <div className="brand">Pandora</div>
+          <button type="button" className={mode === 'homepage' ? 'nav-item active' : 'nav-item'} onClick={() => switchMode('homepage')}>Browse</button>
+          <button type="button" className={mode === 'popular' ? 'nav-item active' : 'nav-item'} onClick={() => switchMode('popular')}>Popular</button>
+          <button type="button" className={mode === 'watched' ? 'nav-item active' : 'nav-item'} onClick={() => switchMode('watched')}>Watched</button>
         </nav>
-        
-        <div style={{ padding: '20px', borderTop: '1px solid #333' }}>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>Active Downloads</div>
-          {downloadMessages.map(msg => (
-            <div key={msg.gid} style={{ fontSize: '0.7rem', marginBottom: '5px' }}>
-              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.gid}</div>
-              <div style={{ height: '4px', backgroundColor: '#333', marginTop: '2px' }}>
-                <div style={{ height: '100%', backgroundColor: 'var(--accent)', width: `${msg.progress}%` }} />
+
+        <div className="downloads-panel">
+          <div className="panel-title">Recent Downloads</div>
+          {downloadMessages.length === 0 && <div className="muted">No events yet</div>}
+          {downloadMessages.map((msg) => (
+            <div key={msg.gid} className="download-row">
+              <div className="download-title">{msg.title ?? msg.gid}</div>
+              <div className="download-status">{msg.status}{msg.phase ? ` · ${msg.phase}` : ''}</div>
+              <div className="progress-track">
+                <div className="progress-bar" style={{ width: `${msg.progress}%` }} />
               </div>
             </div>
           ))}
         </div>
       </aside>
-      <main style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-        <header style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1>Gallery Feed</h1>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
-            <input 
-              type="text" 
+
+      <main className="main-panel">
+        <header className="main-header">
+          <div>
+            <h1>{mode === 'search' ? `Search: ${query}` : mode === 'homepage' ? 'Gallery Feed' : mode}</h1>
+            {searchHistory.length > 0 && <div className="muted">Recent: {searchHistory.slice(0, 3).join(' · ')}</div>}
+          </div>
+          <form onSubmit={handleSearch} className="search-form">
+            <input
+              type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Search galleries..."
-              style={{ 
-                padding: '8px 12px', 
-                borderRadius: 'var(--border-radius)', 
-                border: '1px solid #333',
-                backgroundColor: 'var(--bg-card)',
-                color: 'var(--text-primary)',
-                width: '300px'
-              }}
             />
-            <button type="submit" style={{ 
-              padding: '8px 16px', 
-              borderRadius: 'var(--border-radius)', 
-              border: 'none', 
-              backgroundColor: 'var(--accent)', 
-              color: '#000',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}>Search</button>
+            <button type="submit">Search</button>
           </form>
         </header>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
-          {galleries.map((g: GalleryListItem) => (
-            <GalleryCard 
-              key={g.gid} 
-              gallery={g} 
-              onClick={() => setSelectedGallery({gid: g.gid, token: g.token})} 
+
+        {error && <div className="error-text">Failed to load galleries: {String(error)}</div>}
+        <div className="gallery-grid">
+          {galleries.map((gallery: GalleryListItem) => (
+            <GalleryCard
+              key={gallery.gid}
+              gallery={gallery}
+              onClick={() => setSelectedGallery({ gid: gallery.gid, token: gallery.token })}
             />
           ))}
-          {isLoading && <div>Loading...</div>}
+          {isLoading && <div className="muted">Loading...</div>}
         </div>
-        <button onClick={loadMore} style={{ marginTop: '20px' }}>Load More</button>
+        {hasMore && (
+          <button type="button" className="load-more" onClick={loadMore} disabled={isLoading}>Load More</button>
+        )}
       </main>
 
       {selectedGallery && (
-        <GalleryDrawer 
-          open={!!selectedGallery} 
+        <GalleryDrawer
+          open={!!selectedGallery}
           onOpenChange={(open: boolean) => !open && setSelectedGallery(null)}
           gid={selectedGallery.gid}
           token={selectedGallery.token}

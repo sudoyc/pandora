@@ -1,8 +1,22 @@
 // pandora-web/src/components/GalleryCard.tsx
-export const GalleryCard = ({ gallery, onClick }: { gallery: any, onClick: () => void }) => (
-  <div onClick={onClick} className="gallery-card" style={{ cursor: 'pointer', background: 'var(--bg-card)', padding: '10px', borderRadius: 'var(--border-radius)' }}>
-    <img src={`http://127.0.0.1:7860/proxy/image?url=${encodeURIComponent(gallery.thumb_url)}`} alt={gallery.title} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover' }} />
-    <div style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{gallery.title}</div>
-    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{gallery.uploader}</div>
-  </div>
+import { imageProxyUrl } from '../api/client';
+import type { GalleryListItem } from '../models';
+
+type GalleryCardProps = {
+  gallery: GalleryListItem;
+  onClick: () => void;
+};
+
+export const GalleryCard = ({ gallery, onClick }: GalleryCardProps) => (
+  <button type="button" onClick={onClick} className="gallery-card">
+    {gallery.thumb_url ? (
+      <img src={imageProxyUrl(gallery.thumb_url)} alt={gallery.title} className="gallery-card__thumb" loading="lazy" />
+    ) : (
+      <div className="gallery-card__placeholder">No preview</div>
+    )}
+    <div className="gallery-card__body">
+      <div className="gallery-card__title">{gallery.title}</div>
+      <div className="gallery-card__meta">{gallery.uploader || gallery.category || `${gallery.pages} pages`}</div>
+    </div>
+  </button>
 );
