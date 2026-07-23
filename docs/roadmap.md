@@ -7,6 +7,10 @@
 本路线图只维护尚未完成的工作。每个阶段以可验证结果结束，不按文件数量或主观完成度
 结项。阶段完成后记录验证结果，并把一次性实施计划移入 `docs/archive/`。
 
+跨轮次的具体工作包、依赖和完成证据维护在
+[长期开发工作计划](development/work-program.md)；无人值守执行必须遵守
+[长期开发约束](development/unattended-development.md)。
+
 ## 当前基线
 
 - Python 全量测试：521 个通过（112 个 `exhentai_api`，409 个 daemon/CLI）。
@@ -145,6 +149,7 @@ queue/library 状态。
 ## 维护方式
 
 - 每次只允许一个阶段标记为 In Progress，并在实施计划中列出 owner 和验证命令。
+- 长期运行时只允许一个工作包为 In Progress，并在 work program 中记录检查点和直接证据。
 - 新需求先归入 P0-P3；无法说明用户结果和完成标准的条目不进入路线图。
 - 完成项从本文件移除，在提交、changelog 或归档实施计划中保留证据。
 - 架构方向变化先更新 [架构决策](architecture/decisions.md)，再调整路线图。

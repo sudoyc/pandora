@@ -30,6 +30,12 @@ Agent Pack references:
 - `docs/agent/snippets/` — standalone prompt snippets for different agent roles.
 - `docs/agent/schemas/` — lightweight JSON Schemas for common machine envelopes.
 
+Long-running repository development references:
+
+- `docs/development/unattended-development.md` — autonomy boundaries, checkpoints, verification, Git, and stop rules.
+- `docs/development/work-program.md` — executable work packages, dependencies, current state, and completion evidence.
+- `docs/development/goal-prompt.md` — copy-pasteable persistent goal prompt for completing the program.
+
 Priority for agent work:
 
 1. Prefer daemon REST/CLI workflows with JSON or NDJSON output.

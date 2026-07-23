@@ -13,6 +13,9 @@
 | 系统边界与状态所有权 | [architecture/system-overview.md](architecture/system-overview.md) | 模块职责、依赖方向、持久化边界变化时 |
 | 已接受的架构决策 | [architecture/decisions.md](architecture/decisions.md) | 出现新的跨模块长期约束时 |
 | 开发优先级与完成标准 | [roadmap.md](roadmap.md) | 阶段开始、完成、取消或重新排序时 |
+| 长期无人值守开发约束 | [development/unattended-development.md](development/unattended-development.md) | 自治权限、检查点、验证或停机规则变化时 |
+| 长期执行队列与状态 | [development/work-program.md](development/work-program.md) | 工作包开始、完成、阻塞或依赖变化时 |
+| 长期 goal prompt | [development/goal-prompt.md](development/goal-prompt.md) | 启动协议或默认授权变化时 |
 | Python、REST、WebSocket、CLI 接口 | [api_reference.md](api_reference.md) | 公共接口或数据形状变化时 |
 | 部署与运行 | [deployment.md](deployment.md) | 配置、启动、服务管理或诊断方式变化时 |
 | Python 库用法 | [exhentai_api_usage.md](exhentai_api_usage.md) | `exhentai_api` 公共 API 变化时 |
@@ -36,6 +39,7 @@
 3. Agent 可见行为以 `docs/agent/`、JSON Schema 和 contract tests 为准。
 4. `docs/archive/` 与历史 Git 提交只用于追溯，不覆盖当前文档。
 5. 同一主题只保留一个现役入口；旧版本完成后立即归档。
+6. 长期执行中，路线图维护阶段优先级，work program 只维护工作包状态和完成证据。
 
 ## 变更检查表
 
@@ -43,5 +47,6 @@
 - 修改 REST/WS/CLI 公共行为：同步 API reference、Agent Pack、schema 和 contract tests。
 - 修改配置、状态目录或启动方式：同步 deployment 文档。
 - 完成路线图阶段：记录验证结果，更新阶段状态，把一次性计划移入 archive。
+- 长期自治工作：同步 work program 检查点；权限、验证或停机策略变化时同步约束和 prompt。
 - 归档文档：保留 Git 历史，添加归档说明，修复所有现役文档引用。
 - 提交前：运行 Python 测试、相关前端/构建检查、`git diff --check` 和本地链接检查。

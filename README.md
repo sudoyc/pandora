@@ -24,6 +24,9 @@ pandora-daemon (FastAPI)          -- session, cache, download, image proxy
 - [Current system architecture](docs/architecture/system-overview.md)
 - [Architecture decisions](docs/architecture/decisions.md)
 - [Development roadmap](docs/roadmap.md)
+- [Long-running unattended development](docs/development/unattended-development.md)
+- [Executable work program](docs/development/work-program.md)
+- [Long-running goal prompt](docs/development/goal-prompt.md)
 - [Historical documentation](docs/archive/README.md)
 
 ## Agent Pack
