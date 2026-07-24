@@ -25,6 +25,7 @@ jobs:
         with:
           version: '0.11.30'
           enable-cache: true
+          cache-suffix: ${{ github.job }}
       - name: Check locks, docs, schemas, and whitespace
         run: uv run --frozen python scripts/check.py --group repository
 
@@ -43,6 +44,7 @@ jobs:
         with:
           version: '0.11.30'
           enable-cache: true
+          cache-suffix: ${{ github.job }}
       - name: Run Python tests
         run: uv run --frozen python scripts/check.py --group python
 
@@ -61,6 +63,7 @@ jobs:
         with:
           version: '0.11.30'
           enable-cache: true
+          cache-suffix: ${{ github.job }}
       - name: Set up Node.js
         uses: actions/setup-node@v7.0.0
         with:

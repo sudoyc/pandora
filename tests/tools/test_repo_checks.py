@@ -149,6 +149,10 @@ def test_ci_workflow_runs_fixture_only_unified_groups():
         commands = [step.get("run") for step in job["steps"]]
         assert f"uv run --frozen python scripts/check.py --group {group}" in commands
         assert "environment" not in job
+        uv_step = next(
+            step for step in job["steps"] if step.get("uses") == "astral-sh/setup-uv@v9.0.0"
+        )
+        assert uv_step["with"]["cache-suffix"] == "${{ github.job }}"
 
     action_references = {
         step["uses"]
