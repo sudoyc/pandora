@@ -12,10 +12,10 @@
 
 | 字段 | 当前值 |
 |---|---|
-| Program | In Progress |
-| Active work package | `UP-01` |
-| Next work package | None |
-| Last completed work package | None |
+| Program | Ready |
+| Active work package | None |
+| Next work package | `UP-02` |
+| Last completed work package | `UP-01` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
 | Last full Python evidence | 543 passed（2026-07-24；`uv run python -m pytest -q`） |
@@ -42,8 +42,8 @@
 
 | ID | Required | 状态 | 依赖 | 工作结果 | 直接完成证据 |
 |---|---|---|---|---|---|
-| `UP-01` | Yes | In Progress | - | 定义 auth/session/upstream/parse/network 状态和稳定错误分类 | 契约说明、异常映射测试、无敏感字段测试 |
-| `UP-02` | Yes | Queued | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
+| `UP-01` | Yes | Done | - | 定义 auth/session/upstream/parse/network 状态和稳定错误分类 | 契约说明、异常映射测试、无敏感字段测试 |
+| `UP-02` | Yes | Ready | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
 | `UP-03` | Yes | Queued | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Queued | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
 | `DL-01` | Yes | Queued | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
@@ -113,7 +113,7 @@
 
 | ID | 完成日期 | Commit | 验证证据 | 备注 |
 |---|---|---|---|---|
-| - | - | - | - | 尚未开始 |
+| `UP-01` | 2026-07-24 | `5484566` | `uv run python -m pytest tests/exhentai_api/test_api.py tests/exhentai_api/test_api_new.py tests/exhentai_api/test_exceptions.py tests/exhentai_api/test_client_exceptions.py tests/pandora_daemon/test_exception_handlers.py -q`（86 passed）；`uv run python -m pytest tests/pandora_daemon -q`（420 passed）；`uv run python -m pytest -q`（543 passed）；`git diff --check`（passed） | REST/Agent/schema 契约同步；响应和日志脱敏测试通过 |
 
 ## 7. 阻塞与人工门记录
 
