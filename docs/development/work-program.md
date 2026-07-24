@@ -2,7 +2,7 @@
 
 状态：In Progress
 范围：当前路线图全部 Required 工作包
-最近核对：2026-07-23
+最近核对：2026-07-24
 
 本文是长期开发的可执行队列和跨轮次检查点。阶段方向和优先级以
 [开发路线图](../roadmap.md)为准，执行方式以
@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `UP-02` |
-| Next work package | None |
-| Last completed work package | `CI-02` |
+| Active work package | None |
+| Next work package | `UP-03` |
+| Last completed work package | `UP-02` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 553 passed（2026-07-24；GitHub Actions `30095287193`） |
-| Last Web evidence | lint/build passed（2026-07-24；GitHub Actions `30095287193`） |
+| Last full Python evidence | 558 passed（2026-07-24；本地统一检查，implementation `3838b19`） |
+| Last Web evidence | lint/build passed（2026-07-24；本地统一检查，implementation `3838b19`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -43,8 +43,8 @@
 | ID | Required | 状态 | 依赖 | 工作结果 | 直接完成证据 |
 |---|---|---|---|---|---|
 | `UP-01` | Yes | Done | - | 定义 auth/session/upstream/parse/network 状态和稳定错误分类 | 契约说明、异常映射测试、无敏感字段测试 |
-| `UP-02` | Yes | In Progress | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
-| `UP-03` | Yes | Queued | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
+| `UP-02` | Yes | Done | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
+| `UP-03` | Yes | Ready | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Queued | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
 | `DL-01` | Yes | Queued | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
 | `DL-02` | Yes | Queued | `DL-01` | 下载状态有 schema version、原子迁移和损坏文件恢复 | 旧版本迁移、未知版本、截断/损坏文件测试 |
@@ -116,9 +116,10 @@
 | `UP-01` | 2026-07-24 | `5484566` | `uv run python -m pytest tests/exhentai_api/test_api.py tests/exhentai_api/test_api_new.py tests/exhentai_api/test_exceptions.py tests/exhentai_api/test_client_exceptions.py tests/pandora_daemon/test_exception_handlers.py -q`（86 passed）；`uv run python -m pytest tests/pandora_daemon -q`（420 passed）；`uv run python -m pytest -q`（543 passed）；`git diff --check`（passed） | REST/Agent/schema 契约同步；响应和日志脱敏测试通过 |
 | `CI-01` | 2026-07-24 | `cdace52` | 隔离 clone（初始无 `.venv`、`node_modules`、`dist`）执行 `uv run --frozen python scripts/check.py`：Python/Web lock、Markdown links、5 个 Agent schema、549 tests、Web lint/build、`git diff --check` 全部 passed | 失败阶段标签回归测试 6 passed；生产依赖 `npm audit --omit=dev` 为 0 vulnerabilities |
 | `CI-02` | 2026-07-24 | `208a799` | `uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（10 passed）；`uv run --frozen python scripts/check.py`（553 passed，全部阶段 passed）；GitHub Actions `30095287193` 的 Repository contracts、Python 3.12、Web 三个 job 全部 success 且 annotations 均为 0 | workflow 仅授予 `contents: read`；测试禁止凭据和实网上游引用；5 个 npm 告警仅来自开发工具依赖 |
+| `UP-02` | 2026-07-24 | `3838b19` | `uv run --frozen python -m pytest tests/exhentai_api/test_current_upstream_fixtures.py tests/exhentai_api/test_parser_gallery.py tests/exhentai_api/test_parser_home.py -q`（9 passed）；`uv run --frozen python -m pytest tests/exhentai_api -q`（128 passed）；`uv run --frozen python -m pytest tests/pandora_daemon/test_routes_browse.py tests/pandora_daemon/test_routes_user.py tests/pandora_daemon/test_exception_handlers.py -q`（48 passed）；`uv run --frozen python scripts/check.py`（558 passed，全部阶段 passed） | 四类 fixture 脱敏与凭据泄漏扫描通过；原始响应临时目录已删除；未执行上游写操作 |
 
 ## 7. 阻塞与人工门记录
 
 | ID | 首次发现 | 阻塞事实 | 已尝试 | 解除条件 | 可并行的下一项 |
 |---|---|---|---|---|---|
-| `UP-02` | 2026-07-24 | 仓库只有早期合成 `gallery_list.html`/`home.html`，没有 2026-07-23 探针对应的 homepage/search/popular/home 脱敏 fixture；实网上游探针默认关闭 | 检查 `tests/` fixture 清单及相关 Git 历史；文档所述 `../reference_project/` 在当前工作区不存在；未执行实网请求 | 提供四类当前脱敏 fixture，或明确授权只读实网上游探针并允许保存脱敏 fixture | None |
+| `UP-02` | 2026-07-24 | 仓库只有早期合成 `gallery_list.html`/`home.html`，没有 2026-07-23 探针对应的 homepage/search/popular/home 脱敏 fixture；实网上游探针默认关闭 | 检查 `tests/` fixture 清单及相关 Git 历史；文档所述 `../reference_project/` 在当前工作区不存在；未执行实网请求 | 提供四类当前脱敏 fixture，或明确授权只读实网上游探针并允许保存脱敏 fixture（2026-07-24 已解除） | None |
