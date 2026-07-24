@@ -114,6 +114,9 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 | GET | `/api/watched?page=0` | Watched-tag galleries |
 | GET | `/api/image/proxy?url=...` | Proxy/cache arbitrary image URL |
 
+Search, homepage, popular, toplist, and watched gallery-list responses use the
+[`search response schema`](agent/schemas/search-response.schema.json).
+
 ### Gallery
 
 | Method | Path | Description |
@@ -127,6 +130,9 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 | GET | `/api/gallery/{gid}/{token}/page/{page}` | Full-size page image bytes |
 | GET | `/api/gallery/{gid}/{token}/thumb/{page}` | Cropped thumbnail bytes |
 | POST | `/api/gallery/{gid}/{token}/prefetch` | Body `{current_page}`; prefetches around current page and updates bookmark |
+
+The successful gallery detail response is validated by
+[`gallery-detail-response.schema.json`](agent/schemas/gallery-detail-response.schema.json).
 
 ### Favorites
 
@@ -149,6 +155,13 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 | POST | `/api/downloads/{gid}/retry` | Reconcile and retry missing pages for `completed_with_errors`, or for `completed` when files are missing |
 | POST | `/api/downloads/{gid}/resume` | Reconcile and resume a `paused` task |
 | GET | `/api/downloads/{gid}/pages` | Page-level status using `pending`, `downloading`, `completed`, or `failed` |
+
+Successful download responses use the
+[`task`](agent/schemas/download-task-response.schema.json),
+[`list`](agent/schemas/download-list-response.schema.json),
+[`pages`](agent/schemas/download-pages-response.schema.json), and
+[`consistency report`](agent/schemas/download-consistency-report.schema.json)
+schemas for the corresponding endpoints.
 
 Public download task statuses are `queued`, `downloading`, `completed`,
 `completed_with_errors`, `paused`, `failed`, and `cancelled`. Resume and retry
@@ -200,6 +213,13 @@ is exposed as `completed` by REST and CLI surfaces.
 | GET | `/api/library/{gid}/file?path=cover` | Serve local cover |
 | GET | `/api/library/{gid}/file?path=thumb/{page}` | Serve local thumbnail |
 | GET | `/api/library/{gid}/file?path=page/{page}` | Serve local page |
+
+The successful health, readiness, tag, and library list envelopes are defined
+by [`health-response.schema.json`](agent/schemas/health-response.schema.json),
+[`readiness-response.schema.json`](agent/schemas/readiness-response.schema.json),
+[`tag-suggest-response.schema.json`](agent/schemas/tag-suggest-response.schema.json),
+[`tag-status-response.schema.json`](agent/schemas/tag-status-response.schema.json),
+and [`library-list-response.schema.json`](agent/schemas/library-list-response.schema.json).
 
 ## WebSocket
 

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/download-pages-response.schema.json",
+  "title": "Pandora Download Page Status Response",
+  "type": "object",
+  "required": ["gid", "total_pages", "downloaded_pages", "failed_pages", "page_states"],
+  "additionalProperties": false,
+  "properties": {
+    "gid": {"type": "string"},
+    "total_pages": {"type": "integer", "minimum": 0},
+    "downloaded_pages": {"type": "integer", "minimum": 0},
+    "failed_pages": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "page_states": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["pending", "downloading", "completed", "failed"]
+      }
+    }
+  }
+}

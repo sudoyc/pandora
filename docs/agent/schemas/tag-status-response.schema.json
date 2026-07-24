@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/tag-status-response.schema.json",
+  "title": "Pandora Tag Database Status Response",
+  "type": "object",
+  "required": [
+    "loaded",
+    "entries",
+    "source_url",
+    "cache_path",
+    "metadata_path",
+    "etag",
+    "upstream_repo",
+    "upstream_sha",
+    "last_error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "loaded": {"type": "boolean"},
+    "entries": {"type": "integer", "minimum": 0},
+    "source_url": {"type": "string"},
+    "cache_path": {"type": "string"},
+    "metadata_path": {"type": "string"},
+    "etag": {"type": ["string", "null"]},
+    "upstream_repo": {"type": ["string", "null"]},
+    "upstream_sha": {"type": ["string", "null"]},
+    "last_error": {"type": ["string", "null"]}
+  }
+}

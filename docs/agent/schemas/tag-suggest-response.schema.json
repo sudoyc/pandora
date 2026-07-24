@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/tag-suggest-response.schema.json",
+  "title": "Pandora Tag Suggest Response",
+  "type": "object",
+  "required": ["suggestions"],
+  "additionalProperties": false,
+  "properties": {
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["namespace", "tag", "translation"],
+        "additionalProperties": false,
+        "properties": {
+          "namespace": {"type": "string"},
+          "tag": {"type": "string"},
+          "translation": {"type": "string"}
+        }
+      }
+    }
+  }
+}

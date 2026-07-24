@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/download-list-response.schema.json",
+  "title": "Pandora Download Task List Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "gid",
+      "title",
+      "total_pages",
+      "status",
+      "downloaded_pages",
+      "downloaded_thumbs",
+      "cover_downloaded",
+      "metadata_saved",
+      "error",
+      "created_at",
+      "page_states",
+      "failed_pages"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "gid": {"type": "string"},
+      "title": {"type": "string"},
+      "total_pages": {"type": "integer", "minimum": 0},
+      "status": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "downloading",
+          "completed",
+          "completed_with_errors",
+          "paused",
+          "failed",
+          "cancelled"
+        ]
+      },
+      "downloaded_pages": {"type": "integer", "minimum": 0},
+      "downloaded_thumbs": {"type": "integer", "minimum": 0},
+      "cover_downloaded": {"type": "boolean"},
+      "metadata_saved": {"type": "boolean"},
+      "error": {"type": "string"},
+      "created_at": {"type": "string"},
+      "page_states": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string",
+          "enum": ["pending", "downloading", "completed", "failed"]
+        }
+      },
+      "failed_pages": {
+        "type": "array",
+        "items": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

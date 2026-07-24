@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/gallery-detail-response.schema.json",
+  "title": "Pandora Gallery Detail Response",
+  "type": "object",
+  "required": [
+    "gid",
+    "title",
+    "title_jpn",
+    "category",
+    "uploader",
+    "cover_url",
+    "tags",
+    "pages",
+    "size",
+    "posted",
+    "favorite_slot",
+    "preview_pages",
+    "rating",
+    "rating_count",
+    "favorite_count",
+    "torrent_count",
+    "comments",
+    "comments_has_more",
+    "url"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "comment": {
+      "type": "object",
+      "required": [
+        "id",
+        "user",
+        "comment",
+        "score",
+        "time",
+        "is_uploader",
+        "vote_up_able",
+        "vote_down_able",
+        "vote_up_ed",
+        "vote_down_ed",
+        "editable",
+        "last_edited"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "integer"},
+        "user": {"type": "string"},
+        "comment": {"type": "string"},
+        "score": {"type": "integer"},
+        "time": {"type": "string"},
+        "is_uploader": {"type": "boolean"},
+        "vote_up_able": {"type": "boolean"},
+        "vote_down_able": {"type": "boolean"},
+        "vote_up_ed": {"type": "boolean"},
+        "vote_down_ed": {"type": "boolean"},
+        "editable": {"type": "boolean"},
+        "last_edited": {"type": "string"}
+      }
+    }
+  },
+  "properties": {
+    "gid": {"type": "string"},
+    "title": {"type": "string"},
+    "title_jpn": {"type": ["string", "null"]},
+    "category": {"type": "string"},
+    "uploader": {"type": "string"},
+    "cover_url": {"type": "string"},
+    "tags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "pages": {"type": "integer", "minimum": 0},
+    "size": {"type": "string"},
+    "posted": {"type": "string"},
+    "favorite_slot": {"type": ["integer", "null"]},
+    "preview_pages": {"type": "integer", "minimum": 0},
+    "rating": {"type": "number"},
+    "rating_count": {"type": "integer", "minimum": 0},
+    "favorite_count": {"type": "integer", "minimum": 0},
+    "torrent_count": {"type": "integer", "minimum": 0},
+    "comments": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/comment"}
+    },
+    "comments_has_more": {"type": "boolean"},
+    "url": {"type": "string"}
+  }
+}

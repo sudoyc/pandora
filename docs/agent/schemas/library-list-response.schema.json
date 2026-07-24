@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/library-list-response.schema.json",
+  "title": "Pandora Library List Response",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["gid", "thumb_url"],
+    "additionalProperties": true,
+    "properties": {
+      "gid": {"type": ["string", "integer"]},
+      "thumb_url": {"type": "string"}
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/download-consistency-report.schema.json",
+  "title": "Pandora Download Consistency Report",
+  "type": "object",
+  "required": ["consistent", "summary", "issues"],
+  "additionalProperties": false,
+  "$defs": {
+    "taskStatus": {
+      "type": ["string", "null"],
+      "enum": [
+        "queued",
+        "downloading",
+        "completed",
+        "completed_with_errors",
+        "paused",
+        "failed",
+        "cancelled",
+        null
+      ]
+    },
+    "issue": {
+      "type": "object",
+      "required": [
+        "code",
+        "gid",
+        "task_status",
+        "expected_pages",
+        "present_pages",
+        "missing_pages"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "orphan_task",
+            "missing_pages",
+            "missing_metadata",
+            "invalid_metadata",
+            "unregistered_library"
+          ]
+        },
+        "gid": {"type": "string"},
+        "task_status": {"$ref": "#/$defs/taskStatus"},
+        "expected_pages": {"type": ["integer", "null"], "minimum": 0},
+        "present_pages": {"type": "integer", "minimum": 0},
+        "missing_pages": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  },
+  "properties": {
+    "consistent": {"type": "boolean"},
+    "summary": {
+      "type": "object",
+      "required": [
+        "registered_tasks",
+        "terminal_tasks",
+        "library_entries",
+        "affected_galleries",
+        "issue_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "registered_tasks": {"type": "integer", "minimum": 0},
+        "terminal_tasks": {"type": "integer", "minimum": 0},
+        "library_entries": {"type": "integer", "minimum": 0},
+        "affected_galleries": {"type": "integer", "minimum": 0},
+        "issue_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/issue"}
+    }
+  }
+}

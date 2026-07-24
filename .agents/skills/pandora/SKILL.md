@@ -30,6 +30,16 @@ Agent Pack references:
 - `docs/agent/snippets/` — standalone prompt snippets for different agent roles.
 - `docs/agent/schemas/` — lightweight JSON Schemas for common machine envelopes.
 
+Successful REST response schemas used by the workflows include:
+
+- health/readiness: `health-response.schema.json`, `readiness-response.schema.json`
+- search/gallery: `search-response.schema.json`, `gallery-detail-response.schema.json`
+- downloads: `download-task-response.schema.json`, `download-list-response.schema.json`, `download-pages-response.schema.json`, `download-consistency-report.schema.json`
+- library/tags: `library-list-response.schema.json`, `tag-suggest-response.schema.json`, `tag-status-response.schema.json`
+
+All files live under `docs/agent/schemas/`; the full field and compatibility
+contract remains in `docs/agent/contract.md`.
+
 Long-running repository development references:
 
 - `docs/development/unattended-development.md` — autonomy boundaries, checkpoints, verification, Git, and stop rules.
@@ -89,6 +99,10 @@ Basic health-style checks for agents:
 - `config --json` returns local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
 - `readiness --json` reports authenticated homepage/search/popular/home status without returning upstream content.
 - Credentials may include optional `ipb_pass_hash`; leave it unset when the current session does not require it.
+
+Validate successful health/readiness output with
+`docs/agent/schemas/health-response.schema.json` and
+`docs/agent/schemas/readiness-response.schema.json` respectively.
 
 ```bash
 uv run python -m pandora_daemon.cli health --json
@@ -198,6 +212,11 @@ Machine output safety:
 - `download pages --json` maps internal page state `done` to public state `completed`.
 - `download report --json` is read-only, omits tokens/local paths, and reports consistency through `consistent` plus issue codes.
 - `download repair` and `download forget` default to preview; inspect actions before `--apply`. They update task state only and never delete library files.
+
+The corresponding successful task/list/pages/report responses are described by
+`download-task-response.schema.json`, `download-list-response.schema.json`,
+`download-pages-response.schema.json`, and
+`download-consistency-report.schema.json` in `docs/agent/schemas/`.
 
 Search/tag scheme A:
 

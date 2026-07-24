@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/health-response.schema.json",
+  "title": "Pandora Daemon Health Response",
+  "type": "object",
+  "required": [
+    "ok",
+    "version",
+    "contract_version",
+    "service",
+    "auth_configured",
+    "capabilities"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {"const": true},
+    "version": {"type": "string"},
+    "contract_version": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+    "service": {"const": "pandora-daemon"},
+    "auth_configured": {"type": "boolean"},
+    "capabilities": {
+      "type": "object",
+      "required": [
+        "browse",
+        "gallery_detail",
+        "downloads",
+        "library",
+        "tags",
+        "favorites",
+        "websocket"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "browse": {"type": "boolean"},
+        "gallery_detail": {"type": "boolean"},
+        "downloads": {"type": "boolean"},
+        "library": {"type": "boolean"},
+        "tags": {"type": "boolean"},
+        "favorites": {"type": "boolean"},
+        "websocket": {"type": "boolean"}
+      }
+    }
+  }
+}

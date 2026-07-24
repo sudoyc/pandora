@@ -64,6 +64,10 @@ uv run python -m pandora_daemon.cli tags status --json
 - `status --json` returns the download queue state.
 - `tags status --json` reports the EhTagTranslation cache state for search agents.
 
+`GET /api/health` returns the minimal successful daemon capability envelope.
+Its stable shape is defined by
+[`schemas/health-response.schema.json`](schemas/health-response.schema.json).
+
 `GET /api/readiness` returns HTTP 200 for every recognized diagnostic result so
 clients can always parse the same response schema. Without complete credentials,
 it returns `ready: false`, `session: "not_configured"`, and `not_checked` for all
@@ -171,6 +175,11 @@ uv run python -m pandora_daemon.cli gallery 123 abcdef0123 --json
 
 CLI gallery output redacts daemon-only `api_uid` and `api_key` by default. Treat gallery detail as a user-facing metadata surface plus route identifiers. Daemon-internal helper fields such as `api_uid`, `api_key`, `viewer_urls`, `thumb_urls`, and `thumb_sprites` are internal-only and not part of the public stable contract.
 
+`GET /api/gallery/{gid}/{token}` uses the
+[`schemas/gallery-detail-response.schema.json`](schemas/gallery-detail-response.schema.json)
+shape. The response intentionally omits the route token and daemon-only API
+identity/helper fields.
+
 ## Download Events
 
 WebSocket path:
@@ -224,6 +233,12 @@ Public task status values are `queued`, `downloading`, `completed`,
 separate public `auth_failed` task status. The five final statuses are terminal
 for the current watcher. A `paused` task remains resumable.
 
+`POST /api/downloads` returns one public task object, and `GET /api/downloads`
+returns an array of the same objects. They are defined by
+[`schemas/download-task-response.schema.json`](schemas/download-task-response.schema.json)
+and [`schemas/download-list-response.schema.json`](schemas/download-list-response.schema.json).
+Neither shape contains the task token or local output path.
+
 Control operations have these state boundaries:
 
 - Cancel accepts only `queued`, `downloading`, or `paused`. Missing tasks,
@@ -250,6 +265,9 @@ uv run python -m pandora_daemon.cli download pages 123 --json
 Public page state values are `pending`, `downloading`, `completed`, and
 `failed`. Internal state may use `done`, but REST task/list/page responses and
 CLI page output expose it as `completed`.
+
+`GET /api/downloads/{gid}/pages` is validated by
+[`schemas/download-pages-response.schema.json`](schemas/download-pages-response.schema.json).
 
 Download status/detail surfaces are public machine interfaces for download state, not daemon-local bookkeeping. Fields such as `token` and daemon-local output directory/path values are internal-only and not part of the public stable contract.
 
@@ -299,7 +317,8 @@ without modifying either. Its consistency rules are:
 
 The report omits task tokens and local paths. Retrieving `consistent: false` is
 a successful read and exits 0; machine transport or HTTP failures retain their
-normal nonzero error semantics.
+normal nonzero error semantics. The response shape is defined by
+[`schemas/download-consistency-report.schema.json`](schemas/download-consistency-report.schema.json).
 
 ## Download State Recovery
 
@@ -357,6 +376,13 @@ Preview response:
 false even when actions are planned. In apply mode, `changed` is true only when
 the state registry was actually updated.
 
+## Library List
+
+`GET /api/library` returns an array of local metadata objects. Every item has a
+`gid` and daemon-generated `thumb_url`; other metadata fields remain extensible
+to preserve existing downloaded entries. The successful response is described
+by [`schemas/library-list-response.schema.json`](schemas/library-list-response.schema.json).
+
 ## Library PDF Export
 
 ```bash
@@ -403,3 +429,8 @@ uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --js
 ```
 
 Do not replace this with `search "丝袜" --search-tags` unless the user explicitly wants a literal untranslated tag query.
+
+`GET /api/tags/suggest` returns the
+[`schemas/tag-suggest-response.schema.json`](schemas/tag-suggest-response.schema.json)
+envelope. `GET /api/tags/status` returns the cache/load fields described by
+[`schemas/tag-status-response.schema.json`](schemas/tag-status-response.schema.json).
