@@ -32,6 +32,7 @@ Inspect download queue:
 
 ```bash
 uv run python -m pandora_daemon.cli download list --json
+uv run python -m pandora_daemon.cli download report --json
 uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli library export-pdf 123 --password "PDF_PASSWORD" --json
 ```
@@ -62,3 +63,5 @@ Notes:
 ## State Boundary
 
 Do not persist a separate library catalog. If an agent needs the latest local gallery list, call `library list --json` again.
+Use `download report --json` when queue and library results appear inconsistent;
+the daemon performs the filesystem comparison without exposing local paths.

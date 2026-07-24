@@ -168,6 +168,54 @@ Public page state values include `completed` and `failed`. The CLI maps internal
 
 Download status/detail surfaces are public machine interfaces for download state, not daemon-local bookkeeping. Fields such as `token` and daemon-local output directory/path values are internal-only and not part of the public stable contract.
 
+## Download Consistency Report
+
+```bash
+uv run python -m pandora_daemon.cli download report --json
+```
+
+REST:
+
+```text
+GET /api/downloads/report
+```
+
+The report compares the daemon's loaded task registry with `download.path`
+without modifying either. Its consistency rules are:
+
+- Only `completed` and `completed_with_errors` tasks require complete artifacts.
+- A required task directory that is absent or outside the current `download.path` library root is `orphan_task`; metadata/page checks are not cascaded for that directory.
+- An existing required directory must contain readable object metadata whose `gid` matches the task. Absence is `missing_metadata`; unreadable or mismatched metadata is `invalid_metadata`.
+- Required page numbers are `1..total_pages`; absent files produce `missing_pages`.
+- A directory with readable metadata whose `gid` has no task is `unregistered_library`.
+
+```json
+{
+  "consistent": false,
+  "summary": {
+    "registered_tasks": 2,
+    "terminal_tasks": 1,
+    "library_entries": 1,
+    "affected_galleries": 1,
+    "issue_count": 1
+  },
+  "issues": [
+    {
+      "code": "missing_pages",
+      "gid": "123",
+      "task_status": "completed",
+      "expected_pages": 3,
+      "present_pages": 2,
+      "missing_pages": [2]
+    }
+  ]
+}
+```
+
+The report omits task tokens and local paths. Retrieving `consistent: false` is
+a successful read and exits 0; machine transport or HTTP failures retain their
+normal nonzero error semantics.
+
 ## Library PDF Export
 
 ```bash

@@ -169,6 +169,7 @@ uv run python -m pandora_daemon.cli download run 123 abcdef0123 --ndjson
 uv run python -m pandora_daemon.cli download add "https://exhentai.org/g/123/abcdef0123/" --json
 uv run python -m pandora_daemon.cli download add 123 abcdef0123 --json
 uv run python -m pandora_daemon.cli download list --json
+uv run python -m pandora_daemon.cli download report --json
 uv run python -m pandora_daemon.cli download watch 123 --ndjson
 uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli download cancel 123 --json
@@ -183,6 +184,7 @@ Machine output safety:
 
 - `gallery` CLI output redacts `api_uid` and `api_key` by default.
 - `download pages --json` maps internal page state `done` to public state `completed`.
+- `download report --json` is read-only, omits tokens/local paths, and reports consistency through `consistent` plus issue codes.
 
 Search/tag scheme A:
 
@@ -260,6 +262,7 @@ Preserve these invariants when changing `pandora_daemon/download.py`:
 - Persisted `page_states` JSON keys must load back as integer page numbers.
 - Existing page files on disk count as completed during resume/retry.
 - `completed_with_errors`, `paused`, `failed`, and `cancelled` are terminal from an agent watcher perspective.
+- Consistency reporting requires complete artifacts only for `completed` and `completed_with_errors`; it reports `orphan_task`, `missing_pages`, `missing_metadata`, `invalid_metadata`, and `unregistered_library` without modifying files.
 
 ## Verification Commands
 

@@ -97,6 +97,7 @@ pandora dl <url>                    # alias
 pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token]
 pandora download list --json
+pandora download report --json
 pandora download watch [gid] --ndjson
 pandora download cancel <gid>
 pandora download resume <gid>
@@ -128,6 +129,10 @@ result; inspect its JSON instead of treating it as a daemon connection failure.
 Agent search uses scheme A intentionally: the CLI does not resolve ambiguous translated text into ExHentai tag queries. Agents should check `pandora tags status --json`, refresh if stale or unloaded, inspect `pandora tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then call `pandora search "female:stockings" --search-tags --json`. Search also exposes primitive advanced flags including `--category` (include bitmask), `--min-rating`, `--search-name`, `--search-description`, `--search-torrent`, `--search-low-power-tags`, `--disable-language-filter`, `--show-expunged`, `--min-pages`, and `--max-pages`.
 
 `pandora gallery ...` redacts daemon-only `api_uid` and `api_key` fields by default. Public gallery machine surfaces expose user-facing metadata and route identifiers such as `gid` and `token`. Public download machine surfaces expose download state, not daemon-internal helper fields such as `viewer_urls`, `thumb_urls`, `thumb_sprites`, download-task `token`, or local output directory/path values. `pandora download pages ... --json` reports public page states such as `completed` instead of the internal `done` value.
+
+`pandora download report --json` performs a read-only comparison of registered
+terminal tasks with library metadata and page files. Inspect `consistent` and
+the issue codes; an inconsistent report is still a successful command response.
 
 ## Quick Start
 

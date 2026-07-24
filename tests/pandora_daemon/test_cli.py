@@ -80,7 +80,7 @@ def test_build_parser_exposes_download_management_subcommands():
         action.choices for action in download_parser._actions if hasattr(action, "choices") and action.choices
     )
 
-    assert set(download_subcommands) >= {"add", "run", "list", "watch", "cancel", "resume", "retry", "pages"}
+    assert set(download_subcommands) >= {"add", "run", "list", "report", "watch", "cancel", "resume", "retry", "pages"}
 
 
 def test_normalize_argv_preserves_legacy_download_url_form():
@@ -101,6 +101,11 @@ def test_normalize_argv_leaves_download_subcommands_unchanged():
 def test_normalize_argv_leaves_download_run_unchanged():
     argv = _normalize_argv(["download", "run", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--ndjson"])
     assert argv == ["download", "run", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--ndjson"]
+
+
+def test_normalize_argv_leaves_download_report_unchanged():
+    argv = _normalize_argv(["download", "report", "--json"])
+    assert argv == ["download", "report", "--json"]
 
 
 def test_normalize_argv_leaves_parent_options_before_download_subcommand_unchanged():
@@ -285,6 +290,7 @@ async def test_config_json_calls_daemon_config_without_credentials(monkeypatch, 
     [
         (["download", "add", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads", {"gid": "1234567", "token": "a1b2c3d4e5"}),
         (["download", "list", "--json", "--daemon-url", "http://daemon"], "GET", "/api/downloads", None),
+        (["download", "report", "--json", "--daemon-url", "http://daemon"], "GET", "/api/downloads/report", None),
         (["download", "pages", "123", "--json", "--daemon-url", "http://daemon"], "GET", "/api/downloads/123/pages", None),
         (["download", "cancel", "123", "--json", "--daemon-url", "http://daemon"], "DELETE", "/api/downloads/123", None),
         (["download", "resume", "123", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads/123/resume", None),
@@ -457,6 +463,33 @@ async def test_download_list_json_wraps_tasks(monkeypatch, capsys):
 
     assert code == 0
     assert '"tasks"' in _json_out(capsys)
+
+
+@pytest.mark.asyncio
+async def test_download_report_json_preserves_report(monkeypatch, capsys):
+    report = {
+        "consistent": False,
+        "summary": {"issue_count": 1},
+        "issues": [{"code": "orphan_task", "gid": "123"}],
+    }
+
+    def handler(request):
+        assert request.url.path == "/api/downloads/report"
+        return httpx.Response(200, json=report)
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args([
+        "download",
+        "report",
+        "--json",
+        "--daemon-url",
+        "http://daemon",
+    ])
+
+    code = await _run_http_command(args)
+
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == report
 
 
 @pytest.mark.asyncio

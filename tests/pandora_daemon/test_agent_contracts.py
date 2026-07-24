@@ -204,6 +204,23 @@ def test_cli_download_pages_contract_uses_public_page_state_values():
     assert data["page_states"] == {"1": "completed", "2": "failed"}
 
 
+def test_download_consistency_report_contract_is_documented():
+    contract = Path("docs/agent/contract.md").read_text(encoding="utf-8")
+    workflow = Path("docs/agent/workflows/download.md").read_text(encoding="utf-8")
+    skill = Path(".agents/skills/pandora/SKILL.md").read_text(encoding="utf-8")
+
+    for text in (contract, workflow, skill):
+        assert "download report --json" in text
+    for issue_code in (
+        "orphan_task",
+        "missing_pages",
+        "missing_metadata",
+        "invalid_metadata",
+        "unregistered_library",
+    ):
+        assert issue_code in contract
+
+
 def test_library_item_contract_shape(tmp_path: Path):
     gallery_dir = tmp_path / "123-Download"
     gallery_dir.mkdir()

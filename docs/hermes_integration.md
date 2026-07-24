@@ -70,11 +70,15 @@ Follow-up inspection:
 
 ```bash
 uv run python -m pandora_daemon.cli download list --json
+uv run python -m pandora_daemon.cli download report --json
 uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli library list --json
 ```
 
-Daemon WebSocket events use `event` as the discriminator, not `type`. Terminal event and exit semantics are defined in [`agent/contract.md`](agent/contract.md).
+`download report --json` is a read-only daemon comparison; use its issue codes
+instead of reading state or library files. Daemon WebSocket events use `event`
+as the discriminator, not `type`. Terminal event and exit semantics are defined
+in [`agent/contract.md`](agent/contract.md).
 
 ## Skill Maintenance
 

@@ -35,6 +35,12 @@ async def list_downloads(downloads: DownloadManager = Depends(get_downloads)):
     return [t.to_public_dict() for t in tasks]
 
 
+@router.get("/report")
+async def download_consistency_report(downloads: DownloadManager = Depends(get_downloads)):
+    """Report task/library consistency without changing persisted state or files."""
+    return downloads.consistency_report()
+
+
 @router.delete("/{gid}")
 async def cancel_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
     """Cancel a download task by gid."""

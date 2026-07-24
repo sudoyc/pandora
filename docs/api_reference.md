@@ -135,6 +135,7 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 |---|---|---|
 | POST | `/api/downloads` | Submit download, body `{gid, token}` |
 | GET | `/api/downloads` | List all known download tasks |
+| GET | `/api/downloads/report` | Read-only task, metadata, page, and library consistency report |
 | DELETE | `/api/downloads/{gid}` | Cancel task |
 | POST | `/api/downloads/{gid}/retry` | Retry failed pages for `completed_with_errors` task |
 | POST | `/api/downloads/{gid}/resume` | Resume paused task |
@@ -216,6 +217,11 @@ For bots, use `download run <url|gid> [token] --ndjson` as the supported success
 
 `download watch --json` is accepted for JSON error envelopes, while successful watch output is still event-by-event. `download pages --json` normalizes internal page state `done` to public state `completed`. Public REST/CLI download surfaces do not expose daemon-local output directory/path fields as public contract; treat any such values as internal-only.
 
+`download report --json` calls `GET /api/downloads/report`. The response uses
+`consistent`, `summary`, and `issues`; it never returns task tokens or local
+paths. A successfully retrieved inconsistent report exits 0, while transport or
+HTTP failures use the normal machine error envelope.
+
 Machine-mode errors:
 
 ```json
@@ -244,6 +250,7 @@ pandora dl <url>
 pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token] --json
 pandora download list --json
+pandora download report --json
 pandora download watch [gid] --ndjson
 pandora download cancel <gid> --json
 pandora download resume <gid> --json

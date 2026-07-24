@@ -46,11 +46,15 @@ The event discriminator is `event`, not `type`.
 
 ```bash
 uv run python -m pandora_daemon.cli download list --json
+uv run python -m pandora_daemon.cli download report --json
 uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli library list --json
 ```
 
 `download pages --json` reports public page states such as `completed`; internal daemon state may use `done`.
+`download report --json` is read-only. Use its `consistent`, `summary`, and
+`issues` fields to diagnose registered terminal tasks versus metadata, pages,
+and unregistered library entries; do not scan the files from the agent.
 
 ## Recovery Commands
 

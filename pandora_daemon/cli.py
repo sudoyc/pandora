@@ -426,7 +426,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=float, default=argparse.SUPPRESS, help="Request timeout in seconds")
 
 
-_DOWNLOAD_SUBCOMMANDS = {"add", "run", "list", "watch", "cancel", "resume", "retry", "pages"}
+_DOWNLOAD_SUBCOMMANDS = {"add", "run", "list", "report", "watch", "cancel", "resume", "retry", "pages"}
 
 
 def _normalize_argv(argv: list[str] | None = None) -> list[str]:
@@ -479,6 +479,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     download_list = download_subparsers.add_parser("list", help="List download tasks")
     _add_common_options(download_list)
+
+    download_report = download_subparsers.add_parser("report", help="Report task and library consistency")
+    _add_common_options(download_report)
 
     download_watch = download_subparsers.add_parser("watch", help="Watch a download via WebSocket")
     download_watch.add_argument("gid", nargs="?", help="Gallery ID to filter events")
@@ -691,6 +694,10 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                 if download_command_name == "list":
                     tasks = await _download_statuses(client)
                     return _dispatch_json({"tasks": tasks} if args.json else tasks)
+
+                if download_command_name == "report":
+                    data = await _request_json(client, "GET", "/api/downloads/report")
+                    return _dispatch_json(data)
 
                 if download_command_name == "watch":
                     return await _watch_download_events(daemon_url, args.gid, args.ndjson, args.json)

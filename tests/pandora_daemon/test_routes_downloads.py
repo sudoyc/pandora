@@ -149,6 +149,24 @@ class TestListDownloads:
         assert data[2]["status"] == "completed"
 
 
+class TestDownloadConsistencyReport:
+    def test_get_report_returns_manager_report(self):
+        mock_downloads = MagicMock()
+        report = {
+            "consistent": False,
+            "summary": {"issue_count": 1},
+            "issues": [{"code": "orphan_task", "gid": "123"}],
+        }
+        mock_downloads.consistency_report.return_value = report
+        app = _make_app(mock_downloads)
+
+        response = TestClient(app).get("/api/downloads/report")
+
+        assert response.status_code == 200
+        assert response.json() == report
+        mock_downloads.consistency_report.assert_called_once_with()
+
+
 class TestCancelDownload:
     def test_cancel_download_returns_success_true(self):
         mock_downloads = MagicMock()

@@ -7,5 +7,5 @@ Prefer `uv run python -m pandora_daemon.cli download run <url|gid> [token] --ndj
 
 Treat `download_complete` as success. Treat `download_complete_with_errors`, `download_error`, `download_cancelled`, `download_paused`, and `download_auth_failed` as terminal non-success for the current automation step.
 
-Use `download pages <gid> --json`, `download list --json`, and `library list --json` for follow-up inspection. Do not read or expose credentials.
+Use `download pages <gid> --json`, `download list --json`, `download report --json`, and `library list --json` for follow-up inspection. The report is read-only; do not scan daemon files or read or expose credentials.
 ```

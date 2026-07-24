@@ -144,6 +144,7 @@ uv run python -m pandora_daemon.cli tags suggest "artist" --json
 uv run python -m pandora_daemon.cli tags status --json
 uv run python -m pandora_daemon.cli tags refresh --json
 uv run python -m pandora_daemon.cli library list --json
+uv run python -m pandora_daemon.cli download report --json
 ```
 
 For translated tag searches, Pandora intentionally uses scheme A. The CLI does not automatically resolve Chinese or other translated user text into ExHentai tag syntax. Agent flow: `tags status --json`, `tags refresh --json` if stale or unloaded, `tags suggest "丝袜" --json`, agent chooses a candidate such as `female:stockings`, then `search "female:stockings" --search-tags --json`.
@@ -154,6 +155,7 @@ Download lifecycle checks:
 uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
 uv run python -m pandora_daemon.cli download add "https://exhentai.org/g/123/abcdef0123/" --json
 uv run python -m pandora_daemon.cli download list --json
+uv run python -m pandora_daemon.cli download report --json
 uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli download watch 123 --ndjson
 uv run python -m pandora_daemon.cli download cancel 123 --json
@@ -186,6 +188,7 @@ Agent Pack download flow:
 
 ```bash
 uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
+uv run python -m pandora_daemon.cli download report --json
 uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli library list --json
 ```
@@ -203,6 +206,7 @@ uv run python -m pandora_daemon.cli status
 - Treat `config --json` as public/runtime-safe output, not a credential export.
 - `gallery` CLI output redacts `api_uid` and `api_key`; do not depend on those fields from CLI output.
 - `download pages --json` uses public page state `completed`; internal daemon state may still use `done`.
+- `download report --json` is read-only and omits task tokens and local paths; branch on `consistent` and issue codes.
 - `search --category` uses Pandora include-bitmask semantics; the daemon converts to ExHentai's exclude bitmask upstream.
 - Do not expose `~/.config/pandora/config.toml` or raw proxy credentials in logs.
 - The Web frontend is optional and not required for deployment readiness.

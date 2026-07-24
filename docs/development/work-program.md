@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | None |
-| Next work package | `DL-01` |
+| Active work package | `DL-01` |
+| Next work package | None |
 | Last completed work package | `UP-04` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 573 passed（2026-07-24；本地统一检查，implementation `247b576`） |
-| Last Web evidence | lint/build passed（2026-07-24；本地统一检查，implementation `247b576`） |
+| Last full Python evidence | 573 passed（2026-07-24；GitHub Actions `30099122066`） |
+| Last Web evidence | lint/build passed（2026-07-24；GitHub Actions `30099122066`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -46,7 +46,7 @@
 | `UP-02` | Yes | Done | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
 | `UP-03` | Yes | Done | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Done | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
-| `DL-01` | Yes | Ready | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
+| `DL-01` | Yes | In Progress | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
 | `DL-02` | Yes | Queued | `DL-01` | 下载状态有 schema version、原子迁移和损坏文件恢复 | 旧版本迁移、未知版本、截断/损坏文件测试 |
 | `DL-03` | Yes | Queued | `DL-01`, `DL-02` | 提供显式 dry-run repair/forget，幂等且不静默删除页面 | preview/apply/idempotency/no-delete tests 和机器契约 |
 | `DL-04` | Yes | Queued | `DL-03` | cancel/resume/retry/restart/reconcile 状态和终态词汇一致 | 生命周期集成测试、重启恢复 smoke、文档同步 |
@@ -118,7 +118,7 @@
 | `CI-02` | 2026-07-24 | `208a799` | `uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（10 passed）；`uv run --frozen python scripts/check.py`（553 passed，全部阶段 passed）；GitHub Actions `30095287193` 的 Repository contracts、Python 3.12、Web 三个 job 全部 success 且 annotations 均为 0 | workflow 仅授予 `contents: read`；测试禁止凭据和实网上游引用；5 个 npm 告警仅来自开发工具依赖 |
 | `UP-02` | 2026-07-24 | `3838b19` | `uv run --frozen python -m pytest tests/exhentai_api/test_current_upstream_fixtures.py tests/exhentai_api/test_parser_gallery.py tests/exhentai_api/test_parser_home.py -q`（9 passed）；`uv run --frozen python -m pytest tests/exhentai_api -q`（128 passed）；`uv run --frozen python -m pytest tests/pandora_daemon/test_routes_browse.py tests/pandora_daemon/test_routes_user.py tests/pandora_daemon/test_exception_handlers.py -q`（48 passed）；`uv run --frozen python scripts/check.py`（558 passed，全部阶段 passed）；GitHub Actions `30097455729` 三个 job 全部 success | 四类 fixture 脱敏与凭据泄漏扫描通过；原始响应临时目录已删除；未执行上游写操作 |
 | `UP-03` | 2026-07-24 | `6752bdf` | `uv run --frozen python -m pytest tests/pandora_daemon/test_routes_readiness.py tests/pandora_daemon/test_cli.py tests/pandora_daemon/test_agent_contracts.py -q -k readiness`（12 passed）；`uv run --frozen python -m pytest tests/exhentai_api -q`（129 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（432 passed）；`uv run --frozen python scripts/check.py`（571 passed，全部阶段 passed）；GitHub Actions `30098470051` 三个 job 全部 success | 无凭据不请求上游；四项只读探针、核心失败分类、超时、schema、脱敏和 CLI exit 0/1 均有直接测试 |
-| `UP-04` | 2026-07-24 | `247b576` | `uv run --frozen python -m pytest tests/pandora_daemon/test_bootstrap_smoke.py tests/pandora_daemon/test_agent_contracts.py -q`（17 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（434 passed）；`uv run --frozen python scripts/check.py`（573 passed，全部阶段 passed） | fixture daemon 按 health/config/readiness/status 顺序执行且不请求上游；deployment、Agent Pack、skill 和活跃 agent 指引已同步；凭据泄漏检查通过 |
+| `UP-04` | 2026-07-24 | `247b576` | `uv run --frozen python -m pytest tests/pandora_daemon/test_bootstrap_smoke.py tests/pandora_daemon/test_agent_contracts.py -q`（17 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（434 passed）；`uv run --frozen python scripts/check.py`（573 passed，全部阶段 passed）；GitHub Actions `30099122066` 三个 job 全部 success | fixture daemon 按 health/config/readiness/status 顺序执行且不请求上游；deployment、Agent Pack、skill 和活跃 agent 指引已同步；凭据泄漏检查通过 |
 
 ## 7. 阻塞与人工门记录
 

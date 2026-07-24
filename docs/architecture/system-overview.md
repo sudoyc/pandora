@@ -125,6 +125,9 @@ submit -> reject active duplicate -> fetch detail -> persist task -> queue worke
 `completed_with_errors`、`failed`、`paused` 和 `cancelled`；Agent watcher 的退出语义见
 [Agent Contract](../agent/contract.md)。
 
+只读一致性报告以 daemon 已载入的 task 注册表为状态事实源，对照 `download.path` 下的
+metadata 和页面文件；它不重新实现 library 索引、不返回本地路径，也不执行修复。
+
 ## 7. 公共契约
 
 - REST 是请求/响应和资源操作接口；WebSocket 只承载实时事件。

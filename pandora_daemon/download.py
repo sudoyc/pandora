@@ -33,6 +33,35 @@ def _atomic_write(path: Path, data: bytes) -> None:
     tmp_path.rename(path)
 
 
+_TERMINAL_ARTIFACT_STATUSES = {"completed", "completed_with_errors"}
+_PAGE_FILE_RE = re.compile(r"^(\d{4,})\.[^.]+$")
+
+
+def _read_library_metadata(gallery_dir: Path) -> tuple[str, dict | None]:
+    metadata_path = gallery_dir / "metadata.json"
+    if not metadata_path.is_file():
+        return "missing", None
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeError):
+        return "invalid", None
+    if not isinstance(metadata, dict) or not str(metadata.get("gid", "")):
+        return "invalid", None
+    return "present", metadata
+
+
+def _present_page_numbers(gallery_dir: Path) -> set[int]:
+    pages_dir = gallery_dir / "pages"
+    if not pages_dir.is_dir():
+        return set()
+    pages = set()
+    for path in pages_dir.iterdir():
+        match = _PAGE_FILE_RE.fullmatch(path.name)
+        if path.is_file() and match and path.suffix != ".tmp":
+            pages.add(int(match.group(1)))
+    return pages
+
+
 @dataclass
 class DownloadTask:
     """Represents a single gallery download task."""
@@ -199,6 +228,118 @@ class DownloadManager:
 
     def status(self) -> list[DownloadTask]:
         return list(self._tasks.values())
+
+    def consistency_report(self) -> dict:
+        """Compare registered terminal tasks with library files without changing either."""
+        issues = []
+        terminal_tasks = [
+            task for task in self._tasks.values()
+            if task.status in _TERMINAL_ARTIFACT_STATUSES
+        ]
+
+        def add_issue(
+            code: str,
+            gid: str,
+            task_status: str | None,
+            expected_pages: int | None,
+            present_pages: int,
+            missing_pages: list[int],
+        ) -> None:
+            issues.append({
+                "code": code,
+                "gid": gid,
+                "task_status": task_status,
+                "expected_pages": expected_pages,
+                "present_pages": present_pages,
+                "missing_pages": missing_pages,
+            })
+
+        for task in sorted(terminal_tasks, key=lambda item: item.gid):
+            gallery_dir = Path(task.output_dir)
+            if gallery_dir.parent != self._download_path or not gallery_dir.is_dir():
+                add_issue("orphan_task", task.gid, task.status, task.total_pages, 0, [])
+                continue
+
+            page_numbers = _present_page_numbers(gallery_dir)
+            expected_numbers = set(range(1, task.total_pages + 1))
+            present_pages = len(page_numbers & expected_numbers)
+            metadata_status, metadata = _read_library_metadata(gallery_dir)
+            if metadata_status == "missing":
+                add_issue(
+                    "missing_metadata",
+                    task.gid,
+                    task.status,
+                    task.total_pages,
+                    present_pages,
+                    [],
+                )
+            elif metadata_status == "invalid" or str(metadata["gid"]) != task.gid:
+                add_issue(
+                    "invalid_metadata",
+                    task.gid,
+                    task.status,
+                    task.total_pages,
+                    present_pages,
+                    [],
+                )
+
+            missing_pages = sorted(expected_numbers - page_numbers)
+            if missing_pages:
+                add_issue(
+                    "missing_pages",
+                    task.gid,
+                    task.status,
+                    task.total_pages,
+                    present_pages,
+                    missing_pages,
+                )
+
+        registered_gids = {task.gid for task in self._tasks.values()}
+        library_entries = 0
+        if self._download_path.is_dir():
+            for gallery_dir in sorted(self._download_path.iterdir()):
+                if not gallery_dir.is_dir():
+                    continue
+                metadata_status, metadata = _read_library_metadata(gallery_dir)
+                if metadata_status != "present":
+                    continue
+                library_entries += 1
+                gid = str(metadata["gid"])
+                if gid in registered_gids:
+                    continue
+
+                expected_pages = metadata.get("pages")
+                if isinstance(expected_pages, bool) or not isinstance(expected_pages, int):
+                    expected_pages = None
+                page_numbers = _present_page_numbers(gallery_dir)
+                if expected_pages is None:
+                    present_pages = len(page_numbers)
+                    missing_pages = []
+                else:
+                    expected_numbers = set(range(1, expected_pages + 1))
+                    present_pages = len(page_numbers & expected_numbers)
+                    missing_pages = sorted(expected_numbers - page_numbers)
+                add_issue(
+                    "unregistered_library",
+                    gid,
+                    None,
+                    expected_pages,
+                    present_pages,
+                    missing_pages,
+                )
+
+        issues.sort(key=lambda issue: (issue["gid"], issue["code"]))
+        return {
+            "consistent": not issues,
+            "summary": {
+                "registered_tasks": len(self._tasks),
+                "terminal_tasks": len(terminal_tasks),
+                "library_entries": library_entries,
+                "affected_galleries": len({issue["gid"] for issue in issues}),
+                "issue_count": len(issues),
+            },
+            "issues": issues,
+        }
 
     def _write_metadata(self, detail, output_dir: str) -> None:
         """Write metadata.json with complete gallery info."""
