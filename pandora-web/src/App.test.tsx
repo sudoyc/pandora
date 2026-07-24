@@ -64,9 +64,22 @@ describe('App gallery feed', () => {
     await user.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(screen.getByRole('heading', { name: 'Search: fixture query' })).toBeVisible();
-    expect(vi.mocked(useGalleries)).toHaveBeenLastCalledWith('search', 'fixture query');
+    expect(vi.mocked(useGalleries)).toHaveBeenLastCalledWith({
+      kind: 'search',
+      query: 'fixture query',
+    });
     expect(JSON.parse(localStorage.getItem('searchHistory') ?? '[]')).toEqual([
       'fixture query',
     ]);
+  });
+
+  it('switches the feed with a typed navigation view', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Popular' }));
+
+    expect(screen.getByRole('heading', { name: 'popular' })).toBeVisible();
+    expect(vi.mocked(useGalleries)).toHaveBeenLastCalledWith({ kind: 'popular' });
   });
 });

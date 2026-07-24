@@ -34,7 +34,7 @@ const detail = {
 test('loads the feed and opens detail and reader views', async ({ page }) => {
   await page.route('http://127.0.0.1:7860/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/homepage') {
+    if (path === '/api/homepage' || path === '/api/search') {
       await route.fulfill({ json: [gallery] });
       return;
     }
@@ -60,6 +60,12 @@ test('loads the feed and opens detail and reader views', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: 'Gallery Feed' })).toBeVisible();
   await expect(page.getByText('Fixture Browser Download')).toBeVisible();
+  await page.getByPlaceholder('Search galleries...').fill('  fixture query  ');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page.getByRole('heading', { name: 'Search: fixture query' })).toBeVisible();
+  await expect(page.getByText('Recent: fixture query')).toBeVisible();
+  await page.getByRole('button', { name: 'Browse', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Gallery Feed' })).toBeVisible();
   await page.getByRole('button', { name: /Fixture Browser Gallery/ }).click();
   await expect(page.getByRole('heading', { name: 'Fixture Browser Gallery' })).toBeVisible();
 

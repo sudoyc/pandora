@@ -16,11 +16,13 @@ Implemented:
 - recent download progress panel
 - Vitest unit/component coverage for feed, detail, reader, and WebSocket state
 - Playwright browser smoke coverage for the feed-to-reader workflow
+- typed daemon GET/error client and discriminated gallery view state
+- split sidebar, search/header, gallery feed, and download progress components
 - CSS variable based dark theme
 
 Still intentionally lightweight / next refactor targets:
 
-- `src/App.tsx` still owns layout, sidebar state, search form, search history, gallery selection, and download progress rendering; split it before adding more views.
+- The typed API client currently covers the GET/error behavior used by existing views; add endpoint-specific helpers as new workflows land.
 - WebSocket progress state is live-event only; reconcile with `/api/downloads` on load/reconnect.
 - Add dedicated pages for favorites, history, downloads, and local library.
 - Expand browser coverage for reconnect/restart behavior and the remaining views.
@@ -59,26 +61,9 @@ npm run lint
 npm run build
 ```
 
-## Recommended next refactor
+## Recommended next work
 
-1. Split `App.tsx`:
-   - `components/layout/AppShell.tsx`
-   - `components/layout/Sidebar.tsx`
-   - `components/search/SearchBar.tsx`
-   - `features/gallery/GalleryFeed.tsx`
-   - `features/downloads/DownloadProgressPanel.tsx`
-2. Expand `src/api/client.ts` into a typed API client:
-   - `apiGet<T>()`, `apiPost<T>()`, `apiDelete<T>()`
-   - explicit error type for non-2xx responses
-   - typed helpers for downloads/favorites/library
-3. Introduce route/view state:
-   - home
-   - search
-   - popular
-   - watched
-   - favorites
-   - history
-   - downloads
-   - library
-4. Make `useGalleries` accept a typed source/query object instead of `(mode, keyword)`.
-5. Add smoke tests for: gallery feed load, search, drawer open, reader image URL, WS event reducer.
+1. Reconcile WebSocket download state from `/api/downloads` on initial load and reconnect.
+2. Add endpoint-specific typed helpers alongside favorites, history, downloads, and library views.
+3. Cover reconnect/restart behavior with browser tests before expanding the workflows.
+4. Complete responsive layout and keyboard/focus checks across desktop and mobile viewports.

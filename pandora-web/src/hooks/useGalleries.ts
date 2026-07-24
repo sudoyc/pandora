@@ -1,19 +1,19 @@
 import useSWRInfinite from 'swr/infinite';
 import { fetcher } from '../api/client';
+import { DEFAULT_GALLERY_VIEW, type GalleryView } from '../galleryView';
 import type { GalleryListItem } from '../models';
 
-export function useGalleries(mode: 'homepage' | 'search' | 'popular' | 'watched' = 'homepage', keyword = '') {
-  const trimmedKeyword = keyword.trim();
-  const isPaginated = mode === 'search' || mode === 'watched';
+export function useGalleries(view: GalleryView = DEFAULT_GALLERY_VIEW) {
+  const isPaginated = view.kind === 'search' || view.kind === 'watched';
 
   const getKey = (pageIndex: number, previousPageData: GalleryListItem[] | null) => {
     if (previousPageData && previousPageData.length === 0) return null;
     if (!isPaginated && pageIndex > 0) return null;
-    if (mode === 'search') {
-      return `/search?keyword=${encodeURIComponent(trimmedKeyword)}&page=${pageIndex}`;
+    if (view.kind === 'search') {
+      return `/search?keyword=${encodeURIComponent(view.query)}&page=${pageIndex}`;
     }
-    if (mode === 'popular') return '/popular';
-    if (mode === 'watched') return `/watched?page=${pageIndex}`;
+    if (view.kind === 'popular') return '/popular';
+    if (view.kind === 'watched') return `/watched?page=${pageIndex}`;
     return '/homepage';
   };
 
