@@ -150,6 +150,19 @@ def test_ci_workflow_runs_fixture_only_unified_groups():
         assert f"uv run --frozen python scripts/check.py --group {group}" in commands
         assert "environment" not in job
 
+    action_references = {
+        step["uses"]
+        for job in jobs.values()
+        for step in job["steps"]
+        if "uses" in step
+    }
+    assert action_references == {
+        "actions/checkout@v7",
+        "actions/setup-node@v7",
+        "actions/setup-python@v7",
+        "astral-sh/setup-uv@v9",
+    }
+
     forbidden_references = (
         "secrets.",
         "igneous",
