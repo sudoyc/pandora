@@ -1,6 +1,6 @@
 # Pandora 长期开发工作计划
 
-状态：Ready
+状态：In Progress
 范围：当前路线图全部 Required 工作包
 最近核对：2026-07-23
 
@@ -12,9 +12,9 @@
 
 | 字段 | 当前值 |
 |---|---|
-| Program | Ready |
-| Active work package | None |
-| Next work package | `CI-02` |
+| Program | In Progress |
+| Active work package | `CI-02` |
+| Next work package | None |
 | Last completed work package | `CI-01` |
 | Blockers | `UP-02`：缺少当前脱敏上游 fixture，实网上游探针未获授权 |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
@@ -51,7 +51,7 @@
 | `DL-03` | Yes | Queued | `DL-01`, `DL-02` | 提供显式 dry-run repair/forget，幂等且不静默删除页面 | preview/apply/idempotency/no-delete tests 和机器契约 |
 | `DL-04` | Yes | Queued | `DL-03` | cancel/resume/retry/restart/reconcile 状态和终态词汇一致 | 生命周期集成测试、重启恢复 smoke、文档同步 |
 | `CI-01` | Yes | Done | - | 建立一个本地统一检查入口，覆盖锁文件、Markdown 链接、Agent schema、Python 和 Web | 干净 clone 可执行；每个失败能定位具体检查 |
-| `CI-02` | Yes | Ready | `CI-01` | 主分支 CI 使用与本地一致的检查，不依赖凭据或真实内容 | workflow 配置、fixture-only run、分层 job 结果 |
+| `CI-02` | Yes | In Progress | `CI-01` | 主分支 CI 使用与本地一致的检查，不依赖凭据或真实内容 | workflow 配置、fixture-only run、分层 job 结果 |
 | `REL-01` | Yes | Queued | `CI-02`, `CT-01` | 统一版本/changelog/tag/构建/回滚规则并产出内部 release candidate | 版本一致性检查、artifact build/install dry-run、回滚 runbook |
 | `CT-01` | Yes | Queued | `UP-04`, `DL-04` | 定义 REST/CLI/WS 版本兼容、错误码、退出码和弃用策略 | 决策/contract 文档、错误矩阵 contract tests |
 | `CT-02` | Yes | Queued | `CT-01` | 主要成功响应都有 JSON Schema 并由真实 serializer fixture 校验 | health/readiness/search/gallery/download/library/tag schema tests |

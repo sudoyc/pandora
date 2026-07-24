@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from collections.abc import Callable, Iterable, Sequence
@@ -22,6 +23,11 @@ CHECKS: tuple[Check, ...] = (
     ("Web build", ("npm", "--prefix", "pandora-web", "run", "build")),
     ("Git whitespace", ("git", "diff", "--check")),
 )
+CHECK_GROUPS: dict[str, tuple[Check, ...]] = {
+    "repository": (CHECKS[0], CHECKS[2], CHECKS[6]),
+    "python": (CHECKS[3],),
+    "web": (CHECKS[1], CHECKS[4], CHECKS[5]),
+}
 
 
 def run_checks(
@@ -45,10 +51,18 @@ def run_checks(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    if argv:
-        print("usage: uv run --frozen python scripts/check.py", file=sys.stderr)
-        return 2
-    return run_checks()
+    parser = argparse.ArgumentParser(
+        description="Run Pandora repository checks.",
+        prog="uv run --frozen python scripts/check.py",
+    )
+    parser.add_argument(
+        "--group",
+        choices=CHECK_GROUPS,
+        help="run one CI check group instead of the complete local suite",
+    )
+    args = parser.parse_args(argv)
+    checks = CHECK_GROUPS[args.group] if args.group else CHECKS
+    return run_checks(checks)
 
 
 if __name__ == "__main__":

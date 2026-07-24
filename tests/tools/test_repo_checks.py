@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.check import CHECKS, run_checks
+import pytest
+import yaml
+
+import scripts.check as unified_check
+from scripts.check import CHECK_GROUPS, CHECKS, run_checks
 from scripts.repo_checks import check_agent_schemas, check_markdown_links
 
 
@@ -89,6 +93,72 @@ def test_unified_check_plan_covers_required_stages():
     assert plan["Web lint"][-2:] == ("run", "lint")
     assert plan["Web build"][-2:] == ("run", "build")
     assert plan["Git whitespace"] == ("git", "diff", "--check")
+
+
+def test_unified_check_groups_partition_required_stages():
+    assert tuple(CHECK_GROUPS) == ("repository", "python", "web")
+    assert [label for label, _ in CHECK_GROUPS["repository"]] == [
+        "Python lock",
+        "Markdown links and Agent schemas",
+        "Git whitespace",
+    ]
+    assert [label for label, _ in CHECK_GROUPS["python"]] == ["Python tests"]
+    assert [label for label, _ in CHECK_GROUPS["web"]] == [
+        "Web lock and install",
+        "Web lint",
+        "Web build",
+    ]
+
+    grouped_checks = [check for checks in CHECK_GROUPS.values() for check in checks]
+    assert len(grouped_checks) == len(CHECKS)
+    assert set(grouped_checks) == set(CHECKS)
+
+
+def test_unified_check_group_runs_only_selected_stages(monkeypatch):
+    selected = []
+
+    def fake_run_checks(checks):
+        selected.extend(checks)
+        return 0
+
+    monkeypatch.setattr(unified_check, "run_checks", fake_run_checks)
+
+    assert unified_check.main(["--group", "python"]) == 0
+    assert selected == list(CHECK_GROUPS["python"])
+
+
+def test_unified_check_rejects_unknown_group():
+    with pytest.raises(SystemExit) as exc_info:
+        unified_check.main(["--group", "unknown"])
+
+    assert exc_info.value.code == 2
+
+
+def test_ci_workflow_runs_fixture_only_unified_groups():
+    workflow_path = ROOT / ".github" / "workflows" / "ci.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(workflow_text)
+
+    assert workflow["on"]["push"]["branches"] == ["main"]
+    assert "pull_request" in workflow["on"]
+    assert workflow["permissions"] == {"contents": "read"}
+
+    jobs = workflow["jobs"]
+    assert set(jobs) == {"repository", "python", "web"}
+    for group, job in jobs.items():
+        commands = [step.get("run") for step in job["steps"]]
+        assert f"uv run --frozen python scripts/check.py --group {group}" in commands
+        assert "environment" not in job
+
+    forbidden_references = (
+        "secrets.",
+        "igneous",
+        "ipb_member_id",
+        "ipb_pass_hash",
+        "exhentai.org",
+        "e-hentai.org",
+    )
+    assert not any(reference in workflow_text.lower() for reference in forbidden_references)
 
 
 def test_unified_check_stops_at_named_failure(capsys, tmp_path):

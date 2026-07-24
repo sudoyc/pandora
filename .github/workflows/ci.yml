@@ -1,0 +1,71 @@
+name: CI
+
+'on':
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    name: Repository contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.30'
+          enable-cache: true
+      - name: Check locks, docs, schemas, and whitespace
+        run: uv run --frozen python scripts/check.py --group repository
+
+  python:
+    name: Python 3.12
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.30'
+          enable-cache: true
+      - name: Run Python tests
+        run: uv run --frozen python scripts/check.py --group python
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.30'
+          enable-cache: true
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: pandora-web/package-lock.json
+      - name: Lint and build Web
+        run: uv run --frozen python scripts/check.py --group web
