@@ -324,3 +324,26 @@ def test_cli_machine_error_envelope_contract_shape():
     assert data["ok"] is False
     _assert_keys(data["error"], {"code", "message"})
     assert data["error"]["code"] == "connect_error"
+
+
+def test_upstream_error_schema_and_contract_docs_exist():
+    schema_path = Path("docs/agent/schemas/upstream-error.schema.json")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    core_codes = {"auth", "session", "upstream", "parse", "network"}
+
+    assert schema["required"] == ["error", "detail"]
+    assert schema["additionalProperties"] is False
+    assert core_codes <= set(schema["properties"]["error"]["enum"])
+
+    serialized_schema = json.dumps(schema)
+    for sensitive_name in ("igneous", "ipb_member_id", "ipb_pass_hash", "cookie", "response_body"):
+        assert sensitive_name not in serialized_schema
+
+    for doc_path in (
+        Path("docs/api_reference.md"),
+        Path("docs/agent/contract.md"),
+        Path(".agents/skills/pandora/SKILL.md"),
+    ):
+        text = doc_path.read_text(encoding="utf-8")
+        for code in core_codes:
+            assert f"`{code}`" in text

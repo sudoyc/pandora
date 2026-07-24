@@ -3,6 +3,8 @@ import pytest
 from exhentai_api.exceptions import (
     ExhentaiError,
     AuthenticationError,
+    SessionError,
+    UpstreamError,
     ImageLimitError,
     GalleryNotFoundError,
     GalleryOffensiveError,
@@ -19,6 +21,8 @@ class TestExceptionHierarchy:
 
     @pytest.mark.parametrize("exc_class", [
         AuthenticationError,
+        SessionError,
+        UpstreamError,
         ImageLimitError,
         GalleryNotFoundError,
         GalleryOffensiveError,
@@ -30,6 +34,8 @@ class TestExceptionHierarchy:
 
     @pytest.mark.parametrize("exc_class", [
         AuthenticationError,
+        SessionError,
+        UpstreamError,
         ImageLimitError,
         GalleryNotFoundError,
         GalleryOffensiveError,
@@ -59,3 +65,12 @@ class TestExceptionHierarchy:
                 raise AuthenticationError("test")
             except GalleryNotFoundError:
                 pytest.fail("Wrong exception caught")
+
+    def test_session_error_remains_authentication_compatible(self):
+        assert issubclass(SessionError, AuthenticationError)
+
+    def test_upstream_error_preserves_status_without_response_content(self):
+        exc = UpstreamError(status_code=404)
+
+        assert exc.status_code == 404
+        assert "404" not in str(exc)

@@ -1,6 +1,7 @@
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from exhentai_api.api import ExhentaiAPI
+from exhentai_api.exceptions import ParseError
 from exhentai_api.models.gallery import GalleryListItem, GalleryDetail
 from exhentai_api.constants import BASE_URL
 
@@ -24,6 +25,24 @@ async def test_get_homepage():
     assert items[0].gid == "1"
 
     mock_client.get_html.assert_called_once_with(f"{BASE_URL}/")
+
+
+@pytest.mark.asyncio
+async def test_parser_failure_raises_sanitized_parse_error():
+    upstream_page = "<html>FULL_UPSTREAM_PAGE</html>"
+    mock_client = AsyncMock()
+    mock_client.get_html.return_value = upstream_page
+    api = ExhentaiAPI(client=mock_client)
+
+    with patch(
+        "exhentai_api.api.parse_gallery_list",
+        side_effect=ValueError(upstream_page),
+    ):
+        with pytest.raises(ParseError) as raised:
+            await api.get_homepage()
+
+    assert str(raised.value) == "Upstream response parse failed."
+    assert "FULL_UPSTREAM_PAGE" not in str(raised.value)
 
 @pytest.mark.asyncio
 async def test_get_gallery_details():

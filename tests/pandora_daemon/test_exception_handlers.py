@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from exhentai_api.exceptions import (
     ExhentaiError,
     AuthenticationError,
+    SessionError,
+    UpstreamError,
     ImageLimitError,
     GalleryNotFoundError,
     GalleryOffensiveError,
@@ -54,6 +56,26 @@ class TestExceptionHandlers:
         assert data["error"] == "auth"
         assert data["detail"] == "Authentication failed"
         assert "Sad Panda" not in data["detail"]
+
+    def test_session_error_returns_stable_401(self, app):
+        app.set_exception(SessionError("expired cookie"))
+        resp = app.get()
+
+        assert resp.status_code == 401
+        assert resp.json() == {
+            "error": "session",
+            "detail": "Upstream session is invalid",
+        }
+
+    def test_upstream_error_returns_stable_502(self, app):
+        app.set_exception(UpstreamError(status_code=404))
+        resp = app.get()
+
+        assert resp.status_code == 502
+        assert resp.json() == {
+            "error": "upstream",
+            "detail": "Upstream service request failed",
+        }
 
     def test_gallery_not_found_returns_404(self, app):
         app.set_exception(GalleryNotFoundError("Gallery removed"))
@@ -126,3 +148,26 @@ class TestExceptionHandlers:
         assert "error" not in data
         assert data["detail"] == "Bad gateway"
         assert "Connection details leaked" not in data["detail"]
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            AuthenticationError("igneous=COOKIE_SECRET"),
+            SessionError("ipb_member_id=COOKIE_SECRET"),
+            UpstreamError("<html>FULL_UPSTREAM_PAGE</html>"),
+            ParseError("<html>FULL_UPSTREAM_PAGE</html>"),
+            NetworkError("https://user:PROXY_SECRET@proxy.example"),
+            ExhentaiError("igneous=COOKIE_SECRET"),
+            RuntimeError("<html>FULL_UPSTREAM_PAGE</html>"),
+            Exception("ipb_pass_hash=COOKIE_SECRET"),
+        ],
+    )
+    def test_exception_output_and_logs_do_not_leak_details(self, app, caplog, exc):
+        app.set_exception(exc)
+        with caplog.at_level("WARNING", logger="pandora_daemon.app"):
+            resp = app.get()
+
+        combined = resp.text + caplog.text
+        assert "COOKIE_SECRET" not in combined
+        assert "FULL_UPSTREAM_PAGE" not in combined
+        assert "PROXY_SECRET" not in combined

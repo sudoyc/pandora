@@ -5,15 +5,32 @@ from typing import Optional
 
 from exhentai_api.exceptions import (
     AuthenticationError,
+    SessionError,
+    UpstreamError,
     ImageLimitError,
     GalleryNotFoundError,
     GalleryOffensiveError,
     NetworkError,
+    ParseError,
     ExhentaiError,
 )
 
 # Sentinel: exceptions that must never be retried
 _NO_RETRY = (AuthenticationError, ImageLimitError, GalleryNotFoundError, GalleryOffensiveError)
+_SESSION_ERROR_MESSAGE = "Sad Panda response indicates an invalid upstream session."
+_NETWORK_ERROR_MESSAGE = "Network error while requesting the upstream service."
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code == 509:
+            raise ImageLimitError("Image viewing limit exceeded.") from exc
+        if status_code == 401:
+            raise SessionError(_SESSION_ERROR_MESSAGE) from exc
+        raise UpstreamError(status_code=status_code) from exc
 
 
 class ExhentaiClient:
@@ -60,17 +77,10 @@ class ExhentaiClient:
 
                 # 1. Sad Panda (200 with special Content-Disposition header)
                 if 'inline; filename="sadpanda.jpg"' in response.headers.get("Content-Disposition", ""):
-                    raise AuthenticationError(
-                        "Received Sad Panda. Your cookies might be invalid or your IP is blocked."
-                    )
+                    raise SessionError(_SESSION_ERROR_MESSAGE)
 
                 # 2. HTTP status errors (catches 509 and others)
-                try:
-                    response.raise_for_status()
-                except httpx.HTTPStatusError as http_err:
-                    if http_err.response.status_code == 509:
-                        raise ImageLimitError("Image viewing limit exceeded (HTTP 509).") from http_err
-                    raise NetworkError(f"HTTP error: {http_err}") from http_err
+                _raise_for_status(response)
 
                 html = response.text
 
@@ -85,13 +95,13 @@ class ExhentaiClient:
             except _NO_RETRY:
                 raise
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                wrapped = NetworkError(f"Network error: {e}")
+                wrapped = NetworkError(_NETWORK_ERROR_MESSAGE)
                 wrapped.__cause__ = e
                 last_exception = wrapped
-            except NetworkError as e:
+            except (NetworkError, UpstreamError, ParseError) as e:
                 last_exception = e
             except Exception as e:
-                wrapped = NetworkError(f"Unexpected error: {e}")
+                wrapped = NetworkError("Unexpected upstream client failure.")
                 wrapped.__cause__ = e
                 last_exception = wrapped
 
@@ -107,23 +117,21 @@ class ExhentaiClient:
         for attempt in range(retries):
             try:
                 response = await self.session.post(url, json=json)
+                _raise_for_status(response)
                 try:
-                    response.raise_for_status()
-                except httpx.HTTPStatusError as http_err:
-                    if http_err.response.status_code == 509:
-                        raise ImageLimitError("Image viewing limit exceeded (HTTP 509).") from http_err
-                    raise NetworkError(f"HTTP error: {http_err}") from http_err
-                return response.json()
+                    return response.json()
+                except ValueError as exc:
+                    raise ParseError("Upstream response parse failed.") from exc
             except _NO_RETRY:
                 raise
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                wrapped = NetworkError(f"Network error: {e}")
+                wrapped = NetworkError(_NETWORK_ERROR_MESSAGE)
                 wrapped.__cause__ = e
                 last_exception = wrapped
-            except NetworkError as e:
+            except (NetworkError, UpstreamError, ParseError) as e:
                 last_exception = e
             except Exception as e:
-                wrapped = NetworkError(f"Unexpected error: {e}")
+                wrapped = NetworkError("Unexpected upstream client failure.")
                 wrapped.__cause__ = e
                 last_exception = wrapped
 
@@ -139,23 +147,18 @@ class ExhentaiClient:
         for attempt in range(retries):
             try:
                 response = await self.session.post(url, data=data)
-                try:
-                    response.raise_for_status()
-                except httpx.HTTPStatusError as http_err:
-                    if http_err.response.status_code == 509:
-                        raise ImageLimitError("Image viewing limit exceeded (HTTP 509).") from http_err
-                    raise NetworkError(f"HTTP error: {http_err}") from http_err
+                _raise_for_status(response)
                 return response.text
             except _NO_RETRY:
                 raise
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                wrapped = NetworkError(f"Network error: {e}")
+                wrapped = NetworkError(_NETWORK_ERROR_MESSAGE)
                 wrapped.__cause__ = e
                 last_exception = wrapped
-            except NetworkError as e:
+            except (NetworkError, UpstreamError, ParseError) as e:
                 last_exception = e
             except Exception as e:
-                wrapped = NetworkError(f"Unexpected error: {e}")
+                wrapped = NetworkError("Unexpected upstream client failure.")
                 wrapped.__cause__ = e
                 last_exception = wrapped
 

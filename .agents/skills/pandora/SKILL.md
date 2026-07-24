@@ -129,6 +129,12 @@ Current tested error codes:
 - `websocket_error`
 - `websocket_dependency_missing`
 
+Upstream REST failures use the sanitized shape
+`{"error":"session","detail":"Upstream session is invalid"}`. Stable core
+classifications are `auth`, `session`, `upstream`, `parse`, and `network`; branch
+on `error`, not `detail`. Full semantics and the schema live in
+`docs/agent/contract.md`.
+
 Browse/read-only commands:
 
 ```bash

@@ -71,6 +71,31 @@ Default base URL: `http://127.0.0.1:7860`.
 
 Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`. `igneous` and `ipb_member_id` are the usual minimum; `ipb_pass_hash` is optional and should be left empty when the session does not require it. Public config and CLI machine output never expose raw credential values.
 
+### Upstream error classification
+
+Daemon routes that fail while calling the upstream service return a stable,
+sanitized REST envelope:
+
+```json
+{"error":"session","detail":"Upstream session is invalid"}
+```
+
+| HTTP | `error` | Meaning |
+|---|---|---|
+| 401 | `auth` | Required authentication configuration is absent or rejected before a session can be used |
+| 401 | `session` | A configured session was explicitly rejected or expired, including a Sad Panda response or HTTP 401 |
+| 502 | `upstream` | The upstream service or endpoint returned an unexpected HTTP status |
+| 502 | `parse` | An upstream HTML or JSON response could not be parsed |
+| 502 | `network` | The upstream request failed at the transport layer |
+
+These categories are distinct from a successful empty list. The `detail` value
+is fixed human-readable text; exception messages, upstream status details,
+cookies, proxy credentials, and response bodies are not returned or logged.
+Resource-specific failures retain their existing codes, including
+`gallery_not_found`, `image_limit`, and `offensive`.
+
+Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-error.schema.json).
+
 ### Browse
 
 | Method | Path | Description |

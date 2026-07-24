@@ -3,6 +3,8 @@ from .client import ExhentaiClient
 from .exceptions import (
     ExhentaiError,
     AuthenticationError,
+    SessionError,
+    UpstreamError,
     ImageLimitError,
     GalleryNotFoundError,
     GalleryOffensiveError,

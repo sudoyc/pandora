@@ -27,6 +27,29 @@ uv run python -m pandora_daemon.cli tags status --json
 - `status --json` returns the download queue state.
 - `tags status --json` reports the EhTagTranslation cache state for search agents.
 
+## Upstream REST Error Classification
+
+Daemon routes use a stable, sanitized envelope for upstream failures:
+
+```json
+{"error":"session","detail":"Upstream session is invalid"}
+```
+
+Core classifications:
+
+- `auth`: required authentication configuration is absent or rejected.
+- `session`: the configured session is invalid or expired.
+- `upstream`: the upstream service or endpoint returned an unexpected HTTP status.
+- `parse`: the upstream HTML or JSON response could not be parsed.
+- `network`: the upstream transport failed.
+
+A successful empty list is not an error category. Consumers must branch on
+`error`, not on the human-readable `detail`. The daemon does not include
+exception text, raw upstream responses, cookies, proxy credentials, or upstream
+status details in this envelope or its request-error logs.
+
+Schema: [`schemas/upstream-error.schema.json`](schemas/upstream-error.schema.json).
+
 ## CLI Error Envelope
 
 When `--json` or `--ndjson` is active, CLI failures use this envelope:

@@ -1,6 +1,6 @@
 import hashlib
 import re
-from typing import Optional, List
+from typing import Any, Callable, Optional, List, TypeVar
 
 from exhentai_api.client import ExhentaiClient
 from exhentai_api.parsers.gallery import parse_gallery_list
@@ -27,6 +27,22 @@ from exhentai_api.models.profile import ProfileResult
 from exhentai_api.models.vote import RateResult, VoteCommentResult
 from exhentai_api.models.tags import WatchedTag
 from exhentai_api.constants import BASE_URL
+from exhentai_api.exceptions import ParseError
+
+
+ParsedT = TypeVar("ParsedT")
+
+
+def _parse_response(
+    parser: Callable[..., ParsedT],
+    *args: Any,
+) -> ParsedT:
+    try:
+        return parser(*args)
+    except ParseError:
+        raise
+    except Exception as exc:
+        raise ParseError("Upstream response parse failed.") from exc
 
 
 class ExhentaiAPI:
@@ -48,7 +64,7 @@ class ExhentaiAPI:
 
     async def get_homepage(self):
         html = await self.client.get_html(f"{BASE_URL}/")
-        return parse_gallery_list(html)
+        return _parse_response(parse_gallery_list, html)
 
     async def search(self, params: SearchParams, page: int = 0) -> list[GalleryListItem]:
         query_params = params.to_dict()
@@ -56,12 +72,12 @@ class ExhentaiAPI:
             query_params["page"] = str(page)
 
         html = await self.client.get_html(f"{BASE_URL}/", params=query_params)
-        return parse_gallery_list(html)
+        return _parse_response(parse_gallery_list, html)
 
     async def get_gallery_details(self, gid: str, token: str) -> GalleryDetail:
         url = f"{BASE_URL}/g/{gid}/{token}/"
         html = await self.client.get_html(url)
-        return parse_gallery_detail(html, gid, token)
+        return _parse_response(parse_gallery_detail, html, gid, token)
 
     async def get_image_url(self, gid: str, imgkey: str, page: int, nl: Optional[str] = None) -> ImageDetail:
         if nl:
@@ -74,13 +90,13 @@ class ExhentaiAPI:
                 "showkey": nl
             }
             json_resp = await self.client.post_json(f"{BASE_URL}/api.php", json=payload)
-            image_url, new_nl = parse_image_api_response(json_resp)
+            image_url, new_nl = _parse_response(parse_image_api_response, json_resp)
             return ImageDetail(gid=str(gid), page=page, image_url=image_url, nl=new_nl)
         else:
             # Initial load from viewer page
             url = f"{BASE_URL}/s/{imgkey}/{gid}-{page}"
             html = await self.client.get_html(url)
-            image_url, new_nl = parse_image_viewer(html)
+            image_url, new_nl = _parse_response(parse_image_viewer, html)
             return ImageDetail(gid=str(gid), page=page, image_url=image_url, nl=new_nl)
 
     async def get_favorites(
@@ -107,7 +123,7 @@ class ExhentaiAPI:
                 params["sf"] = "on"
 
         html = await self.client.get_html(f"{BASE_URL}/favorites.php", params=params if params else None)
-        return parse_favorites_list(html)
+        return _parse_response(parse_favorites_list, html)
 
     async def add_favorite(self, gid: str, token: str, favcat: int = 0, favnote: str = "") -> str:
         url = f"{BASE_URL}/gallerypopups.php?gid={gid}&t={token}&act=addfav"
@@ -143,7 +159,7 @@ class ExhentaiAPI:
 
     async def get_popular(self) -> List[GalleryListItem]:
         html = await self.client.get_html(f"{BASE_URL}/popular")
-        return parse_gallery_list(html)
+        return _parse_response(parse_gallery_list, html)
 
     async def get_toplist(self, tl: str = "15") -> List[TopListItem]:
         url = f"{BASE_URL}/toplist.php"
@@ -154,7 +170,7 @@ class ExhentaiAPI:
         # Note: Toplist is only supported on e-hentai.org natively,
         # but spec requires f"{BASE_URL}/toplist.php?tl={tl}"
         html = await self.client.get_html(url, params=params if params else None)
-        return parse_toplist(html)
+        return _parse_response(parse_toplist, html)
 
     # ── New methods ───────────────────────────────────────────────────
 
@@ -172,7 +188,7 @@ class ExhentaiAPI:
             data["edit_comment"] = str(edit_id)
 
         html = await self.client.post_form(url, data=data)
-        comments, _ = parse_comments(html)
+        comments, _ = _parse_response(parse_comments, html)
         return comments
 
     async def vote_comment(
@@ -228,13 +244,13 @@ class ExhentaiAPI:
         """Fetch the list of available torrents for a gallery."""
         url = f"{BASE_URL}/gallerytorrents.php?gid={gid}&t={token}"
         html = await self.client.get_html(url)
-        return parse_torrent_list(html)
+        return _parse_response(parse_torrent_list, html)
 
     async def get_archive_list(self, gid: str, token: str) -> ArchiverData:
         """Fetch archive download options for a gallery."""
         url = f"{BASE_URL}/archiver.php?gid={gid}&token={token}"
         html = await self.client.get_html(url)
-        return parse_archive_list(html)
+        return _parse_response(parse_archive_list, html)
 
     async def download_archive(self, archive_url: str, resolution: str = "org") -> str:
         """Initiate an archive download and return the download URL.
@@ -265,7 +281,7 @@ class ExhentaiAPI:
     async def get_mytags(self) -> list[WatchedTag]:
         """Fetch the user's watched/hidden tag configuration."""
         html = await self.client.get_html(f"{BASE_URL}/mytags")
-        return parse_mytags(html)
+        return _parse_response(parse_mytags, html)
 
     async def add_tag(
         self,
@@ -285,7 +301,7 @@ class ExhentaiAPI:
             "usertags_action": "add",
         }
         html = await self.client.post_form(f"{BASE_URL}/mytags", data=data)
-        return parse_mytags(html)
+        return _parse_response(parse_mytags, html)
 
     async def delete_tag(self, tag_id: int) -> list[WatchedTag]:
         """Delete a watched/hidden tag by ID. Returns updated tag list."""
@@ -294,7 +310,7 @@ class ExhentaiAPI:
             ("modify_usertags[]", str(tag_id)),
         ]
         html = await self.client.post_form(f"{BASE_URL}/mytags", data=form_data)
-        return parse_mytags(html)
+        return _parse_response(parse_mytags, html)
 
     async def get_watched(self, page: int = 0) -> list[GalleryListItem]:
         """Fetch galleries matching the user's watched tags."""
@@ -303,12 +319,12 @@ class ExhentaiAPI:
             params = {"page": str(page)}
 
         html = await self.client.get_html(f"{BASE_URL}/watched", params=params)
-        return parse_gallery_list(html)
+        return _parse_response(parse_gallery_list, html)
 
     async def get_home_detail(self) -> HomeDetail:
         """Fetch the user's home page with image limits and GP stats."""
         html = await self.client.get_html(f"{BASE_URL}/home.php")
-        return parse_home_detail(html)
+        return _parse_response(parse_home_detail, html)
 
     async def reset_image_limit(self) -> HomeDetail:
         """Reset the image viewing limit by spending GP. Returns updated home detail."""
@@ -316,7 +332,7 @@ class ExhentaiAPI:
             f"{BASE_URL}/home.php",
             data={"reset_imagelimit": "Reset Limit"},
         )
-        return parse_home_detail(html)
+        return _parse_response(parse_home_detail, html)
 
     async def get_profile(self) -> ProfileResult:
         """Fetch the current user's profile (display name, avatar).
@@ -334,7 +350,7 @@ class ExhentaiAPI:
 
         profile_url = match.group(1)
         profile_html = await self.client.get_html(profile_url)
-        return parse_profile(profile_html)
+        return _parse_response(parse_profile, profile_html)
 
     async def get_gallery_token(self, gid: int, imgkey: str, page: int) -> str:
         """Fetch the gallery token for a specific page using the gtoken API.
@@ -388,4 +404,4 @@ class ExhentaiAPI:
             params["fs_exp"] = "on"
 
         html = await self.client.get_html(f"{BASE_URL}/", params=params)
-        return parse_gallery_list(html)
+        return _parse_response(parse_gallery_list, html)

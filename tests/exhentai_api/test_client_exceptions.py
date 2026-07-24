@@ -6,9 +6,12 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from exhentai_api.client import ExhentaiClient
 from exhentai_api.exceptions import (
     AuthenticationError,
+    SessionError,
+    UpstreamError,
     ImageLimitError,
     GalleryNotFoundError,
     GalleryOffensiveError,
+    ParseError,
     NetworkError,
 )
 
@@ -45,8 +48,28 @@ async def test_get_html_sad_panda_raises_authentication_error(mock_get):
         headers={"Content-Disposition": 'inline; filename="sadpanda.jpg"'}
     )
     async with ExhentaiClient() as client:
-        with pytest.raises(AuthenticationError, match="Sad Panda"):
+        with pytest.raises(SessionError):
             await client.get_html("https://exhentai.org", backoff_factor=0.01)
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient.get")
+async def test_get_html_401_raises_session_error_without_retry(mock_get):
+    mock_get.return_value = _make_response(status_code=401)
+    async with ExhentaiClient() as client:
+        with pytest.raises(SessionError):
+            await client.get_html("https://exhentai.org", retries=3, backoff_factor=0.01)
+    assert mock_get.call_count == 1
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient.get")
+async def test_get_html_404_raises_upstream_error(mock_get):
+    mock_get.return_value = _make_response(status_code=404)
+    async with ExhentaiClient() as client:
+        with pytest.raises(UpstreamError) as raised:
+            await client.get_html("https://exhentai.org/home.php", retries=1)
+    assert raised.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -197,6 +220,35 @@ async def test_post_json_timeout_raises_network_error():
                     retries=2,
                     backoff_factor=0.01,
                 )
+
+
+@pytest.mark.asyncio
+async def test_post_json_invalid_payload_raises_parse_error():
+    async with ExhentaiClient() as client:
+        with patch.object(client.session, "post", new_callable=AsyncMock) as mock_post:
+            response = _make_response()
+            response.json.side_effect = ValueError("<html>unexpected upstream page</html>")
+            mock_post.return_value = response
+            with pytest.raises(ParseError):
+                await client.post_json(
+                    "https://exhentai.org/api.php",
+                    json={},
+                    retries=1,
+                )
+
+
+@pytest.mark.asyncio
+async def test_post_form_404_raises_upstream_error():
+    async with ExhentaiClient() as client:
+        with patch.object(client.session, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = _make_response(status_code=404)
+            with pytest.raises(UpstreamError) as raised:
+                await client.post_form(
+                    "https://exhentai.org/home.php",
+                    data={},
+                    retries=1,
+                )
+    assert raised.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------

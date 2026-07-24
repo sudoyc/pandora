@@ -6,7 +6,24 @@ class ExhentaiError(Exception):
 
 
 class AuthenticationError(ExhentaiError):
-    """Sad Panda or cookie expiry. Do not retry."""
+    """Authentication configuration is missing or rejected. Do not retry."""
+
+
+class SessionError(AuthenticationError):
+    """The configured upstream session is invalid or expired. Do not retry."""
+
+
+class UpstreamError(ExhentaiError):
+    """The upstream service or endpoint returned an unexpected HTTP status."""
+
+    def __init__(
+        self,
+        message: str = "Upstream service request failed",
+        *,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class ImageLimitError(ExhentaiError):
