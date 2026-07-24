@@ -104,6 +104,7 @@ pandora download retry <gid>
 pandora download pages <gid>
 pandora health --json
 pandora config --json
+pandora readiness --json
 pandora status --json
 pandora search "keyword" --page 0 --json
 pandora search "female:stockings" --search-tags --json
@@ -119,6 +120,10 @@ pandora watched --page 0 --json
 ```
 
 Commands accept `--daemon-url http://127.0.0.1:7860`, `--timeout 30`, and `--json` on request/response style commands. `download run --ndjson` is the preferred bot path because it attaches to WebSocket first, submits the task, emits `download_submitted` or `download_already_queued`, and watches terminal WebSocket events. `download add` plus `download watch` remains available, but a late watcher can miss earlier events. In machine mode, CLI failures use a stable envelope like `{"ok": false, "error": {"code": "connect_error", "message": "..."}}`.
+
+Bootstrap diagnostics run in this order: `health`, `config`, `readiness`, then
+`status`. A `readiness --json` exit code of 1 is a structured upstream not-ready
+result; inspect its JSON instead of treating it as a daemon connection failure.
 
 Agent search uses scheme A intentionally: the CLI does not resolve ambiguous translated text into ExHentai tag queries. Agents should check `pandora tags status --json`, refresh if stale or unloaded, inspect `pandora tags suggest "丝袜" --json`, choose a candidate such as `female:stockings`, then call `pandora search "female:stockings" --search-tags --json`. Search also exposes primitive advanced flags including `--category` (include bitmask), `--min-rating`, `--search-name`, `--search-description`, `--search-torrent`, `--search-low-power-tags`, `--disable-language-filter`, `--show-expunged`, `--min-pages`, and `--max-pages`.
 
@@ -150,6 +155,8 @@ uv run python -m pandora_daemon
 # Agent/script readiness checks
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
+uv run python -m pandora_daemon.cli status --json
 
 # Web frontend (optional)
 cd pandora-web && npm run dev

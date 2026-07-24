@@ -62,6 +62,7 @@ Suggested order:
 uv run python -m pytest tests/pandora_daemon/test_agent_contracts.py -q
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 ```
 

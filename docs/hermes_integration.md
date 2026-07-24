@@ -31,11 +31,14 @@ Use the Agent Pack bootstrap workflow: [`agent/workflows/bootstrap.md`](agent/wo
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```
 
-`config --json` omits credentials and redacts proxy secrets, but local non-secret paths may appear.
+Run the first four commands in order. `config --json` omits credentials and
+redacts proxy secrets, but local non-secret paths may appear. Readiness exit 1
+is a structured upstream not-ready result, not a daemon connection failure.
 
 ## Hermes Search
 

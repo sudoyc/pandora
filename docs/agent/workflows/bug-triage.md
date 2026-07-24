@@ -46,6 +46,7 @@ Example probes:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```

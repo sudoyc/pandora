@@ -62,6 +62,7 @@ Use these before running agent workflows:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```
@@ -70,8 +71,13 @@ Expected guidance:
 
 - `health --json` is the minimal capability probe.
 - `config --json` exposes local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
+- `readiness --json` checks authenticated homepage/search/popular/home capability without returning upstream content.
 - `status --json` returns `{"tasks": [...]}` for queue inspection.
 - `tags status --json` returns the EhTagTranslation cache status for search agents.
+
+Run the first four commands in the shown order. `readiness --json` exits 1 when
+the daemon answered but authenticated upstream work is not ready; its JSON still
+uses the stable readiness schema. This differs from a CLI `connect_error`.
 
 Machine-mode error contract:
 
@@ -126,6 +132,8 @@ Read-only agent checks:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
+uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli search "tag" --page 0 --json
 uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
 uv run python -m pandora_daemon.cli popular --json
@@ -160,6 +168,7 @@ Agent Pack bootstrap flow:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```

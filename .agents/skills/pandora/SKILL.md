@@ -86,13 +86,18 @@ Basic health-style checks for agents:
 
 - `health --json` is a minimal capability probe; it intentionally omits credentials and local filesystem paths.
 - `config --json` returns local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
+- `readiness --json` reports authenticated homepage/search/popular/home status without returning upstream content.
 - Credentials may include optional `ipb_pass_hash`; leave it unset when the current session does not require it.
 
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 ```
+
+Run those four commands in order. A readiness exit code of 1 is a structured
+not-ready result; `connect_error` means the daemon is unreachable.
 
 If the CLI reports it cannot connect, start the daemon first or pass:
 
@@ -106,7 +111,7 @@ Hermes session bootstrap, based on `docs/agent/workflows/bootstrap.md`:
 
 1. Confirm the repository root and use `uv`; do not use global `pip`.
 2. Start the daemon if it is not already running: `uv run python -m pandora_daemon`.
-3. Probe readiness with `health --json`, `config --json`, and `status --json`.
+3. Probe with `health --json`, `config --json`, `readiness --json`, and `status --json` in that order.
 4. For search agents, also run `tags status --json` before translated-tag workflows.
 5. Omit `--daemon-url` when the daemon is on the default URL; pass the actual daemon URL only when it is non-default.
 
@@ -140,6 +145,8 @@ Browse/read-only commands:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
+uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli search "keyword" --page 0 --json
 uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
 uv run python -m pandora_daemon.cli popular --json

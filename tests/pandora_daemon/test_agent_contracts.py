@@ -315,6 +315,32 @@ def test_readiness_schema_and_contract_docs_exist():
         assert "exit 1" in text
 
 
+def test_bootstrap_docs_use_canonical_diagnostic_order():
+    commands = [
+        "uv run python -m pandora_daemon.cli health --json",
+        "uv run python -m pandora_daemon.cli config --json",
+        "uv run python -m pandora_daemon.cli readiness --json",
+        "uv run python -m pandora_daemon.cli status --json",
+    ]
+    paths = [
+        Path("README.md"),
+        Path("docs/deployment.md"),
+        Path("docs/agent/README.md"),
+        Path("docs/agent/contract.md"),
+        Path("docs/agent/context-pack.md"),
+        Path("docs/agent/workflows/bootstrap.md"),
+        Path("docs/hermes_integration.md"),
+        Path(".agents/skills/pandora/SKILL.md"),
+        Path("GEMINI.md"),
+    ]
+
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        positions = [text.find(command) for command in commands]
+        assert all(position >= 0 for position in positions), path
+        assert positions == sorted(positions), path
+
+
 def test_websocket_event_contract_examples():
     examples = [
         {"event": "download_queued", "gid": "123", "title": "Download"},

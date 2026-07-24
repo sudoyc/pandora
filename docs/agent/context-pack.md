@@ -22,11 +22,14 @@ For translated tag search, use Scheme A: check tag DB status, refresh if stale o
 Before work, verify daemon readiness with:
 `uv run python -m pandora_daemon.cli health --json`
 `uv run python -m pandora_daemon.cli config --json`
+`uv run python -m pandora_daemon.cli readiness --json`
 `uv run python -m pandora_daemon.cli status --json`
 For search/tag tasks, also run:
 `uv run python -m pandora_daemon.cli tags status --json`
 
-If the daemon is unreachable, report the machine error and start or request startup according to the host agent's permissions. Do not read or expose credential files.
+Run those four commands in order. `readiness --json` exit 1 is a structured
+upstream not-ready result; `connect_error` means the daemon is unreachable. Do
+not read or expose credential files.
 ```
 
 ## Download Context

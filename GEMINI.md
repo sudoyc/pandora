@@ -8,7 +8,7 @@ Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for
 ### Architecture
 - **exhentai_api (Python)**: The core, stateless abstraction over the ExHentai site.
 - **pandora-daemon (Python/FastAPI)**: The intermediary that handles sessions, caching, database persistence (SQLite), download management, and provides a proxy for images. It runs a REST + WebSocket API on `localhost:7860`. All frontends MUST communicate with ExHentai through this daemon.
-- **Agent Pack + CLI workflows**: Primary integration surface for agents and scripts. Use `docs/agent/` for reusable context/snippets/schemas, and use CLI `health --json`, `config --json`, REST, and WebSocket/NDJSON events for machine operations.
+- **Agent Pack + CLI workflows**: Primary integration surface for agents and scripts. Use `docs/agent/` for reusable context/snippets/schemas, and use CLI `health --json`, `config --json`, `readiness --json`, `status --json`, REST, and WebSocket/NDJSON events for machine operations.
 - **pandora-tui (Rust)**: Archived/frozen. Do not improve or extend it; keep only as historical REST/WS consumer reference.
 - **Web Frontend**: Optional human UI, lower priority than daemon/CLI/Agent Pack contracts.
 
@@ -29,13 +29,18 @@ Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 ```
+
+Run these commands in order. Readiness exit 1 is a structured upstream
+not-ready result; `connect_error` means the daemon is unreachable.
 
 ## API Documentation Quick Links
 - **REST Endpoints:**
   - `GET /api/health`: minimal daemon health/capability probe (no credentials or local paths)
   - `GET /api/config`: public daemon config with credentials omitted and proxy secrets redacted
+  - `GET /api/readiness`: read-only authenticated upstream capability checks
   - `GET /api/history`: Browsing history
   - `GET /api/local-favorites`: Local favorites
   - `GET /api/bookmarks`: Reading progress

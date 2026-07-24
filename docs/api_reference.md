@@ -236,8 +236,9 @@ Current commands:
 
 ```bash
 pandora health --json
-pandora readiness --json
 pandora config --json
+pandora readiness --json
+pandora status --json
 pandora download <url>              # legacy interactive path; submits and monitors via WebSocket
 pandora dl <url>
 pandora download run <url|gid> [token] --ndjson

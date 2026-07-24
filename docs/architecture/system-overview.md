@@ -96,7 +96,7 @@ consumer 不应直接编辑 daemon 状态文件。需要修复或迁移时，应
 
 ```text
 load config -> initialize SQLite -> create upstream client/cache/tag DB/download manager
-            -> start workers and eviction loop -> expose health/config/status
+            -> start workers and eviction loop -> expose health/config/readiness/status
 ```
 
 `health.auth_configured` 只表示凭据字段已配置，不表示上游会话已验证。`readiness` 通过

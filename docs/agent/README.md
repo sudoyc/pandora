@@ -45,9 +45,14 @@ Probe readiness:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```
+
+The canonical diagnostic order is `health`, `config`, `readiness`, then
+`status`; add `tags status` for search/tag work. A readiness exit code of 1 is a
+structured not-ready result, not a daemon connection failure.
 
 Prefer installed `pandora ...` commands when Pandora is installed as a CLI package. Prefer `uv run python -m pandora_daemon.cli ...` from a checkout.
 

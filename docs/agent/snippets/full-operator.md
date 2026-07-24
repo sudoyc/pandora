@@ -7,7 +7,9 @@ Allowed surfaces: CLI JSON/NDJSON, daemon REST, and daemon WebSocket. From a che
 
 All durable state belongs to pandora-daemon: credentials, session, cache, SQLite data, bookmarks, filters, download queue, retry/resume state, and local library. Do not create a second state layer or call `exhentai_api` directly for user workflows.
 
-Before work, run readiness checks: `health --json`, `config --json`, `status --json`, and for search tasks `tags status --json`.
+Before work, run `health --json`, `config --json`, `readiness --json`, and
+`status --json` in that order. A readiness exit 1 is a structured upstream
+not-ready result. For search tasks, then run `tags status --json`.
 
 For search, use keyword search directly. For translated tag search, use Scheme A with suggestions and candidate evidence before `search --search-tags`.
 

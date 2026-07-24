@@ -23,6 +23,7 @@ Readiness:
 ```bash
 uv run python -m pandora_daemon.cli health --json
 uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```
@@ -32,6 +33,7 @@ Installed CLI equivalents:
 ```bash
 pandora health --json
 pandora config --json
+pandora readiness --json
 pandora status --json
 pandora tags status --json
 ```
@@ -40,9 +42,13 @@ pandora tags status --json
 
 - `health --json` confirms daemon availability and safe capabilities.
 - `config --json` confirms runtime config without credentials.
+- `readiness --json` checks authenticated upstream capabilities without returning upstream content.
 - `status --json` confirms the download queue can be inspected.
 - `tags status --json` confirms whether translated-tag suggestions are loaded, stale, or need refresh.
 
 ## Failure Handling
 
-If a command returns a machine error such as `connect_error`, use [`failure-recovery.md`](failure-recovery.md). Do not read credential files to diagnose readiness.
+Run `health`, `config`, `readiness`, and `status` in that order. Readiness exit 1
+is a valid structured not-ready result; a machine error such as `connect_error`
+uses the failure envelope and should follow [`failure-recovery.md`](failure-recovery.md).
+Do not read credential files to diagnose readiness.
