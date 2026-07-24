@@ -157,7 +157,7 @@ async def test_get_home_detail():
     api = ExhentaiAPI(client=mock_client)
     detail = await api.get_home_detail()
     assert detail.image_used == 0
-    mock_client.get_html.assert_called_once_with(f"{BASE_URL}/home.php")
+    mock_client.get_html.assert_called_once_with("https://e-hentai.org/home.php")
 
 
 @pytest.mark.asyncio
@@ -167,7 +167,7 @@ async def test_reset_image_limit():
     api = ExhentaiAPI(client=mock_client)
     detail = await api.reset_image_limit()
     mock_client.post_form.assert_called_once_with(
-        f"{BASE_URL}/home.php", data={"reset_imagelimit": "Reset Limit"},
+        "https://e-hentai.org/home.php", data={"reset_imagelimit": "Reset Limit"},
     )
 
 
@@ -225,7 +225,7 @@ async def test_image_search():
 @pytest.mark.asyncio
 async def test_get_favorites_with_keyword():
     mock_client = AsyncMock()
-    mock_client.get_html.return_value = '<html><body></body></html>'
+    mock_client.get_html.return_value = '<html><body>No hits found</body></html>'
     api = ExhentaiAPI(client=mock_client)
     await api.get_favorites(favcat=0, keyword="test", sn=True, st=True)
     call_args = mock_client.get_html.call_args
@@ -238,7 +238,7 @@ async def test_get_favorites_with_keyword():
 @pytest.mark.asyncio
 async def test_get_favorites_with_sf():
     mock_client = AsyncMock()
-    mock_client.get_html.return_value = '<html><body></body></html>'
+    mock_client.get_html.return_value = '<html><body>No hits found</body></html>'
     api = ExhentaiAPI(client=mock_client)
     await api.get_favorites(favcat=2, keyword="query", sf=True)
     call_args = mock_client.get_html.call_args
@@ -252,7 +252,7 @@ async def test_get_favorites_with_sf():
 async def test_get_favorites_no_keyword():
     """Existing behavior: no keyword params when keyword is empty."""
     mock_client = AsyncMock()
-    mock_client.get_html.return_value = '<html><body></body></html>'
+    mock_client.get_html.return_value = '<html><body>No hits found</body></html>'
     api = ExhentaiAPI(client=mock_client)
     await api.get_favorites(favcat=0, page=1)
     call_args = mock_client.get_html.call_args

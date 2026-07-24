@@ -1,5 +1,6 @@
 import re
 from bs4 import BeautifulSoup
+from exhentai_api.exceptions import ParseError
 from exhentai_api.models.gallery import GalleryListItem
 from exhentai_api.utils import extract_gallery_token
 
@@ -52,7 +53,9 @@ def parse_gallery_list(html: str) -> list[GalleryListItem]:
 
     itg = soup.find(class_="itg")
     if not itg:
-        return []
+        if "no hits found" in soup.get_text(" ", strip=True).lower():
+            return []
+        raise ParseError("Upstream gallery list structure changed.")
 
     for row in itg.find_all("tr"):
         title_elem = row.find(class_="glname")
@@ -60,10 +63,10 @@ def parse_gallery_list(html: str) -> list[GalleryListItem]:
             continue
 
         title = title_elem.get_text(strip=True)
-        link_elem = row.find("td", class_="gl3c")
-        if not link_elem:
-            continue
-        link_elem = link_elem.find("a")
+        link_elem = row.find(
+            "a",
+            href=lambda href: isinstance(href, str) and "/g/" in href,
+        )
         if not link_elem or not link_elem.get("href"):
             continue
         gid, token = extract_gallery_token(link_elem["href"])
@@ -127,4 +130,6 @@ def parse_gallery_list(html: str) -> list[GalleryListItem]:
             thumb_height=thumb_height,
         ))
 
+    if not items and itg.find(class_="glname"):
+        raise ParseError("Upstream gallery list structure changed.")
     return items

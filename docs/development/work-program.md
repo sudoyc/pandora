@@ -1,6 +1,6 @@
 # Pandora 长期开发工作计划
 
-状态：Blocked
+状态：In Progress
 范围：当前路线图全部 Required 工作包
 最近核对：2026-07-23
 
@@ -12,11 +12,11 @@
 
 | 字段 | 当前值 |
 |---|---|
-| Program | Blocked |
-| Active work package | None |
+| Program | In Progress |
+| Active work package | `UP-02` |
 | Next work package | None |
 | Last completed work package | `CI-02` |
-| Blockers | `UP-02`：缺少当前脱敏上游 fixture，实网上游探针未获授权 |
+| Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
 | Last full Python evidence | 553 passed（2026-07-24；GitHub Actions `30095287193`） |
 | Last Web evidence | lint/build passed（2026-07-24；GitHub Actions `30095287193`） |
@@ -43,7 +43,7 @@
 | ID | Required | 状态 | 依赖 | 工作结果 | 直接完成证据 |
 |---|---|---|---|---|---|
 | `UP-01` | Yes | Done | - | 定义 auth/session/upstream/parse/network 状态和稳定错误分类 | 契约说明、异常映射测试、无敏感字段测试 |
-| `UP-02` | Yes | Blocked | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
+| `UP-02` | Yes | In Progress | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
 | `UP-03` | Yes | Queued | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Queued | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
 | `DL-01` | Yes | Queued | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |

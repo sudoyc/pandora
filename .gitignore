@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 credentials.txt
 credentials.txt~
+/cookie.txt
 downloads/
 .env
 *~

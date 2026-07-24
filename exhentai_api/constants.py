@@ -6,3 +6,4 @@ class Category(StrEnum):
     NON_H = "Non-H"
 
 BASE_URL = "https://exhentai.org"
+HOME_URL = "https://e-hentai.org/home.php"

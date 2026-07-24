@@ -26,7 +26,7 @@ from exhentai_api.models.home import HomeDetail
 from exhentai_api.models.profile import ProfileResult
 from exhentai_api.models.vote import RateResult, VoteCommentResult
 from exhentai_api.models.tags import WatchedTag
-from exhentai_api.constants import BASE_URL
+from exhentai_api.constants import BASE_URL, HOME_URL
 from exhentai_api.exceptions import ParseError
 
 
@@ -323,13 +323,13 @@ class ExhentaiAPI:
 
     async def get_home_detail(self) -> HomeDetail:
         """Fetch the user's home page with image limits and GP stats."""
-        html = await self.client.get_html(f"{BASE_URL}/home.php")
+        html = await self.client.get_html(HOME_URL)
         return _parse_response(parse_home_detail, html)
 
     async def reset_image_limit(self) -> HomeDetail:
         """Reset the image viewing limit by spending GP. Returns updated home detail."""
         html = await self.client.post_form(
-            f"{BASE_URL}/home.php",
+            HOME_URL,
             data={"reset_imagelimit": "Reset Limit"},
         )
         return _parse_response(parse_home_detail, html)
