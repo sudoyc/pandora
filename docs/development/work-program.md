@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `DL-02` |
-| Next work package | None |
-| Last completed work package | `DL-01` |
+| Active work package | None |
+| Next work package | `DL-03` |
+| Last completed work package | `DL-02` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 581 passed（2026-07-24；GitHub Actions `30100089972`） |
-| Last Web evidence | lint/build passed（2026-07-24；GitHub Actions `30100089972`） |
+| Last full Python evidence | 588 passed（2026-07-24；本地统一检查，implementation `f32ed19`） |
+| Last Web evidence | lint/build passed（2026-07-24；本地统一检查，implementation `f32ed19`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -47,8 +47,8 @@
 | `UP-03` | Yes | Done | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Done | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
 | `DL-01` | Yes | Done | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
-| `DL-02` | Yes | In Progress | `DL-01` | 下载状态有 schema version、原子迁移和损坏文件恢复 | 旧版本迁移、未知版本、截断/损坏文件测试 |
-| `DL-03` | Yes | Queued | `DL-01`, `DL-02` | 提供显式 dry-run repair/forget，幂等且不静默删除页面 | preview/apply/idempotency/no-delete tests 和机器契约 |
+| `DL-02` | Yes | Done | `DL-01` | 下载状态有 schema version、原子迁移和损坏文件恢复 | 旧版本迁移、未知版本、截断/损坏文件测试 |
+| `DL-03` | Yes | Ready | `DL-01`, `DL-02` | 提供显式 dry-run repair/forget，幂等且不静默删除页面 | preview/apply/idempotency/no-delete tests 和机器契约 |
 | `DL-04` | Yes | Queued | `DL-03` | cancel/resume/retry/restart/reconcile 状态和终态词汇一致 | 生命周期集成测试、重启恢复 smoke、文档同步 |
 | `CI-01` | Yes | Done | - | 建立一个本地统一检查入口，覆盖锁文件、Markdown 链接、Agent schema、Python 和 Web | 干净 clone 可执行；每个失败能定位具体检查 |
 | `CI-02` | Yes | Done | `CI-01` | 主分支 CI 使用与本地一致的检查，不依赖凭据或真实内容 | workflow 配置、fixture-only run、分层 job 结果 |
@@ -120,6 +120,7 @@
 | `UP-03` | 2026-07-24 | `6752bdf` | `uv run --frozen python -m pytest tests/pandora_daemon/test_routes_readiness.py tests/pandora_daemon/test_cli.py tests/pandora_daemon/test_agent_contracts.py -q -k readiness`（12 passed）；`uv run --frozen python -m pytest tests/exhentai_api -q`（129 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（432 passed）；`uv run --frozen python scripts/check.py`（571 passed，全部阶段 passed）；GitHub Actions `30098470051` 三个 job 全部 success | 无凭据不请求上游；四项只读探针、核心失败分类、超时、schema、脱敏和 CLI exit 0/1 均有直接测试 |
 | `UP-04` | 2026-07-24 | `247b576` | `uv run --frozen python -m pytest tests/pandora_daemon/test_bootstrap_smoke.py tests/pandora_daemon/test_agent_contracts.py -q`（17 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（434 passed）；`uv run --frozen python scripts/check.py`（573 passed，全部阶段 passed）；GitHub Actions `30099122066` 三个 job 全部 success | fixture daemon 按 health/config/readiness/status 顺序执行且不请求上游；deployment、Agent Pack、skill 和活跃 agent 指引已同步；凭据泄漏检查通过 |
 | `DL-01` | 2026-07-24 | `30bbf3a` | `uv run --frozen python -m pytest tests/pandora_daemon/test_download_consistency.py tests/pandora_daemon/test_routes_downloads.py tests/pandora_daemon/test_cli.py tests/pandora_daemon/test_agent_contracts.py -q`（104 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（442 passed）；`uv run --frozen python scripts/check.py`（581 passed，全部阶段 passed）；GitHub Actions `30100089972` 三个 job 全部 success | fixture matrix 覆盖 orphan task、缺页、缺失/无效 metadata、未登记 library、旧下载根目录与正常活动 task；报告只读且不返回 token/本地路径 |
+| `DL-02` | 2026-07-24 | `f32ed19` | `uv run --frozen python -m pytest tests/pandora_daemon/test_download_state.py tests/pandora_daemon/test_download.py tests/pandora_daemon/test_download_concurrency.py tests/pandora_daemon/test_download_consistency.py tests/pandora_daemon/test_integration.py tests/pandora_daemon/test_app_lifespan.py -q`（75 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（449 passed）；`uv run --frozen python scripts/check.py`（588 passed，全部阶段 passed） | v1 envelope、旧映射原子迁移、唯一损坏备份、部分 task 恢复和未知版本启动中止均有直接测试；cookie 值泄漏检查通过 |
 
 ## 7. 阻塞与人工门记录
 
