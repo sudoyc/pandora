@@ -19,6 +19,22 @@ from exhentai_api.exceptions import (
 _NO_RETRY = (AuthenticationError, ImageLimitError, GalleryNotFoundError, GalleryOffensiveError)
 _SESSION_ERROR_MESSAGE = "Sad Panda response indicates an invalid upstream session."
 _NETWORK_ERROR_MESSAGE = "Network error while requesting the upstream service."
+_SESSION_HOSTS = {"exhentai.org", "e-hentai.org", "forums.e-hentai.org"}
+
+
+def _is_login_response(response: httpx.Response) -> bool:
+    responses = [response]
+    history = getattr(response, "history", ())
+    if isinstance(history, (list, tuple)):
+        responses.extend(history)
+
+    for item in responses:
+        url = getattr(item, "url", None)
+        host = getattr(url, "host", "")
+        path = getattr(url, "path", "")
+        if host in _SESSION_HOSTS and path.rstrip("/") == "/bounce_login.php":
+            return True
+    return False
 
 
 def _raise_for_status(response: httpx.Response) -> None:
@@ -76,7 +92,9 @@ class ExhentaiClient:
                 response = await self.session.get(url, params=params)
 
                 # 1. Sad Panda (200 with special Content-Disposition header)
-                if 'inline; filename="sadpanda.jpg"' in response.headers.get("Content-Disposition", ""):
+                if _is_login_response(response) or 'inline; filename="sadpanda.jpg"' in response.headers.get(
+                    "Content-Disposition", ""
+                ):
                     raise SessionError(_SESSION_ERROR_MESSAGE)
 
                 # 2. HTTP status errors (catches 509 and others)

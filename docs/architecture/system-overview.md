@@ -99,8 +99,9 @@ load config -> initialize SQLite -> create upstream client/cache/tag DB/download
             -> start workers and eviction loop -> expose health/config/status
 ```
 
-`health.auth_configured` 只表示凭据字段已配置，不表示上游会话已验证。需要真实可用性时，
-调用方必须使用单独的只读上游探针；该缺口列入当前路线图。
+`health.auth_configured` 只表示凭据字段已配置，不表示上游会话已验证。`readiness` 通过
+homepage、search、popular 和 home 四个只读检查分别报告 auth/session/upstream/parse/network
+状态；未配置完整凭据时不请求上游。
 
 ### 浏览与详情
 
@@ -166,7 +167,7 @@ TUI 已冻结，不纳入默认功能开发验证。
 ## 10. 当前约束
 
 - 上游是 HTML 驱动接口，页面或认证行为变化会造成 parser/endpoint 漂移。
-- 健康检查区分“daemon 可用”和“凭据已配置”，尚未验证真实上游会话。
+- `health` 保持轻量；上游会话和四项页面能力由显式 `readiness` 探针验证。
 - Web 仍是可选 WIP，缺少重连后的下载状态对账、完整页面和自动化 UI 测试。
 - 仓库尚无持续集成和正式 release/tag 流程。
 - 历史下载状态与磁盘 library 可能失配，缺少正式 reconcile/repair 工作流。

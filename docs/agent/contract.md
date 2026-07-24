@@ -17,15 +17,34 @@ Installed CLI examples may use `pandora ...`; checkout examples use `uv run pyth
 
 ```bash
 uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli readiness --json
 uv run python -m pandora_daemon.cli config --json
 uv run python -m pandora_daemon.cli status --json
 uv run python -m pandora_daemon.cli tags status --json
 ```
 
 - `health --json` is the minimal safe capability probe.
+- `readiness --json` runs read-only authenticated probes for homepage, search,
+  popular, and home without returning upstream content.
 - `config --json` omits credentials and redacts proxy secrets, but local non-secret paths may appear.
 - `status --json` returns the download queue state.
 - `tags status --json` reports the EhTagTranslation cache state for search agents.
+
+`GET /api/readiness` returns HTTP 200 for every recognized diagnostic result so
+clients can always parse the same response schema. Without complete credentials,
+it returns `ready: false`, `session: "not_configured"`, and `not_checked` for all
+four checks without contacting upstream. Check values are `ok`, `auth`,
+`session`, `upstream`, `parse`, or `network`; `session` summarizes authentication
+as `not_configured`, `valid`, `invalid`, or `unknown`.
+
+`ready` is true only when all four checks are `ok`. Any `auth` or `session`
+result makes the session `invalid`; otherwise, at least one `ok` result makes it
+`valid`, while only transport/upstream/parser failures leave it `unknown`.
+
+CLI `readiness --json` prints that response unchanged. A fully ready result exits
+with exit 0; every not-ready result exits with exit 1. Daemon connection and HTTP
+failures still use the standard CLI error envelope. Schema:
+[`schemas/readiness-response.schema.json`](schemas/readiness-response.schema.json).
 
 ## Upstream REST Error Classification
 

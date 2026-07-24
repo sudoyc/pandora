@@ -275,6 +275,46 @@ def test_health_contract_shape_is_minimal_and_safe():
     assert "cache_path" not in data
 
 
+def test_readiness_schema_and_contract_docs_exist():
+    schema_path = Path("docs/agent/schemas/readiness-response.schema.json")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    assert schema["required"] == [
+        "ready",
+        "auth_configured",
+        "session",
+        "checks",
+    ]
+    assert set(schema["$defs"]["checkStatus"]["enum"]) == {
+        "not_checked",
+        "ok",
+        "auth",
+        "session",
+        "upstream",
+        "parse",
+        "network",
+    }
+    serialized_schema = json.dumps(schema)
+    for sensitive_name in (
+        "igneous",
+        "ipb_member_id",
+        "ipb_pass_hash",
+        "cookie",
+        "response_body",
+    ):
+        assert sensitive_name not in serialized_schema
+
+    for doc_path in (
+        Path("docs/api_reference.md"),
+        Path("docs/agent/contract.md"),
+    ):
+        text = doc_path.read_text(encoding="utf-8")
+        assert "/api/readiness" in text
+        assert "readiness --json" in text
+        assert "exit 0" in text
+        assert "exit 1" in text
+
+
 def test_websocket_event_contract_examples():
     examples = [
         {"event": "download_queued", "gid": "123", "title": "Download"},

@@ -54,7 +54,7 @@ async with ExhentaiAPI(client=client) as api:
 | `get_archive_list(gid, token)` | Archive options |
 | `download_archive(archive_url, resolution="org")` | Initiate archive download |
 | `get_mytags()` / `add_tag(...)` / `delete_tag(tag_id)` | Account tag settings |
-| `get_home_detail()` / `reset_image_limit()` | Image limits; live endpoint needs re-check |
+| `get_home_detail()` / `reset_image_limit()` | Image limits through the current E-Hentai home endpoint; reset is mutating and not exercised by unattended checks |
 | `get_profile()` | Forum profile; live endpoint may return 403 |
 
 ## Main data models
@@ -166,10 +166,11 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/health` | Minimal daemon health and capability probe; omits credentials and local paths |
+| GET | `/api/readiness` | Read-only authenticated homepage/search/popular/home checks with stable, sanitized status values |
 | GET | `/api/config` | Public config; omits credentials and redacts proxy secrets |
 | PUT | `/api/config` | Update a validated subset of public server/download/cache config fields; not an arbitrary dict patch |
-| GET | `/api/home` | User home/image limits; live endpoint needs re-check |
-| POST | `/api/home/reset_limit` | Reset image limit; live endpoint needs re-check |
+| GET | `/api/home` | User home/image limits through the current E-Hentai home endpoint |
+| POST | `/api/home/reset_limit` | Reset image limit; mutating upstream behavior is not exercised by unattended checks |
 | GET | `/api/profile` | User profile; forum endpoint may return 403 |
 | GET | `/api/tags` | Account watched/hidden tags |
 | POST | `/api/tags` | Add account tag |
@@ -223,6 +224,10 @@ Machine-mode errors:
 
 Current tested error codes include `connect_error`, `http_error`, `invalid_gallery_target`, `usage_error`, `websocket_error`, and `websocket_dependency_missing`.
 
+`readiness --json` prints the [`readiness response`](agent/schemas/readiness-response.schema.json)
+even when upstream is not ready. It exits with exit 0 only when `ready` is true
+and exits with exit 1 for every recognized not-ready result.
+
 Search/tag workflow for agents uses scheme A: Pandora exposes primitive interfaces only and does not rewrite translated user text into tag queries. A bot should call `tags status`, refresh if needed, call `tags suggest`, choose the desired namespace/tag candidate itself, then call `search` with an explicit keyword such as `female:stockings` and `--search-tags`.
 
 Advanced search query parameters accepted by `/api/search` are `category`, `min_rating`, `search_name`, `search_tags`, `search_description`, `search_torrent`, `search_low_power_tags`, `disable_language_filter`, `show_expunged`, `min_pages`, and `max_pages`. `category` is passed as an include bitmask; `SearchParams.to_dict()` converts it to ExHentai's exclude bitmask before the upstream request.
@@ -231,6 +236,7 @@ Current commands:
 
 ```bash
 pandora health --json
+pandora readiness --json
 pandora config --json
 pandora download <url>              # legacy interactive path; submits and monitors via WebSocket
 pandora dl <url>

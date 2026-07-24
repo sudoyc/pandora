@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | None |
-| Next work package | `UP-03` |
+| Active work package | `UP-03` |
+| Next work package | None |
 | Last completed work package | `UP-02` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 558 passed（2026-07-24；本地统一检查，implementation `3838b19`） |
-| Last Web evidence | lint/build passed（2026-07-24；本地统一检查，implementation `3838b19`） |
+| Last full Python evidence | 558 passed（2026-07-24；GitHub Actions `30097455729`） |
+| Last Web evidence | lint/build passed（2026-07-24；GitHub Actions `30097455729`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -44,7 +44,7 @@
 |---|---|---|---|---|---|
 | `UP-01` | Yes | Done | - | 定义 auth/session/upstream/parse/network 状态和稳定错误分类 | 契约说明、异常映射测试、无敏感字段测试 |
 | `UP-02` | Yes | Done | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
-| `UP-03` | Yes | Ready | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
+| `UP-03` | Yes | In Progress | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Queued | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
 | `DL-01` | Yes | Queued | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
 | `DL-02` | Yes | Queued | `DL-01` | 下载状态有 schema version、原子迁移和损坏文件恢复 | 旧版本迁移、未知版本、截断/损坏文件测试 |
@@ -116,7 +116,7 @@
 | `UP-01` | 2026-07-24 | `5484566` | `uv run python -m pytest tests/exhentai_api/test_api.py tests/exhentai_api/test_api_new.py tests/exhentai_api/test_exceptions.py tests/exhentai_api/test_client_exceptions.py tests/pandora_daemon/test_exception_handlers.py -q`（86 passed）；`uv run python -m pytest tests/pandora_daemon -q`（420 passed）；`uv run python -m pytest -q`（543 passed）；`git diff --check`（passed） | REST/Agent/schema 契约同步；响应和日志脱敏测试通过 |
 | `CI-01` | 2026-07-24 | `cdace52` | 隔离 clone（初始无 `.venv`、`node_modules`、`dist`）执行 `uv run --frozen python scripts/check.py`：Python/Web lock、Markdown links、5 个 Agent schema、549 tests、Web lint/build、`git diff --check` 全部 passed | 失败阶段标签回归测试 6 passed；生产依赖 `npm audit --omit=dev` 为 0 vulnerabilities |
 | `CI-02` | 2026-07-24 | `208a799` | `uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（10 passed）；`uv run --frozen python scripts/check.py`（553 passed，全部阶段 passed）；GitHub Actions `30095287193` 的 Repository contracts、Python 3.12、Web 三个 job 全部 success 且 annotations 均为 0 | workflow 仅授予 `contents: read`；测试禁止凭据和实网上游引用；5 个 npm 告警仅来自开发工具依赖 |
-| `UP-02` | 2026-07-24 | `3838b19` | `uv run --frozen python -m pytest tests/exhentai_api/test_current_upstream_fixtures.py tests/exhentai_api/test_parser_gallery.py tests/exhentai_api/test_parser_home.py -q`（9 passed）；`uv run --frozen python -m pytest tests/exhentai_api -q`（128 passed）；`uv run --frozen python -m pytest tests/pandora_daemon/test_routes_browse.py tests/pandora_daemon/test_routes_user.py tests/pandora_daemon/test_exception_handlers.py -q`（48 passed）；`uv run --frozen python scripts/check.py`（558 passed，全部阶段 passed） | 四类 fixture 脱敏与凭据泄漏扫描通过；原始响应临时目录已删除；未执行上游写操作 |
+| `UP-02` | 2026-07-24 | `3838b19` | `uv run --frozen python -m pytest tests/exhentai_api/test_current_upstream_fixtures.py tests/exhentai_api/test_parser_gallery.py tests/exhentai_api/test_parser_home.py -q`（9 passed）；`uv run --frozen python -m pytest tests/exhentai_api -q`（128 passed）；`uv run --frozen python -m pytest tests/pandora_daemon/test_routes_browse.py tests/pandora_daemon/test_routes_user.py tests/pandora_daemon/test_exception_handlers.py -q`（48 passed）；`uv run --frozen python scripts/check.py`（558 passed，全部阶段 passed）；GitHub Actions `30097455729` 三个 job 全部 success | 四类 fixture 脱敏与凭据泄漏扫描通过；原始响应临时目录已删除；未执行上游写操作 |
 
 ## 7. 阻塞与人工门记录
 

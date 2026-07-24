@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pandora.local/schemas/readiness-response.schema.json",
+  "title": "Pandora Upstream Readiness Response",
+  "type": "object",
+  "required": ["ready", "auth_configured", "session", "checks"],
+  "additionalProperties": false,
+  "$defs": {
+    "checkStatus": {
+      "type": "string",
+      "enum": [
+        "not_checked",
+        "ok",
+        "auth",
+        "session",
+        "upstream",
+        "parse",
+        "network"
+      ]
+    }
+  },
+  "properties": {
+    "ready": {"type": "boolean"},
+    "auth_configured": {"type": "boolean"},
+    "session": {
+      "type": "string",
+      "enum": ["not_configured", "valid", "invalid", "unknown"]
+    },
+    "checks": {
+      "type": "object",
+      "required": ["homepage", "search", "popular", "home"],
+      "additionalProperties": false,
+      "properties": {
+        "homepage": {"$ref": "#/$defs/checkStatus"},
+        "search": {"$ref": "#/$defs/checkStatus"},
+        "popular": {"$ref": "#/$defs/checkStatus"},
+        "home": {"$ref": "#/$defs/checkStatus"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"ready": {"const": true}},
+        "required": ["ready"]
+      },
+      "then": {
+        "properties": {
+          "auth_configured": {"const": true},
+          "session": {"const": "valid"},
+          "checks": {
+            "properties": {
+              "homepage": {"const": "ok"},
+              "search": {"const": "ok"},
+              "popular": {"const": "ok"},
+              "home": {"const": "ok"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"auth_configured": {"const": false}},
+        "required": ["auth_configured"]
+      },
+      "then": {
+        "properties": {
+          "ready": {"const": false},
+          "session": {"const": "not_configured"},
+          "checks": {
+            "properties": {
+              "homepage": {"const": "not_checked"},
+              "search": {"const": "not_checked"},
+              "popular": {"const": "not_checked"},
+              "home": {"const": "not_checked"}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

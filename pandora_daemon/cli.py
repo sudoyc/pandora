@@ -509,6 +509,12 @@ def build_parser() -> argparse.ArgumentParser:
     health_parser = subparsers.add_parser("health", help="Check daemon health")
     _add_common_options(health_parser)
 
+    readiness_parser = subparsers.add_parser(
+        "readiness",
+        help="Check authenticated upstream readiness",
+    )
+    _add_common_options(readiness_parser)
+
     config_parser = subparsers.add_parser("config", help="Show daemon public config")
     _add_common_options(config_parser)
 
@@ -638,6 +644,18 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                     return _dispatch_json(data)
                 Console().print(f"[green]OK[/green] {data.get('service', 'pandora-daemon')}")
                 return 0
+
+            if command == "readiness":
+                data = await _request_json(client, "GET", "/api/readiness")
+                if args.json:
+                    _dispatch_json(data)
+                elif data.get("ready") is True:
+                    Console().print("[green]READY[/green] authenticated upstream")
+                else:
+                    Console().print(
+                        f"[yellow]NOT READY[/yellow] session={data.get('session', 'unknown')}"
+                    )
+                return 0 if data.get("ready") is True else 1
 
             if command == "config":
                 data = await _request_json(client, "GET", "/api/config")

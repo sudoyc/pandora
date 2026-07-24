@@ -64,6 +64,20 @@ async def test_get_html_401_raises_session_error_without_retry(mock_get):
 
 @pytest.mark.asyncio
 @patch("httpx.AsyncClient.get")
+async def test_get_html_bounce_login_raises_session_error_without_retry(mock_get):
+    mock_get.return_value = httpx.Response(
+        200,
+        text="<html>Log In</html>",
+        request=httpx.Request("GET", "https://e-hentai.org/bounce_login.php?b=d"),
+    )
+    async with ExhentaiClient() as client:
+        with pytest.raises(SessionError):
+            await client.get_html("https://exhentai.org", retries=3, backoff_factor=0.01)
+    assert mock_get.call_count == 1
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient.get")
 async def test_get_html_404_raises_upstream_error(mock_get):
     mock_get.return_value = _make_response(status_code=404)
     async with ExhentaiClient() as client:

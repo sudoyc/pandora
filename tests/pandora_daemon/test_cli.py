@@ -68,6 +68,7 @@ def test_build_parser_exposes_download_and_status_commands():
     assert "status" in subcommands
     assert "st" in subcommands
     assert "health" in subcommands
+    assert "readiness" in subcommands
     assert "config" in subcommands
 
 
@@ -218,6 +219,45 @@ async def test_health_json_calls_daemon_health(monkeypatch, capsys):
     assert code == 0
     assert seen_paths == ["/api/health"]
     assert "pandora-daemon" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("ready", "expected_code"),
+    [(True, 0), (False, 1)],
+)
+async def test_readiness_json_preserves_result_and_exit_semantics(
+    monkeypatch,
+    capsys,
+    ready,
+    expected_code,
+):
+    payload = {
+        "ready": ready,
+        "auth_configured": ready,
+        "session": "valid" if ready else "not_configured",
+        "checks": {
+            name: "ok" if ready else "not_checked"
+            for name in ("homepage", "search", "popular", "home")
+        },
+    }
+
+    def handler(request):
+        assert request.url.path == "/api/readiness"
+        return httpx.Response(200, json=payload)
+
+    _mock_http_client(monkeypatch, handler)
+    args = build_parser().parse_args([
+        "readiness",
+        "--json",
+        "--daemon-url",
+        "http://daemon",
+    ])
+
+    code = await _run_http_command(args)
+
+    assert code == expected_code
+    assert json.loads(capsys.readouterr().out) == payload
 
 
 @pytest.mark.asyncio
