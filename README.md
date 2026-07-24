@@ -26,7 +26,9 @@ pandora-daemon (FastAPI)          -- session, cache, download, image proxy
 - [Development roadmap](docs/roadmap.md)
 - [Long-running unattended development](docs/development/unattended-development.md)
 - [Executable work program](docs/development/work-program.md)
+- [Release process and rollback](docs/development/release-process.md)
 - [Long-running goal prompt](docs/development/goal-prompt.md)
+- [Changelog](CHANGELOG.md)
 - [Historical documentation](docs/archive/README.md)
 
 ## Agent Pack
@@ -189,11 +191,14 @@ uv run --frozen python scripts/check.py
 ```
 
 The checker verifies `uv.lock`, installs the exact Web lockfile with `npm ci`,
-checks tracked Markdown links and Agent JSON Schemas, runs all Python tests,
+checks release metadata, tracked Markdown links and Agent JSON Schemas, runs all Python tests,
 runs Web lint and build, and finishes with `git diff --check`. Each stage prints
 its own `[CHECK]`, `[PASS]`, or `[FAIL]` label so a failure identifies the
 specific gate. Use the narrower command printed for a stage when iterating on a
 failure.
+
+The repeatable internal artifact and rollback procedure is documented in
+[`docs/development/release-process.md`](docs/development/release-process.md).
 
 ## API Reference
 

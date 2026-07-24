@@ -2,6 +2,10 @@
 
 Pandora is deployed as a local daemon plus a CLI. Agent workflows should target the CLI in `--json` or `--ndjson` mode and follow the generic [Pandora Agent Pack](agent/README.md).
 
+Versioned build, internal release-candidate, and rollback steps live in the
+[release process runbook](development/release-process.md); this deployment
+guide does not create tags or publish artifacts.
+
 Hermes is one packaged consumer of the Agent Pack through `.agents/skills/pandora/SKILL.md`. There is no separate in-repo Hermes plugin/toolset package yet; future wrappers should stay thin and call the CLI or daemon instead of creating a parallel control plane.
 
 ## Prerequisites

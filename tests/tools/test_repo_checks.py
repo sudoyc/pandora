@@ -79,6 +79,7 @@ def test_unified_check_plan_covers_required_stages():
 
     assert set(plan) == {
         "Python lock",
+        "Release metadata",
         "Web lock and install",
         "Markdown links and Agent schemas",
         "Python tests",
@@ -87,6 +88,7 @@ def test_unified_check_plan_covers_required_stages():
         "Git whitespace",
     }
     assert plan["Python lock"] == ("uv", "lock", "--check")
+    assert plan["Release metadata"][-2:] == ("scripts/release.py", "check")
     assert plan["Web lock and install"] == ("npm", "--prefix", "pandora-web", "ci")
     assert plan["Markdown links and Agent schemas"][-1] == "scripts.repo_checks"
     assert plan["Python tests"][-3:] == ("-m", "pytest", "-q")
@@ -99,6 +101,7 @@ def test_unified_check_groups_partition_required_stages():
     assert tuple(CHECK_GROUPS) == ("repository", "python", "web")
     assert [label for label, _ in CHECK_GROUPS["repository"]] == [
         "Python lock",
+        "Release metadata",
         "Markdown links and Agent schemas",
         "Git whitespace",
     ]

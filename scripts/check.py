@@ -13,6 +13,10 @@ Runner = Callable[..., subprocess.CompletedProcess]
 
 CHECKS: tuple[Check, ...] = (
     ("Python lock", ("uv", "lock", "--check")),
+    (
+        "Release metadata",
+        ("uv", "run", "--frozen", "python", "scripts/release.py", "check"),
+    ),
     ("Web lock and install", ("npm", "--prefix", "pandora-web", "ci")),
     (
         "Markdown links and Agent schemas",
@@ -24,9 +28,9 @@ CHECKS: tuple[Check, ...] = (
     ("Git whitespace", ("git", "diff", "--check")),
 )
 CHECK_GROUPS: dict[str, tuple[Check, ...]] = {
-    "repository": (CHECKS[0], CHECKS[2], CHECKS[6]),
-    "python": (CHECKS[3],),
-    "web": (CHECKS[1], CHECKS[4], CHECKS[5]),
+    "repository": (CHECKS[0], CHECKS[1], CHECKS[3], CHECKS[7]),
+    "python": (CHECKS[4],),
+    "web": (CHECKS[2], CHECKS[5], CHECKS[6]),
 }
 
 

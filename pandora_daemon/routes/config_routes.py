@@ -66,7 +66,7 @@ def _pandora_version() -> str:
     try:
         return version("pandora")
     except PackageNotFoundError:
-        return "0.2.0"
+        return "unknown"
 
 
 @router.get("/api/config")

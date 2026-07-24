@@ -1,6 +1,7 @@
 """Tests for pandora_daemon.routes.config_routes module."""
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from pandora_daemon.config import CredentialsConfig, PandoraConfig
-from pandora_daemon.routes.config_routes import router
+from pandora_daemon.routes.config_routes import _pandora_version, router
 from pandora_daemon.state import AppState
 
 
@@ -97,6 +98,13 @@ class TestGetConfig:
 
 
 class TestHealth:
+    def test_health_version_has_no_hardcoded_fallback(self):
+        with patch(
+            "pandora_daemon.routes.config_routes.version",
+            side_effect=PackageNotFoundError,
+        ):
+            assert _pandora_version() == "unknown"
+
     def test_health_returns_safe_public_shape(self, tmp_path):
         config = PandoraConfig(
             credentials=CredentialsConfig(igneous="secret-igneous", ipb_member_id="secret-member"),
