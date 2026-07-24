@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `WEB-02` |
-| Next work package | None |
-| Last completed work package | `WEB-01` |
+| Active work package | None |
+| Next work package | `WEB-03` |
+| Last completed work package | `WEB-02` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 676 passed（2026-07-25；本地统一检查，implementation `84d9cae`） |
-| Last Web evidence | 5 unit/component + 1 Chromium browser passed；lint/build passed（2026-07-25；本地统一检查，implementation `84d9cae`） |
+| Last full Python evidence | 676 passed（2026-07-25；本地统一检查，implementation `aec111d`） |
+| Last Web evidence | 11 unit/component + 1 Chromium browser passed；lint/build passed（2026-07-25；本地统一检查，implementation `aec111d`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -58,8 +58,8 @@
 | `CT-03` | Yes | Done | `CT-01` | 长任务具有 request/correlation id 和最小诊断字段，日志可关联且不泄密 | REST/CLI/WS 关联测试、日志脱敏测试 |
 | `CT-04` | Yes | Done | `CT-02`, `CT-03` | Agent Pack 关键工作流能在 fixture daemon 端到端执行 | bootstrap/search/gallery/download/library/PDF 成功和失败 E2E |
 | `WEB-01` | Yes | Done | `CT-02` | 建立 Web unit/component/browser 测试基线，覆盖已有 feed/detail/reader/WS reducer | 可重复 test script、现有行为基线测试、lint/build |
-| `WEB-02` | Yes | In Progress | `WEB-01` | 拆分 `App.tsx` 职责，形成 typed API/error 层和稳定 view state | 组件/hook tests；无契约复制；lint/build |
-| `WEB-03` | Yes | Queued | `WEB-02`, `DL-04` | 初始加载、WS 重连、daemon 重启后下载状态从 REST 对账恢复 | disconnect/reconnect/restart browser tests |
+| `WEB-02` | Yes | Done | `WEB-01` | 拆分 `App.tsx` 职责，形成 typed API/error 层和稳定 view state | 组件/hook tests；无契约复制；lint/build |
+| `WEB-03` | Yes | Ready | `WEB-02`, `DL-04` | 初始加载、WS 重连、daemon 重启后下载状态从 REST 对账恢复 | disconnect/reconnect/restart browser tests |
 | `WEB-04` | Yes | Queued | `WEB-02`, `CT-02` | favorites、history、downloads、library 页面与本地阅读形成完整流程 | 各页空/错/重试/component tests 和关键 E2E |
 | `WEB-05` | Yes | Queued | `WEB-03`, `WEB-04` | 桌面/移动端无重叠，键盘和对话框焦点可用 | 多视口截图检查、键盘/焦点 browser tests、lint/build |
 | `DIST-01` | Yes | Queued | `REL-01`, `CT-04`, `WEB-05` | 用 ADR 选择一种维护成本可控的分发方式并构建 artifact | ADR、可重复 build、artifact 内容/版本检查 |
@@ -129,6 +129,7 @@
 | `CT-03` | 2026-07-25 | `73279c3` | `uv run --frozen python -m pytest tests/pandora_daemon/test_diagnostics.py tests/pandora_daemon/test_machine_contract.py tests/pandora_daemon/test_agent_contracts.py tests/pandora_daemon/test_success_response_schemas.py tests/pandora_daemon/test_routes_downloads.py tests/pandora_daemon/test_routes_library.py tests/pandora_daemon/test_download_lifecycle.py tests/pandora_daemon/test_download_state.py tests/pandora_daemon/test_cli.py -q`（190 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（526 passed）；`uv run --frozen python -m pytest -q`（669 passed）；`uv run --frozen python -m scripts.repo_checks`（Markdown/schema passed）；`uv run --frozen python scripts/check.py`（669 passed，全部阶段 passed）；GitHub Actions `30108961803` 三个 job 全部 success | REST header、CLI、下载持久状态、WS 和 PDF hook 使用可关联 ID；旧 v1 task 自动补写；动态路径、token、密码、标题、本地路径和异常文本不进入诊断日志；`cookie.txt` 未读取且未暂存 |
 | `CT-04` | 2026-07-25 | `0168120` | `uv run --frozen python -m pytest tests/pandora_daemon/test_agent_workflows_e2e.py tests/pandora_daemon/test_bootstrap_smoke.py tests/pandora_daemon/test_agent_contracts.py tests/pandora_daemon/test_machine_contract.py -q`（50 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（532 passed）；`uv run --frozen python -m pytest -q`（675 passed）；`uv run --frozen python scripts/check.py`（675 passed，全部阶段 passed）；GitHub Actions `30110103154` 三个 job 全部 success | fixture CLI 经真实 parser、ASGI route、serializer/error handler 和 schema 覆盖 bootstrap、search、gallery、download NDJSON、library 与 PDF 成功/失败；未请求上游、未读取凭据或真实业务状态 |
 | `WEB-01` | 2026-07-25 | `84d9cae` | `uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（11 passed）；`npm run test:unit`（4 files、5 tests passed）；`npm run test:browser`（1 Chromium smoke passed）；`npm run lint`、`npm run build`（passed）；`uv run --frozen python scripts/check.py`（676 passed，全部阶段 passed）；`npm audit --omit=dev`（0 vulnerabilities）；Playwright 1280x800 fixture 截图检查（reader 全视口、drawer/sidebar 层级正确、console 0 errors）；GitHub Actions `30111555658` 三个 job 全部 success | Vitest/Testing Library/jsdom 和系统浏览器 Playwright 基线覆盖 feed、search、detail、reader、WS reducer；统一 Web 检查已接入 unit/browser/lint/build；修复 reader 在 modal 外不可点击及 sidebar 覆盖问题 |
+| `WEB-02` | 2026-07-25 | `aec111d` | `npm run test:unit`（6 files、11 tests passed）；`npm run test:browser`（1 Chromium smoke passed，覆盖 feed→search/history→Browse→detail→reader）；`npm run lint`、`npm run build`（passed）；`uv run --frozen python scripts/check.py`（676 passed，全部阶段 passed）；Playwright 1280x800 fixture 截图检查（搜索/历史布局正常、reader 全视口、console 0 errors） | `App.tsx` 收敛为 43 行组合层；sidebar、search/header、feed、download panel 分离；判别联合消除 mode/query 无效组合；通用 `ApiError/apiGet` 保持 daemon 契约单一来源 |
 
 ## 7. 阻塞与人工门记录
 
