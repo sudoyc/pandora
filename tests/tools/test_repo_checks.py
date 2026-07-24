@@ -81,6 +81,7 @@ def test_unified_check_plan_covers_required_stages():
         "Python lock",
         "Release metadata",
         "Web lock and install",
+        "Web dependency audit",
         "Markdown links and Agent schemas",
         "Python tests",
         "Web unit and component tests",
@@ -92,6 +93,9 @@ def test_unified_check_plan_covers_required_stages():
     assert plan["Python lock"] == ("uv", "lock", "--check")
     assert plan["Release metadata"][-2:] == ("scripts/release.py", "check")
     assert plan["Web lock and install"] == ("npm", "--prefix", "pandora-web", "ci")
+    assert plan["Web dependency audit"] == (
+        "npm", "--prefix", "pandora-web", "audit", "--audit-level=low",
+    )
     assert plan["Markdown links and Agent schemas"][-1] == "scripts.repo_checks"
     assert plan["Python tests"][-3:] == ("-m", "pytest", "-q")
     assert plan["Web unit and component tests"][-2:] == ("run", "test:unit")
@@ -112,6 +116,7 @@ def test_unified_check_groups_partition_required_stages():
     assert [label for label, _ in CHECK_GROUPS["python"]] == ["Python tests"]
     assert [label for label, _ in CHECK_GROUPS["web"]] == [
         "Web lock and install",
+        "Web dependency audit",
         "Web unit and component tests",
         "Web browser tests",
         "Web lint",

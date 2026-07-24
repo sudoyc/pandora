@@ -203,12 +203,12 @@ local gate with one command:
 uv run --frozen python scripts/check.py
 ```
 
-The checker verifies `uv.lock`, installs the exact Web lockfile with `npm ci`,
-checks release metadata, tracked Markdown links and Agent JSON Schemas, runs all Python tests,
-runs Web lint and build, and finishes with `git diff --check`. Each stage prints
-its own `[CHECK]`, `[PASS]`, or `[FAIL]` label so a failure identifies the
-specific gate. Use the narrower command printed for a stage when iterating on a
-failure.
+The checker verifies `uv.lock`, installs and audits the exact Web dependency
+tree, checks release metadata, tracked Markdown links and Agent JSON Schemas,
+runs all Python tests, runs Web unit/browser tests, lint, and build, and
+finishes with `git diff --check`. Each stage prints its own `[CHECK]`, `[PASS]`,
+or `[FAIL]` label so a failure identifies the specific gate. Use the narrower
+command printed for a stage when iterating on a failure.
 
 When exercising the daemon directly from a development checkout, keep the same
 canonical diagnostic order as the installed CLI:

@@ -19,6 +19,10 @@ CHECKS: tuple[Check, ...] = (
     ),
     ("Web lock and install", ("npm", "--prefix", "pandora-web", "ci")),
     (
+        "Web dependency audit",
+        ("npm", "--prefix", "pandora-web", "audit", "--audit-level=low"),
+    ),
+    (
         "Markdown links and Agent schemas",
         ("uv", "run", "--frozen", "python", "-m", "scripts.repo_checks"),
     ),
@@ -36,9 +40,9 @@ CHECKS: tuple[Check, ...] = (
     ("Git whitespace", ("git", "diff", "--check")),
 )
 CHECK_GROUPS: dict[str, tuple[Check, ...]] = {
-    "repository": (CHECKS[0], CHECKS[1], CHECKS[3], CHECKS[9]),
-    "python": (CHECKS[4],),
-    "web": (CHECKS[2], CHECKS[5], CHECKS[6], CHECKS[7], CHECKS[8]),
+    "repository": (CHECKS[0], CHECKS[1], CHECKS[4], CHECKS[10]),
+    "python": (CHECKS[5],),
+    "web": (CHECKS[2], CHECKS[3], CHECKS[6], CHECKS[7], CHECKS[8], CHECKS[9]),
 }
 
 

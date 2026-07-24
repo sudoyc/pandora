@@ -13,7 +13,7 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | None（等待 `REL-02` 人工门） |
+| Active work package | `BUG-20260725-02` |
 | Next work package | `REL-02`（Gated） |
 | Last completed work package | `BUG-20260725-01` |
 | Blockers | None；`REL-02` 尚未人工放行 |
@@ -65,6 +65,7 @@
 | `DIST-01` | Yes | Done | `REL-01`, `CT-04`, `WEB-05` | 用 ADR 选择一种维护成本可控的分发方式并构建 artifact | ADR、可重复 build、artifact 内容/版本检查 |
 | `DIST-02` | Yes | Done | `DIST-01` | 隔离环境完成安装、启动、health/readiness、升级和回滚 | clean-environment scripted smoke 和失败恢复记录 |
 | `BUG-20260725-01` | Yes | Done | `DIST-02` | 现役 roadmap/architecture 不再把已完成能力描述为未完成 | 陈旧声明扫描、Markdown links/schema、统一检查 |
+| `BUG-20260725-02` | Yes | In Progress | `WEB-05`, `CI-02` | 清除有修复版本的 Web 开发工具链依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查 |
 | `REL-02` | Yes | Gated | `DIST-02` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
 | `WRAP-01` | No | Gated | `CT-04`, `DIST-02` | 有真实需求时创建只包装 CLI/REST/WS 的薄 consumer | 需求证据、同一 contract suite、无第二状态层 |
 | `CLOSE-01` | Yes | Queued | 除自身外全部 Required | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
