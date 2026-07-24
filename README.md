@@ -98,6 +98,8 @@ pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token]
 pandora download list --json
 pandora download report --json
+pandora download repair <gid> [--apply] --json
+pandora download forget <gid> [--apply] --json
 pandora download watch [gid] --ndjson
 pandora download cancel <gid>
 pandora download resume <gid>
@@ -133,6 +135,10 @@ Agent search uses scheme A intentionally: the CLI does not resolve ambiguous tra
 `pandora download report --json` performs a read-only comparison of registered
 terminal tasks with library metadata and page files. Inspect `consistent` and
 the issue codes; an inconsistent report is still a successful command response.
+`download repair` and `download forget` default to a no-write preview. Pass
+`--apply` only after inspecting the returned actions. Repair registers one
+complete unregistered library entry; forget removes inactive task state while
+leaving metadata, pages, and directories untouched.
 
 ## Quick Start
 

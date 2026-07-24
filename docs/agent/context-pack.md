@@ -41,7 +41,7 @@ Treat these terminal events as completion for the current automation step:
 success: `download_complete` exits 0.
 failure/non-success: `download_complete_with_errors`, `download_error`, `download_cancelled`, `download_paused`, and `download_auth_failed` exit 1.
 
-Inspect follow-up state with `download pages <gid> --json`, `download list --json`, `download report --json`, and `library list --json`. The consistency report is read-only; use its issue codes instead of scanning daemon files.
+Inspect follow-up state with `download pages <gid> --json`, `download list --json`, `download report --json`, and `library list --json`. The consistency report is read-only; use its issue codes instead of scanning daemon files. When the user requests recovery, preview `download repair <gid> --json` or `download forget <gid> --json`, inspect `actions`, then repeat with `--apply`. Recovery never deletes library files.
 ```
 
 ## Bug Fix Context

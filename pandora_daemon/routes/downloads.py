@@ -18,6 +18,10 @@ class SubmitBody(BaseModel):
     token: str
 
 
+class RecoveryBody(BaseModel):
+    apply: bool = False
+
+
 @router.post("")
 async def submit_download(body: SubmitBody, downloads: DownloadManager = Depends(get_downloads)):
     """Submit a gallery for download."""
@@ -39,6 +43,32 @@ async def list_downloads(downloads: DownloadManager = Depends(get_downloads)):
 async def download_consistency_report(downloads: DownloadManager = Depends(get_downloads)):
     """Report task/library consistency without changing persisted state or files."""
     return downloads.consistency_report()
+
+
+@router.post("/{gid}/repair")
+async def repair_download(
+    gid: str,
+    body: RecoveryBody,
+    downloads: DownloadManager = Depends(get_downloads),
+):
+    """Preview or register a complete library entry as a download task."""
+    try:
+        return await downloads.repair(gid, apply=body.apply)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@router.post("/{gid}/forget")
+async def forget_download(
+    gid: str,
+    body: RecoveryBody,
+    downloads: DownloadManager = Depends(get_downloads),
+):
+    """Preview or forget an inactive task without deleting library files."""
+    try:
+        return await downloads.forget(gid, apply=body.apply)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.delete("/{gid}")

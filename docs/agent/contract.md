@@ -216,6 +216,62 @@ The report omits task tokens and local paths. Retrieving `consistent: false` is
 a successful read and exits 0; machine transport or HTTP failures retain their
 normal nonzero error semantics.
 
+## Download State Recovery
+
+Preview first:
+
+```bash
+uv run python -m pandora_daemon.cli download repair 123 --json
+uv run python -m pandora_daemon.cli download forget 123 --json
+```
+
+Apply only after inspecting `actions`:
+
+```bash
+uv run python -m pandora_daemon.cli download repair 123 --apply --json
+uv run python -m pandora_daemon.cli download forget 123 --apply --json
+```
+
+REST:
+
+```text
+POST /api/downloads/{gid}/repair  {"apply": false}
+POST /api/downloads/{gid}/forget  {"apply": false}
+```
+
+Both operations default to preview. `apply: true` is the only mode that changes
+`downloads.json`.
+
+- `repair` registers one unregistered library entry as a completed task only when metadata identifies the requested `gid`, `pages` is valid, every expected page file exists, and the entry is unique.
+- `forget` removes one inactive task registration. `queued` and `downloading` tasks return HTTP 409 instead.
+- Neither operation writes, moves, or deletes metadata, page files, or library directories.
+- Repeating an applied operation is a successful no-op with `changed: false` and `actions: []`.
+- Responses never include task tokens or local paths. Invalid or ambiguous repair inputs return HTTP 409 through the normal CLI `http_error` envelope.
+
+Preview response:
+
+```json
+{
+  "operation": "repair",
+  "gid": "123",
+  "apply": false,
+  "changed": false,
+  "actions": [
+    {
+      "code": "register_library_task",
+      "gid": "123",
+      "task_status": "completed",
+      "expected_pages": 3,
+      "present_pages": 3
+    }
+  ]
+}
+```
+
+`forget` uses action code `forget_task`. In preview mode, `changed` remains
+false even when actions are planned. In apply mode, `changed` is true only when
+the state registry was actually updated.
+
 ## Library PDF Export
 
 ```bash

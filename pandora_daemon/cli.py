@@ -426,7 +426,10 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=float, default=argparse.SUPPRESS, help="Request timeout in seconds")
 
 
-_DOWNLOAD_SUBCOMMANDS = {"add", "run", "list", "report", "watch", "cancel", "resume", "retry", "pages"}
+_DOWNLOAD_SUBCOMMANDS = {
+    "add", "run", "list", "report", "repair", "forget", "watch",
+    "cancel", "resume", "retry", "pages",
+}
 
 
 def _normalize_argv(argv: list[str] | None = None) -> list[str]:
@@ -482,6 +485,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     download_report = download_subparsers.add_parser("report", help="Report task and library consistency")
     _add_common_options(download_report)
+
+    for action_name in ("repair", "forget"):
+        action_parser = download_subparsers.add_parser(
+            action_name,
+            help=f"Preview or apply download {action_name}",
+        )
+        action_parser.add_argument("gid", help="Gallery ID")
+        action_parser.add_argument(
+            "--apply",
+            action="store_true",
+            help="Apply the planned state change (default: preview only)",
+        )
+        _add_common_options(action_parser)
 
     download_watch = download_subparsers.add_parser("watch", help="Watch a download via WebSocket")
     download_watch.add_argument("gid", nargs="?", help="Gallery ID to filter events")
@@ -697,6 +713,15 @@ async def _run_http_command(args: argparse.Namespace) -> int:
 
                 if download_command_name == "report":
                     data = await _request_json(client, "GET", "/api/downloads/report")
+                    return _dispatch_json(data)
+
+                if download_command_name in {"repair", "forget"}:
+                    data = await _request_json(
+                        client,
+                        "POST",
+                        f"/api/downloads/{args.gid}/{download_command_name}",
+                        json={"apply": args.apply},
+                    )
                     return _dispatch_json(data)
 
                 if download_command_name == "watch":

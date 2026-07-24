@@ -80,7 +80,10 @@ def test_build_parser_exposes_download_management_subcommands():
         action.choices for action in download_parser._actions if hasattr(action, "choices") and action.choices
     )
 
-    assert set(download_subcommands) >= {"add", "run", "list", "report", "watch", "cancel", "resume", "retry", "pages"}
+    assert set(download_subcommands) >= {
+        "add", "run", "list", "report", "repair", "forget", "watch",
+        "cancel", "resume", "retry", "pages",
+    }
 
 
 def test_normalize_argv_preserves_legacy_download_url_form():
@@ -106,6 +109,12 @@ def test_normalize_argv_leaves_download_run_unchanged():
 def test_normalize_argv_leaves_download_report_unchanged():
     argv = _normalize_argv(["download", "report", "--json"])
     assert argv == ["download", "report", "--json"]
+
+
+@pytest.mark.parametrize("operation", ["repair", "forget"])
+def test_normalize_argv_leaves_download_recovery_subcommands_unchanged(operation):
+    argv = _normalize_argv(["download", operation, "123", "--json"])
+    assert argv == ["download", operation, "123", "--json"]
 
 
 def test_normalize_argv_leaves_parent_options_before_download_subcommand_unchanged():
@@ -291,6 +300,10 @@ async def test_config_json_calls_daemon_config_without_credentials(monkeypatch, 
         (["download", "add", "https://exhentai.org/g/1234567/a1b2c3d4e5/", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads", {"gid": "1234567", "token": "a1b2c3d4e5"}),
         (["download", "list", "--json", "--daemon-url", "http://daemon"], "GET", "/api/downloads", None),
         (["download", "report", "--json", "--daemon-url", "http://daemon"], "GET", "/api/downloads/report", None),
+        (["download", "repair", "123", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads/123/repair", {"apply": False}),
+        (["download", "repair", "123", "--apply", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads/123/repair", {"apply": True}),
+        (["download", "forget", "123", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads/123/forget", {"apply": False}),
+        (["download", "forget", "123", "--apply", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads/123/forget", {"apply": True}),
         (["download", "pages", "123", "--json", "--daemon-url", "http://daemon"], "GET", "/api/downloads/123/pages", None),
         (["download", "cancel", "123", "--json", "--daemon-url", "http://daemon"], "DELETE", "/api/downloads/123", None),
         (["download", "resume", "123", "--json", "--daemon-url", "http://daemon"], "POST", "/api/downloads/123/resume", None),

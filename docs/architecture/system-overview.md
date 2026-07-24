@@ -131,7 +131,9 @@ submit -> reject active duplicate -> fetch detail -> persist task -> queue worke
 降级覆盖，daemon 会在启动 worker 前报错。
 
 只读一致性报告以 daemon 已载入的 task 注册表为状态事实源，对照 `download.path` 下的
-metadata 和页面文件；它不重新实现 library 索引、不返回本地路径，也不执行修复。
+metadata 和页面文件；它不重新实现 library 索引，也不返回本地路径。显式 repair/forget
+默认只生成 preview，只有 apply 才更新 task 状态；repair 只登记 metadata 有效且页面完整的
+library 条目，forget 只移除非活动 task，两者都不改动 library 文件。
 
 ## 7. 公共契约
 
@@ -178,6 +180,6 @@ TUI 已冻结，不纳入默认功能开发验证。
 - `health` 保持轻量；上游会话和四项页面能力由显式 `readiness` 探针验证。
 - Web 仍是可选 WIP，缺少重连后的下载状态对账、完整页面和自动化 UI 测试。
 - 仓库尚无持续集成和正式 release/tag 流程。
-- 历史下载状态与磁盘 library 可能失配，缺少正式 reconcile/repair 工作流。
+- 下载生命周期的 cancel/resume/retry/restart/reconcile 终态语义仍待统一。
 
 这些事项的处理顺序和验收标准见 [开发路线图](../roadmap.md)。

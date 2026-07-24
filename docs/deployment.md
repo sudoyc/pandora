@@ -67,6 +67,19 @@ internal format is a version 1 envelope with `schema_version` and `tasks`.
 Use `download report --json` for task/library consistency. Agents and wrappers
 must not read or modify the state file or its recovery backups directly.
 
+For a complete unregistered library entry or stale inactive task, preview the
+daemon-owned recovery action before applying it:
+
+```bash
+uv run python -m pandora_daemon.cli download repair GID --json
+uv run python -m pandora_daemon.cli download repair GID --apply --json
+uv run python -m pandora_daemon.cli download forget GID --json
+uv run python -m pandora_daemon.cli download forget GID --apply --json
+```
+
+Repair/forget only update the versioned task state. They never remove metadata,
+pages, or library directories.
+
 ## Readiness Checks
 
 Use these before running agent workflows:

@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -17,7 +18,7 @@ from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from pandora_daemon.config import DownloadConfig, PandoraConfig
 from pandora_daemon import cli
 from pandora_daemon.cli import _machine_error
-from pandora_daemon.download import DownloadTask
+from pandora_daemon.download import DownloadManager, DownloadTask
 from pandora_daemon.routes.browse import _gallery_item_to_dict
 from pandora_daemon.routes.gallery import _detail_to_dict
 from pandora_daemon.routes.library import router as library_router
@@ -219,6 +220,50 @@ def test_download_consistency_report_contract_is_documented():
         "unregistered_library",
     ):
         assert issue_code in contract
+
+
+@pytest.mark.asyncio
+async def test_download_recovery_contract_is_safe_and_documented(tmp_path: Path):
+    gallery_dir = tmp_path / "downloads" / "123-Download"
+    pages_dir = gallery_dir / "pages"
+    pages_dir.mkdir(parents=True)
+    (gallery_dir / "metadata.json").write_text(
+        json.dumps({
+            "gid": "123",
+            "token": "abcdef0123",
+            "title": "Download",
+            "pages": 1,
+        }),
+        encoding="utf-8",
+    )
+    (pages_dir / "0001.jpg").write_bytes(b"page")
+    manager = DownloadManager(
+        AsyncMock(),
+        DownloadConfig(path=str(tmp_path / "downloads")),
+        AsyncMock(),
+        AsyncMock(),
+        tmp_path / "downloads.json",
+    )
+
+    data = await manager.repair("123")
+
+    _assert_keys(data, {"operation", "gid", "apply", "changed", "actions"})
+    _assert_keys(
+        data["actions"][0],
+        {"code", "gid", "task_status", "expected_pages", "present_pages"},
+    )
+    serialized = json.dumps(data)
+    assert "abcdef0123" not in serialized
+    assert str(tmp_path) not in serialized
+    for path in (
+        "docs/agent/contract.md",
+        "docs/agent/workflows/download.md",
+        ".agents/skills/pandora/SKILL.md",
+    ):
+        text = Path(path).read_text(encoding="utf-8")
+        assert "download repair" in text
+        assert "download forget" in text
+        assert "--apply" in text
 
 
 def test_library_item_contract_shape(tmp_path: Path):

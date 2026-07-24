@@ -167,6 +167,60 @@ class TestDownloadConsistencyReport:
         mock_downloads.consistency_report.assert_called_once_with()
 
 
+class TestDownloadRecovery:
+    @pytest.mark.parametrize("operation", ["repair", "forget"])
+    @pytest.mark.parametrize("apply", [False, True])
+    def test_recovery_operation_forwards_explicit_apply_mode(self, operation, apply):
+        mock_downloads = MagicMock()
+        result = {
+            "operation": operation,
+            "gid": "123",
+            "apply": apply,
+            "changed": apply,
+            "actions": [],
+        }
+        setattr(mock_downloads, operation, AsyncMock(return_value=result))
+        app = _make_app(mock_downloads)
+
+        response = TestClient(app).post(
+            f"/api/downloads/123/{operation}",
+            json={"apply": apply},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == result
+        getattr(mock_downloads, operation).assert_awaited_once_with("123", apply=apply)
+
+    @pytest.mark.parametrize("operation", ["repair", "forget"])
+    def test_recovery_defaults_to_preview(self, operation):
+        mock_downloads = MagicMock()
+        result = {
+            "operation": operation,
+            "gid": "123",
+            "apply": False,
+            "changed": False,
+            "actions": [],
+        }
+        setattr(mock_downloads, operation, AsyncMock(return_value=result))
+        app = _make_app(mock_downloads)
+
+        response = TestClient(app).post(f"/api/downloads/123/{operation}", json={})
+
+        assert response.status_code == 200
+        getattr(mock_downloads, operation).assert_awaited_once_with("123", apply=False)
+
+    @pytest.mark.parametrize("operation", ["repair", "forget"])
+    def test_invalid_recovery_operation_returns_conflict(self, operation):
+        mock_downloads = MagicMock()
+        setattr(mock_downloads, operation, AsyncMock(side_effect=ValueError("not recoverable")))
+        app = _make_app(mock_downloads)
+
+        response = TestClient(app).post(f"/api/downloads/123/{operation}", json={})
+
+        assert response.status_code == 409
+        assert response.json() == {"detail": "not recoverable"}
+
+
 class TestCancelDownload:
     def test_cancel_download_returns_success_true(self):
         mock_downloads = MagicMock()

@@ -40,8 +40,9 @@ Forbidden:
 
 ## Mutation Rules
 
-- Read-only agents must not call download, comment, rating, vote, favorite mutation, tag mutation, config update, bookmark delete, history delete, filter mutation, or quick-search mutation commands.
-- Download agents may submit/cancel/resume/retry downloads only when the user asks for download operations.
+- Read-only agents must not call download, repair, forget, comment, rating, vote, favorite mutation, tag mutation, config update, bookmark delete, history delete, filter mutation, or quick-search mutation commands.
+- Download agents may submit/cancel/resume/retry downloads only when the user asks for download operations. Repair/forget additionally require preview inspection before explicit apply.
+- Repair/forget may change daemon task state but must never modify or delete library metadata, pages, or directories.
 - Config changes require explicit user instruction and should use daemon config endpoints only.
 - Do not silently retry operations that can create duplicate side effects, except `download run --ndjson`, which handles active duplicate queue submissions through `download_already_queued`.
 

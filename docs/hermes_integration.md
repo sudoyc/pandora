@@ -80,6 +80,11 @@ instead of reading state or library files. Daemon WebSocket events use `event`
 as the discriminator, not `type`. Terminal event and exit semantics are defined
 in [`agent/contract.md`](agent/contract.md).
 
+When the user requests recovery, preview `download repair <gid> --json` or
+`download forget <gid> --json`, inspect `actions`, then repeat the selected
+command with `--apply`. Both commands preserve library files and keep task state
+inside the daemon.
+
 ## Skill Maintenance
 
 When updating `.agents/skills/pandora/SKILL.md`:

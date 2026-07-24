@@ -136,6 +136,8 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 | POST | `/api/downloads` | Submit download, body `{gid, token}` |
 | GET | `/api/downloads` | List all known download tasks |
 | GET | `/api/downloads/report` | Read-only task, metadata, page, and library consistency report |
+| POST | `/api/downloads/{gid}/repair` | Preview/apply registration of one complete library entry; body `{apply}` |
+| POST | `/api/downloads/{gid}/forget` | Preview/apply removal of inactive task state; body `{apply}` |
 | DELETE | `/api/downloads/{gid}` | Cancel task |
 | POST | `/api/downloads/{gid}/retry` | Retry failed pages for `completed_with_errors` task |
 | POST | `/api/downloads/{gid}/resume` | Resume paused task |
@@ -222,6 +224,14 @@ For bots, use `download run <url|gid> [token] --ndjson` as the supported success
 paths. A successfully retrieved inconsistent report exits 0, while transport or
 HTTP failures use the normal machine error envelope.
 
+`download repair <gid> --json` and `download forget <gid> --json` are previews;
+they send `{ "apply": false }` and do not write state. Add `--apply` to send
+`{ "apply": true }`. Repair only registers a uniquely identified library entry
+with valid metadata and every expected page. Forget only removes an inactive
+task. Both operations preserve all library files and omit tokens and local paths
+from their responses. Repeating a successful apply returns `changed: false` and
+an empty `actions` list.
+
 Machine-mode errors:
 
 ```json
@@ -251,6 +261,8 @@ pandora download run <url|gid> [token] --ndjson
 pandora download add <url|gid> [token] --json
 pandora download list --json
 pandora download report --json
+pandora download repair <gid> [--apply] --json
+pandora download forget <gid> [--apply] --json
 pandora download watch [gid] --ndjson
 pandora download cancel <gid> --json
 pandora download resume <gid> --json

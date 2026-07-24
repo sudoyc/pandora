@@ -244,6 +244,109 @@ class DownloadManager:
     def status(self) -> list[DownloadTask]:
         return list(self._tasks.values())
 
+    async def repair(self, gid: str, *, apply: bool = False) -> dict:
+        """Preview or register one complete, unregistered library entry."""
+        async with self._submit_lock:
+            result = {
+                "operation": "repair",
+                "gid": gid,
+                "apply": apply,
+                "changed": False,
+                "actions": [],
+            }
+            if gid in self._tasks:
+                return result
+
+            candidates = []
+            if self._download_path.is_dir():
+                for gallery_dir in sorted(self._download_path.iterdir()):
+                    if not gallery_dir.is_dir():
+                        continue
+                    metadata_status, metadata = _read_library_metadata(gallery_dir)
+                    if metadata_status == "present" and str(metadata["gid"]) == gid:
+                        candidates.append((gallery_dir, metadata))
+
+            if not candidates:
+                return result
+            if len(candidates) > 1:
+                raise ValueError(f"Multiple library entries found for gallery {gid}")
+
+            gallery_dir, metadata = candidates[0]
+            total_pages = metadata.get("pages")
+            if isinstance(total_pages, bool) or not isinstance(total_pages, int) or total_pages < 1:
+                raise ValueError(f"Library entry {gid} has invalid page metadata")
+
+            expected_numbers = set(range(1, total_pages + 1))
+            page_numbers = _present_page_numbers(gallery_dir)
+            missing_pages = sorted(expected_numbers - page_numbers)
+            if missing_pages:
+                raise ValueError(f"Library entry {gid} has missing pages")
+
+            action = {
+                "code": "register_library_task",
+                "gid": gid,
+                "task_status": "completed",
+                "expected_pages": total_pages,
+                "present_pages": total_pages,
+            }
+            result["actions"] = [action]
+            if not apply:
+                return result
+
+            token = metadata.get("token")
+            title = metadata.get("title")
+            created_at = metadata.get("downloaded_at")
+            task = DownloadTask(
+                gid=gid,
+                token=token if isinstance(token, str) else "",
+                title=title if isinstance(title, str) and title else f"Gallery {gid}",
+                total_pages=total_pages,
+                output_dir=str(gallery_dir),
+                status="completed",
+                downloaded_pages=total_pages,
+                cover_downloaded=any(
+                    path.is_file() and path.suffix != ".tmp"
+                    for path in gallery_dir.glob("cover.*")
+                ),
+                metadata_saved=True,
+                created_at=created_at if isinstance(created_at, str) else "",
+                page_states={page: "done" for page in range(1, total_pages + 1)},
+            )
+            self._tasks[gid] = task
+            self._save_state()
+            result["changed"] = True
+            return result
+
+    async def forget(self, gid: str, *, apply: bool = False) -> dict:
+        """Preview or remove one inactive task while preserving library files."""
+        async with self._submit_lock:
+            result = {
+                "operation": "forget",
+                "gid": gid,
+                "apply": apply,
+                "changed": False,
+                "actions": [],
+            }
+            task = self._tasks.get(gid)
+            if task is None:
+                return result
+            if task.status in {"queued", "downloading"}:
+                raise ValueError(f"Gallery {gid} has an active task and cannot be forgotten")
+
+            result["actions"] = [{
+                "code": "forget_task",
+                "gid": gid,
+                "task_status": task.status,
+            }]
+            if not apply:
+                return result
+
+            self._tasks.pop(gid)
+            self._cancelled.discard(gid)
+            self._save_state()
+            result["changed"] = True
+            return result
+
     def consistency_report(self) -> dict:
         """Compare registered terminal tasks with library files without changing either."""
         issues = []

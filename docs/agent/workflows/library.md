@@ -65,3 +65,7 @@ Notes:
 Do not persist a separate library catalog. If an agent needs the latest local gallery list, call `library list --json` again.
 Use `download report --json` when queue and library results appear inconsistent;
 the daemon performs the filesystem comparison without exposing local paths.
+For an unregistered complete entry or stale inactive task, preview
+`download repair <gid> --json` or `download forget <gid> --json`, inspect the
+actions, and use `--apply` only when the user requested the change. These
+commands preserve library files.

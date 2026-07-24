@@ -64,6 +64,14 @@ Use only when appropriate for the user request and current task state:
 uv run python -m pandora_daemon.cli download cancel 123 --json
 uv run python -m pandora_daemon.cli download resume 123 --json
 uv run python -m pandora_daemon.cli download retry 123 --json
+uv run python -m pandora_daemon.cli download repair 123 --json
+uv run python -m pandora_daemon.cli download forget 123 --json
 ```
 
-Do not implement a separate retry database or queue in an agent. The daemon owns retry/resume state.
+Run `download report --json` first. Recovery commands default to preview; inspect
+their `actions`, then repeat the selected command with `--apply` only when the
+user requested the state change. Repair registers a complete unregistered
+library entry. Forget removes inactive task state. Neither command deletes
+library files.
+
+Do not implement a separate retry database or queue in an agent. The daemon owns retry/resume and repair/forget state.
