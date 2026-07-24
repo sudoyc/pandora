@@ -14,9 +14,9 @@
 |---|---|
 | Program | Ready |
 | Active work package | None |
-| Next work package | `UP-02` |
+| Next work package | `CI-01` |
 | Last completed work package | `UP-01` |
-| Blockers | None |
+| Blockers | `UP-02`：缺少当前脱敏上游 fixture，实网上游探针未获授权 |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
 | Last full Python evidence | 543 passed（2026-07-24；`uv run python -m pytest -q`） |
 | Last Web evidence | lint/build passed（基线记录；Web 工作开始前必须重跑） |
@@ -43,7 +43,7 @@
 | ID | Required | 状态 | 依赖 | 工作结果 | 直接完成证据 |
 |---|---|---|---|---|---|
 | `UP-01` | Yes | Done | - | 定义 auth/session/upstream/parse/network 状态和稳定错误分类 | 契约说明、异常映射测试、无敏感字段测试 |
-| `UP-02` | Yes | Ready | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
+| `UP-02` | Yes | Blocked | `UP-01` | homepage/search/popular/home 使用当前脱敏 fixture，合法空列表不与失败混淆 | 四类 fixture regression tests 和 parser/route 目标测试 |
 | `UP-03` | Yes | Queued | `UP-01`, `UP-02` | 提供独立、只读、无凭据也有确定输出的 readiness REST/CLI 机器接口 | route/CLI/schema tests；失败类别和退出语义测试 |
 | `UP-04` | Yes | Queued | `UP-03` | 部署和 Agent bootstrap 使用统一诊断顺序 | fixture daemon smoke、deployment/Agent Pack/skill 同步 |
 | `DL-01` | Yes | Queued | `UP-04` | 定义 task、状态文件、磁盘页面、metadata、library 的一致性规则并提供只读报告 | orphan/missing/unregistered fixture matrix；REST/CLI report tests |
@@ -119,4 +119,4 @@
 
 | ID | 首次发现 | 阻塞事实 | 已尝试 | 解除条件 | 可并行的下一项 |
 |---|---|---|---|---|---|
-| - | - | - | - | - | 当前无阻塞 |
+| `UP-02` | 2026-07-24 | 仓库只有早期合成 `gallery_list.html`/`home.html`，没有 2026-07-23 探针对应的 homepage/search/popular/home 脱敏 fixture；实网上游探针默认关闭 | 检查 `tests/` fixture 清单及相关 Git 历史；文档所述 `../reference_project/` 在当前工作区不存在；未执行实网请求 | 提供四类当前脱敏 fixture，或明确授权只读实网上游探针并允许保存脱敏 fixture | `CI-01` |
