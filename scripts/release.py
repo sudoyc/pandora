@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 import hashlib
 import os
 import re
@@ -23,6 +24,11 @@ SDIST_ROOT_FILES = {".gitignore", "CHANGELOG.md", "PKG-INFO", "README.md", "pypr
 SOURCE_PACKAGES = {"exhentai_api", "pandora_daemon"}
 FORBIDDEN_PATH_PARTS = {"__pycache__", "dist", "downloads", "node_modules"}
 PRIVATE_FILE_NAMES = {".env", "cookie.txt", "credentials.txt", "downloads.json"}
+REQUIRED_PYTHON = ">=3.12"
+CONSOLE_SCRIPTS = {
+    "pandora": "pandora_daemon.cli:main",
+    "pandora-daemon": "pandora_daemon.__main__:main",
+}
 
 
 def project_version(root: Path = ROOT) -> str:
@@ -92,7 +98,24 @@ def _metadata_errors(content: bytes, version: str, artifact: str) -> list[str]:
         errors.append(
             f"{artifact} metadata version {metadata.get('Version')!r} does not match {version!r}"
         )
+    if metadata.get("Requires-Python") != REQUIRED_PYTHON:
+        errors.append(
+            f"{artifact} Requires-Python {metadata.get('Requires-Python')!r} "
+            f"does not match {REQUIRED_PYTHON!r}"
+        )
     return errors
+
+
+def _entry_point_errors(content: bytes) -> list[str]:
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read_string(content.decode("utf-8"))
+        scripts = dict(parser.items("console_scripts"))
+    except (configparser.Error, KeyError, UnicodeDecodeError) as exc:
+        return [f"wheel console scripts could not be read: {exc}"]
+    if scripts != CONSOLE_SCRIPTS:
+        return [f"wheel console scripts must be {CONSOLE_SCRIPTS!r}; found {scripts!r}"]
+    return []
 
 
 def _is_forbidden_path(parts: tuple[str, ...]) -> bool:
@@ -130,6 +153,8 @@ def _wheel_errors(path: Path, version: str) -> list[str]:
                     errors.append(f"wheel is missing required path: {required}")
             if metadata_path in names:
                 errors.extend(_metadata_errors(archive.read(metadata_path), version, "wheel"))
+            if entry_points_path in names:
+                errors.extend(_entry_point_errors(archive.read(entry_points_path)))
     except (OSError, zipfile.BadZipFile) as exc:
         errors.append(f"wheel could not be read: {exc}")
     return errors

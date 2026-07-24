@@ -186,8 +186,9 @@ TUI 已冻结，不纳入默认功能开发验证。
 
 - 上游是 HTML 驱动接口，页面或认证行为变化会造成 parser/endpoint 漂移。
 - `health` 保持轻量；上游会话和四项页面能力由显式 `readiness` 探针验证。
-- Web 仍是可选 consumer；下载对账和核心 workspace 页面已有 fixture 覆盖，剩余重点是
-  响应式/键盘焦点细化，以及按需增加 daemon 写操作的明确交互。
-- 主分支 CI 与内部 release candidate 已建立；正式 tag/release 仍受人工门控制。
+- Web 仍是可选 consumer；下载对账、核心 workspace、桌面/移动布局和对话框键盘焦点已有
+  fixture 与浏览器覆盖。
+- 主分支 CI、内部 release candidate 和默认 wheel 分发已建立；隔离环境的安装、升级、回滚
+  smoke 仍需完成，正式 tag/release 仍受人工门控制。
 
 这些事项的处理顺序和验收标准见 [开发路线图](../roadmap.md)。

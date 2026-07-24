@@ -53,6 +53,8 @@ def _write_artifacts(
     version: str,
     *,
     metadata_version: str | None = None,
+    requires_python: str = ">=3.12",
+    entry_points: str | None = None,
     extra_sdist_members: tuple[str, ...] = (),
 ) -> None:
     wheel = dist_dir / f"pandora-{version}-py3-none-any.whl"
@@ -63,13 +65,17 @@ def _write_artifacts(
             f"pandora-{version}.dist-info/METADATA",
             "Metadata-Version: 2.4\n"
             "Name: pandora\n"
-            f"Version: {metadata_version or version}\n",
+            f"Version: {metadata_version or version}\n"
+            f"Requires-Python: {requires_python}\n",
         )
         archive.writestr(
             f"pandora-{version}.dist-info/entry_points.txt",
-            "[console_scripts]\n"
-            "pandora = pandora_daemon.cli:main\n"
-            "pandora-daemon = pandora_daemon.__main__:main\n",
+            entry_points
+            or (
+                "[console_scripts]\n"
+                "pandora = pandora_daemon.cli:main\n"
+                "pandora-daemon = pandora_daemon.__main__:main\n"
+            ),
         )
 
     root = f"pandora-{version}"
@@ -86,6 +92,7 @@ def _write_artifacts(
                 "Metadata-Version: 2.4\n"
                 "Name: pandora\n"
                 f"Version: {metadata_version or version}\n"
+                f"Requires-Python: {requires_python}\n"
             ).encode(),
         )
         for extra_sdist_member in extra_sdist_members:
@@ -139,3 +146,20 @@ def test_artifact_verifier_rejects_wrong_metadata_and_unexpected_sdist_content(t
     assert any("pandora-web/node_modules" in error for error in errors)
     assert any("pandora_daemon/credentials.txt" in error for error in errors)
     assert any("unexpected-directory" in error for error in errors)
+
+
+def test_artifact_verifier_rejects_runtime_metadata_and_entry_point_drift(tmp_path):
+    _write_artifacts(
+        tmp_path,
+        "1.2.3",
+        requires_python=">=3.11",
+        entry_points=(
+            "[console_scripts]\n"
+            "pandora = pandora_daemon.wrong:main\n"
+        ),
+    )
+
+    errors = verify_artifacts(tmp_path, "1.2.3")
+
+    assert sum("Requires-Python" in error for error in errors) == 2
+    assert any("console scripts" in error for error in errors)

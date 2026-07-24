@@ -144,7 +144,20 @@ leaving metadata, pages, and directories untouched.
 
 ## Quick Start
 
-### 1. Configure credentials
+### 1. Install the verified wheel
+
+```bash
+PANDORA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/pandora"
+uv venv --python 3.12 "$PANDORA_HOME/venv"
+uv pip install --python "$PANDORA_HOME/venv/bin/python" \
+  --link-mode copy /path/to/pandora-VERSION-py3-none-any.whl
+```
+
+The wheel is Pandora's default runtime distribution. Source-checkout `uv run`
+commands are for development; see the [deployment guide](docs/deployment.md) for
+the artifact boundary and service setup.
+
+### 2. Configure credentials
 
 ```bash
 # Edit ~/.config/pandora/config.toml
@@ -155,29 +168,29 @@ leaving metadata, pages, and directories untouched.
 #   ipb_pass_hash = "..."  # Optional; leave empty if unused.
 ```
 
-### 2. Start daemon
+### 3. Start daemon
 
 ```bash
-uv run python -m pandora_daemon
+"$PANDORA_HOME/venv/bin/pandora-daemon"
 # Listening on http://127.0.0.1:7860
 ```
 
-### 3. Use the CLI or optional Web frontend
+### 4. Use the CLI
 
 ```bash
 # Agent/script readiness checks
-uv run python -m pandora_daemon.cli health --json
-uv run python -m pandora_daemon.cli config --json
-uv run python -m pandora_daemon.cli readiness --json
-uv run python -m pandora_daemon.cli status --json
-
-# Web frontend (optional)
-cd pandora-web && npm run dev
+"$PANDORA_HOME/venv/bin/pandora" health --json
+"$PANDORA_HOME/venv/bin/pandora" config --json
+"$PANDORA_HOME/venv/bin/pandora" readiness --json
+"$PANDORA_HOME/venv/bin/pandora" status --json
 
 # CLI
-uv run python -m pandora_daemon.cli search "keyword" --json
-uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/12345/abcdef0123/" --ndjson
+"$PANDORA_HOME/venv/bin/pandora" search "keyword" --json
+"$PANDORA_HOME/venv/bin/pandora" download run "https://exhentai.org/g/12345/abcdef0123/" --ndjson
 ```
+
+The optional Web consumer is not bundled in the wheel. Run it separately from
+a source checkout with `cd pandora-web && npm run dev` when needed.
 
 See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness checks, systemd user-service setup, CLI smoke tests, and config safety notes. See [`docs/agent/README.md`](docs/agent/README.md) for generic agent workflows and [`docs/hermes_integration.md`](docs/hermes_integration.md) for Hermes-specific packaging guidance.
 
@@ -196,6 +209,16 @@ runs Web lint and build, and finishes with `git diff --check`. Each stage prints
 its own `[CHECK]`, `[PASS]`, or `[FAIL]` label so a failure identifies the
 specific gate. Use the narrower command printed for a stage when iterating on a
 failure.
+
+When exercising the daemon directly from a development checkout, keep the same
+canonical diagnostic order as the installed CLI:
+
+```bash
+uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
+uv run python -m pandora_daemon.cli status --json
+```
 
 The repeatable internal artifact and rollback procedure is documented in
 [`docs/development/release-process.md`](docs/development/release-process.md).

@@ -17,6 +17,7 @@
 | ADR-007 | Accepted | 本地优先并默认只绑定 loopback | daemon 持有凭据和本地文件能力，不应默认暴露公网 | 增加认证、TLS、权限模型和远程部署需求 |
 | ADR-008 | Accepted | 历史设计统一归档，不与当前文档并列 | 保留决策上下文，同时避免旧计划被误执行 | 无；归档内容需要恢复时先形成新决策 |
 | ADR-009 | Accepted | REST/CLI/WS 使用独立 major 的机器契约版本 | 应用发布版本不能表达 consumer 兼容性；跨 surface 的字段、错误和退出语义需要同一边界 | 引入正式版本化 RPC，或现有 v1 必须发生破坏性变化 |
+| ADR-010 | Accepted | 经验证的纯 Python wheel 是唯一默认运行分发，并安装到隔离 venv | 复用现有 Python 3.12、entry point、artifact 校验和回滚流程，保持跨平台且不新增打包器 | Python/uv 前置条件成为主要采用障碍，或出现必须离线自包含部署的证据 |
 
 ## 决策约束
 
@@ -42,6 +43,18 @@ CLI、Web、Agent wrapper 不导入 `exhentai_api` 执行用户工作流，不�
 稳定。破坏性变化必须启用新的 major 和并行迁移入口。弃用项需声明替代方案，不污染机器
 stdout，至少跨越后续一个 minor release，并且只能在新的机器契约 major 中移除。详细规则以
 [Agent Contract](../agent/contract.md#machine-contract-versioning) 为准。
+
+### 默认运行分发
+
+默认运行 artifact 是 `pandora-VERSION-py3-none-any.whl`，使用
+[`scripts/release.py`](../../scripts/release.py) 从受控 sdist 构建并校验。安装目标是独立的
+Python 3.12 venv；`pandora` 和 `pandora-daemon` 是稳定入口。sdist 用于可追溯构建和源码回滚，
+不是第二条默认运行安装路径。wheel 不捆绑可选 Web、冻结 TUI、凭据或 daemon 运行状态。
+
+单目录可执行包当前不采用，因为它需要新的冻结工具、按操作系统构建和额外运行时兼容矩阵；
+systemd 安装脚本也不作为分发，因为它只覆盖 Linux，并会对主机路径和服务状态执行写操作。
+systemd 仍可作为 wheel 安装后的部署配方。若 Python/uv 前置条件或在线解析依赖成为有复现证据的
+用户阻塞，再评估自包含 artifact，而不是同时维护多条默认路径。
 
 ### 历史实现
 

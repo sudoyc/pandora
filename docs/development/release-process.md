@@ -30,6 +30,19 @@ uv run --frozen python scripts/release.py check --tag vVERSION
 
 The check is also part of `scripts/check.py` and CI's Repository contracts job.
 
+## Default Runtime Distribution
+
+Per [ADR-010](../architecture/decisions.md#默认运行分发), the verified pure-Python
+wheel installed into an isolated Python 3.12 venv is Pandora's only default
+runtime distribution. The sdist remains a build-provenance and source-rollback
+companion; it is not a second runtime installation path. One-directory bundles
+and host-mutating service installers are not built or published.
+
+The wheel verifier rejects unexpected or private paths, metadata version drift,
+a `Requires-Python` value other than `>=3.12`, and changes to the `pandora` or
+`pandora-daemon` console entry points. The optional Web client and frozen TUI
+remain outside the runtime artifact.
+
 ## Internal Candidate
 
 Use a new empty temporary directory. The command builds the sdist first, builds
@@ -51,6 +64,12 @@ documentation archives, the frozen TUI, Web `node_modules`/`dist`, caches,
 downloads, or credentials. The command prints SHA-256 checksums for the two
 artifacts. Repeat the command in another empty directory when a byte-for-byte
 rebuild comparison is needed.
+
+The installable runtime artifact from that directory is:
+
+```text
+pandora-VERSION-py3-none-any.whl
+```
 
 To verify artifacts that were copied from a candidate run without rebuilding:
 

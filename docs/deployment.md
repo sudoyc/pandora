@@ -12,8 +12,41 @@ Hermes is one packaged consumer of the Agent Pack through `.agents/skills/pandor
 
 - Linux, macOS, or another environment that can run Python 3.12+
 - `uv`
+- A verified `pandora-VERSION-py3-none-any.whl` candidate
 - Valid ExHentai/E-Hentai session cookies in config when using authenticated endpoints
-- Normal project dependencies installed by `uv`; `websockets` is required for `download run --ndjson` and `download watch --ndjson`
+- Network or package-index access for the wheel's declared dependencies during installation
+
+## Default Wheel Installation
+
+The verified wheel is the only default runtime distribution. On a POSIX host,
+install it into a dedicated venv instead of a development checkout or the system
+Python:
+
+```bash
+PANDORA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/pandora"
+uv venv --python 3.12 "$PANDORA_HOME/venv"
+uv pip install --python "$PANDORA_HOME/venv/bin/python" \
+  --link-mode copy /path/to/pandora-VERSION-py3-none-any.whl
+"$PANDORA_HOME/venv/bin/pandora" --help
+```
+
+The wheel provides both `pandora` and `pandora-daemon`. It contains the daemon,
+CLI, and stateless API library, but not the optional Web client, frozen TUI,
+credentials, cache, database, downloads, or other runtime state. Keep the wheel
+and its recorded SHA-256 checksum for upgrades and rollback.
+
+Source-checkout commands using `uv run` remain development conveniences. They
+are not a second supported runtime distribution.
+
+For contract checks from a development checkout, the equivalent diagnostic
+sequence is:
+
+```bash
+uv run python -m pandora_daemon.cli health --json
+uv run python -m pandora_daemon.cli config --json
+uv run python -m pandora_daemon.cli readiness --json
+uv run python -m pandora_daemon.cli status --json
+```
 
 ## Config Location
 
@@ -40,7 +73,13 @@ Public/safe config behavior:
 
 ## Daemon Startup
 
-From the repository root:
+From the default wheel installation:
+
+```bash
+"$PANDORA_HOME/venv/bin/pandora-daemon"
+```
+
+From a development checkout:
 
 ```bash
 uv run python -m pandora_daemon
@@ -56,7 +95,7 @@ http://127.0.0.1:7860
 Override when needed:
 
 ```bash
-uv run python -m pandora_daemon.cli health --json --daemon-url http://127.0.0.1:7860
+"$PANDORA_HOME/venv/bin/pandora" health --json --daemon-url http://127.0.0.1:7860
 ```
 
 ## Download State Recovery
@@ -75,10 +114,10 @@ For a complete unregistered library entry or stale inactive task, preview the
 daemon-owned recovery action before applying it:
 
 ```bash
-uv run python -m pandora_daemon.cli download repair GID --json
-uv run python -m pandora_daemon.cli download repair GID --apply --json
-uv run python -m pandora_daemon.cli download forget GID --json
-uv run python -m pandora_daemon.cli download forget GID --apply --json
+"$PANDORA_HOME/venv/bin/pandora" download repair GID --json
+"$PANDORA_HOME/venv/bin/pandora" download repair GID --apply --json
+"$PANDORA_HOME/venv/bin/pandora" download forget GID --json
+"$PANDORA_HOME/venv/bin/pandora" download forget GID --apply --json
 ```
 
 Repair/forget only update the versioned task state. They never remove metadata,
@@ -89,11 +128,11 @@ pages, or library directories.
 Use these before running agent workflows:
 
 ```bash
-uv run python -m pandora_daemon.cli health --json
-uv run python -m pandora_daemon.cli config --json
-uv run python -m pandora_daemon.cli readiness --json
-uv run python -m pandora_daemon.cli status --json
-uv run python -m pandora_daemon.cli tags status --json
+"$PANDORA_HOME/venv/bin/pandora" health --json
+"$PANDORA_HOME/venv/bin/pandora" config --json
+"$PANDORA_HOME/venv/bin/pandora" readiness --json
+"$PANDORA_HOME/venv/bin/pandora" status --json
+"$PANDORA_HOME/venv/bin/pandora" tags status --json
 ```
 
 Expected guidance:
@@ -132,7 +171,7 @@ CLI error-envelope code.
 
 ## Systemd User Service
 
-Example `~/.config/systemd/user/pandora.service`. Check the `uv` path first with `command -v uv` and adjust `ExecStart` if needed:
+Example `~/.config/systemd/user/pandora.service` for the default wheel location:
 
 ```ini
 [Unit]
@@ -142,8 +181,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/code/projects/pandora
-ExecStart=/usr/bin/uv run python -m pandora_daemon
+ExecStart=%h/.local/share/pandora/venv/bin/pandora-daemon
 Restart=on-failure
 RestartSec=3
 
@@ -159,28 +197,30 @@ systemctl --user enable --now pandora.service
 systemctl --user status pandora.service
 ```
 
-Adjust `WorkingDirectory` and `ExecStart` to match your install location.
+Adjust `ExecStart` when `XDG_DATA_HOME` or the install location differs. The
+service unit is a deployment recipe for the installed wheel, not a separate
+distribution artifact.
 
 ## CLI Smoke Tests
 
 Read-only agent checks:
 
 ```bash
-uv run python -m pandora_daemon.cli health --json
-uv run python -m pandora_daemon.cli config --json
-uv run python -m pandora_daemon.cli readiness --json
-uv run python -m pandora_daemon.cli status --json
-uv run python -m pandora_daemon.cli search "tag" --page 0 --json
-uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
-uv run python -m pandora_daemon.cli popular --json
-uv run python -m pandora_daemon.cli toplist --tl 15 --json
-uv run python -m pandora_daemon.cli watched --page 0 --json
-uv run python -m pandora_daemon.cli favorites list --json
-uv run python -m pandora_daemon.cli tags suggest "artist" --json
-uv run python -m pandora_daemon.cli tags status --json
-uv run python -m pandora_daemon.cli tags refresh --json
-uv run python -m pandora_daemon.cli library list --json
-uv run python -m pandora_daemon.cli download report --json
+"$PANDORA_HOME/venv/bin/pandora" health --json
+"$PANDORA_HOME/venv/bin/pandora" config --json
+"$PANDORA_HOME/venv/bin/pandora" readiness --json
+"$PANDORA_HOME/venv/bin/pandora" status --json
+"$PANDORA_HOME/venv/bin/pandora" search "tag" --page 0 --json
+"$PANDORA_HOME/venv/bin/pandora" search "female:stockings" --search-tags --json
+"$PANDORA_HOME/venv/bin/pandora" popular --json
+"$PANDORA_HOME/venv/bin/pandora" toplist --tl 15 --json
+"$PANDORA_HOME/venv/bin/pandora" watched --page 0 --json
+"$PANDORA_HOME/venv/bin/pandora" favorites list --json
+"$PANDORA_HOME/venv/bin/pandora" tags suggest "artist" --json
+"$PANDORA_HOME/venv/bin/pandora" tags status --json
+"$PANDORA_HOME/venv/bin/pandora" tags refresh --json
+"$PANDORA_HOME/venv/bin/pandora" library list --json
+"$PANDORA_HOME/venv/bin/pandora" download report --json
 ```
 
 For translated tag searches, Pandora intentionally uses scheme A. The CLI does not automatically resolve Chinese or other translated user text into ExHentai tag syntax. Agent flow: `tags status --json`, `tags refresh --json` if stale or unloaded, `tags suggest "丝袜" --json`, agent chooses a candidate such as `female:stockings`, then `search "female:stockings" --search-tags --json`.
@@ -188,15 +228,15 @@ For translated tag searches, Pandora intentionally uses scheme A. The CLI does n
 Download lifecycle checks:
 
 ```bash
-uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
-uv run python -m pandora_daemon.cli download add "https://exhentai.org/g/123/abcdef0123/" --json
-uv run python -m pandora_daemon.cli download list --json
-uv run python -m pandora_daemon.cli download report --json
-uv run python -m pandora_daemon.cli download pages 123 --json
-uv run python -m pandora_daemon.cli download watch 123 --ndjson
-uv run python -m pandora_daemon.cli download cancel 123 --json
-uv run python -m pandora_daemon.cli download resume 123 --json
-uv run python -m pandora_daemon.cli download retry 123 --json
+"$PANDORA_HOME/venv/bin/pandora" download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
+"$PANDORA_HOME/venv/bin/pandora" download add "https://exhentai.org/g/123/abcdef0123/" --json
+"$PANDORA_HOME/venv/bin/pandora" download list --json
+"$PANDORA_HOME/venv/bin/pandora" download report --json
+"$PANDORA_HOME/venv/bin/pandora" download pages 123 --json
+"$PANDORA_HOME/venv/bin/pandora" download watch 123 --ndjson
+"$PANDORA_HOME/venv/bin/pandora" download cancel 123 --json
+"$PANDORA_HOME/venv/bin/pandora" download resume 123 --json
+"$PANDORA_HOME/venv/bin/pandora" download retry 123 --json
 ```
 
 Prefer `download run --ndjson` for bots and agents. It attaches to the WebSocket stream before submitting the download, emits `download_submitted` or `download_already_queued`, then watches until a terminal event. `download add` plus `download watch` is still useful for manual composition, but a watcher started later can miss events emitted immediately after submission.
@@ -204,36 +244,36 @@ Prefer `download run --ndjson` for bots and agents. It attaches to the WebSocket
 Agent Pack bootstrap flow:
 
 ```bash
-uv run python -m pandora_daemon.cli health --json
-uv run python -m pandora_daemon.cli config --json
-uv run python -m pandora_daemon.cli readiness --json
-uv run python -m pandora_daemon.cli status --json
-uv run python -m pandora_daemon.cli tags status --json
+"$PANDORA_HOME/venv/bin/pandora" health --json
+"$PANDORA_HOME/venv/bin/pandora" config --json
+"$PANDORA_HOME/venv/bin/pandora" readiness --json
+"$PANDORA_HOME/venv/bin/pandora" status --json
+"$PANDORA_HOME/venv/bin/pandora" tags status --json
 ```
 
 Agent Pack Scheme A search flow:
 
 ```bash
-uv run python -m pandora_daemon.cli tags status --json
-uv run python -m pandora_daemon.cli tags refresh --json   # if stale or unloaded
-uv run python -m pandora_daemon.cli tags suggest "丝袜" --json
-uv run python -m pandora_daemon.cli search "female:stockings" --search-tags --json
+"$PANDORA_HOME/venv/bin/pandora" tags status --json
+"$PANDORA_HOME/venv/bin/pandora" tags refresh --json   # if stale or unloaded
+"$PANDORA_HOME/venv/bin/pandora" tags suggest "丝袜" --json
+"$PANDORA_HOME/venv/bin/pandora" search "female:stockings" --search-tags --json
 ```
 
 Agent Pack download flow:
 
 ```bash
-uv run python -m pandora_daemon.cli download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
-uv run python -m pandora_daemon.cli download report --json
-uv run python -m pandora_daemon.cli download pages 123 --json
-uv run python -m pandora_daemon.cli library list --json
+"$PANDORA_HOME/venv/bin/pandora" download run "https://exhentai.org/g/123/abcdef0123/" --ndjson
+"$PANDORA_HOME/venv/bin/pandora" download report --json
+"$PANDORA_HOME/venv/bin/pandora" download pages 123 --json
+"$PANDORA_HOME/venv/bin/pandora" library list --json
 ```
 
 Legacy human-oriented commands remain available:
 
 ```bash
-uv run python -m pandora_daemon.cli download "https://exhentai.org/g/123/abcdef0123/"
-uv run python -m pandora_daemon.cli status
+"$PANDORA_HOME/venv/bin/pandora" download "https://exhentai.org/g/123/abcdef0123/"
+"$PANDORA_HOME/venv/bin/pandora" status
 ```
 
 ## Safety Notes
