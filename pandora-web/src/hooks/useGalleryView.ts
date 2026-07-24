@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import {
+  type AppNavigationKind,
   DEFAULT_GALLERY_VIEW,
-  type GalleryNavigationKind,
-  type GalleryView,
+  type AppView,
 } from '../galleryView';
 
 const SEARCH_HISTORY_KEY = 'searchHistory';
@@ -18,10 +18,10 @@ function loadSearchHistory(): string[] {
 }
 
 export function useGalleryView() {
-  const [view, setView] = useState<GalleryView>(DEFAULT_GALLERY_VIEW);
+  const [view, setView] = useState<AppView>(DEFAULT_GALLERY_VIEW);
   const [searchHistory, setSearchHistory] = useState<string[]>(loadSearchHistory);
 
-  const navigate = useCallback((kind: GalleryNavigationKind) => {
+  const navigate = useCallback((kind: AppNavigationKind) => {
     setView({ kind });
   }, []);
 

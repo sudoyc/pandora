@@ -151,3 +151,106 @@ test('reconciles download progress after a daemon restart', async ({ page }) => 
   await expect(row).toContainText('completed');
   await expect(row.locator('.progress-bar')).toHaveAttribute('style', 'width: 100%;');
 });
+
+test('navigates workspace views and reads a local library gallery', async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => consoleErrors.push(error.message));
+
+  const workspaceGallery = {
+    gid: '654',
+    token: 'fedcba0123',
+    title: 'Fixture Favorite Gallery',
+    category: 'Manga',
+    uploader: 'fixture-user',
+    thumb_url: 'https://example.test/favorite.jpg',
+    posted: '2026-01-01',
+    rating: 4,
+    pages: 2,
+    rated: false,
+    thumb_width: 250,
+    thumb_height: 350,
+  };
+
+  await page.route('http://127.0.0.1:7860/api/**', async (route) => {
+    const requestUrl = new URL(route.request().url());
+    const path = requestUrl.pathname;
+    if (path === '/api/homepage') {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path === '/api/downloads') {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path === '/api/favorites') {
+      await route.fulfill({ json: {
+        categories: [{ slot: 0, name: 'Archive', count: 1 }],
+        galleries: [workspaceGallery],
+      } });
+      return;
+    }
+    if (path === '/api/history') {
+      await route.fulfill({ json: [{
+        gid: '777',
+        title: 'Fixture History Gallery',
+        title_jpn: null,
+        category: 'Manga',
+        uploader: 'fixture-user',
+        thumb_url: '',
+        posted: '2026-01-01',
+        rating: 4,
+        pages: 3,
+        read_page: 1,
+        time: 1767225600,
+      }] });
+      return;
+    }
+    if (path === '/api/library') {
+      await route.fulfill({ json: [{
+        gid: '888',
+        title: 'Fixture Library Gallery',
+        thumb_url: '/api/library/888/file?path=cover',
+        pages: 2,
+      }] });
+      return;
+    }
+    if (path === '/api/library/888/file') {
+      await route.fulfill({ status: 200, contentType: 'image/jpeg', body: '' });
+      return;
+    }
+    if (path.startsWith('/api/image/proxy')) {
+      await route.fulfill({ status: 200, contentType: 'image/jpeg', body: '' });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { detail: 'Fixture route missing' } });
+  });
+  await page.routeWebSocket('ws://127.0.0.1:7860/ws', () => {});
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Favorites' }).click();
+  await expect(page.getByRole('heading', { name: 'Favorites' })).toBeVisible();
+  await expect(page.getByText('Fixture Favorite Gallery')).toBeVisible();
+
+  await page.getByRole('button', { name: 'History' }).click();
+  await expect(page.getByRole('heading', { name: 'History' })).toBeVisible();
+  await expect(page.getByText('Fixture History Gallery')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Downloads' }).click();
+  await expect(page.getByRole('heading', { name: 'Downloads' })).toBeVisible();
+  await expect(page.getByText('No downloads yet.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Library' }).click();
+  await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
+  await page.getByRole('button', { name: 'Read Fixture Library Gallery' }).click();
+  await expect(page.locator('.reader-shell')).toBeVisible();
+  await expect(page.locator('.reader-page').first()).toHaveAttribute(
+    'src',
+    'http://127.0.0.1:7860/api/library/888/file?path=page/1',
+  );
+  await page.getByRole('button', { name: 'Exit' }).click();
+  await expect(page.locator('.reader-shell')).toBeHidden();
+  expect(consoleErrors).toEqual([]);
+});

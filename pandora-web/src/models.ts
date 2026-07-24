@@ -51,6 +51,42 @@ export interface GalleryDetail {
   url: string;
 }
 
+export interface FavoriteCategory {
+  slot: number;
+  name: string;
+  count: number;
+}
+
+export interface FavoritesResponse {
+  categories: FavoriteCategory[];
+  galleries: GalleryListItem[];
+}
+
+export interface HistoryItem {
+  gid: string;
+  title: string;
+  title_jpn?: string | null;
+  category: string;
+  uploader: string;
+  thumb_url: string;
+  posted: string;
+  rating: number;
+  pages: number;
+  read_page: number;
+  time: number;
+}
+
+export interface LibraryItem {
+  gid: string | number;
+  title?: string;
+  title_jpn?: string | null;
+  category?: string;
+  uploader?: string;
+  thumb_url: string;
+  pages?: number;
+  downloaded_at?: string;
+}
+
 export type DownloadEvent =
   | { event: 'download_queued'; gid: string; title?: string }
   | { event: 'download_progress'; gid: string; phase: string; page?: number; total?: number }

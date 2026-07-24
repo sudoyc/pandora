@@ -15,16 +15,18 @@ Implemented:
 - download state reconciled from `/api/downloads` on load and WebSocket reconnect
 - bounded exponential-backoff WebSocket reconnect for daemon restarts
 - recent download progress panel
+- favorites, browsing history, downloads, and local library workspace views
+- local library reader using daemon-served page files
+- loading, empty, error, and retry states for workspace data
 - Vitest unit/component coverage for feed, detail, reader, and WebSocket state
-- Playwright browser coverage for the feed-to-reader and daemon-restart workflows
-- typed daemon GET/error client and discriminated gallery view state
+- Playwright browser coverage for gallery, daemon-restart, workspace navigation, and local reader workflows
+- typed daemon GET/error client and discriminated app view state
 - split sidebar, search/header, gallery feed, and download progress components
 - CSS variable based dark theme
 
 Still intentionally lightweight / next refactor targets:
 
 - The typed API client currently covers the GET/error behavior used by existing views; add endpoint-specific helpers as new workflows land.
-- Add dedicated pages for favorites, history, downloads, and local library.
 - Expand browser coverage for the remaining views.
 - Generated `dist/` and `node_modules/` are ignored under `pandora-web/.gitignore` and should not be treated as source.
 
@@ -63,7 +65,7 @@ npm run build
 
 ## Recommended next work
 
-1. Add dedicated favorites, history, downloads, and local library views.
-2. Add endpoint-specific typed helpers alongside those workflows.
-3. Cover their empty, error, retry, and critical browser paths.
+1. Add endpoint-specific typed helpers as mutation workflows land.
+2. Add download cancel/resume/retry controls with explicit confirmation where needed.
+3. Cover remaining empty, error, retry, and critical browser paths.
 4. Complete responsive layout and keyboard/focus checks across desktop and mobile viewports.

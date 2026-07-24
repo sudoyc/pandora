@@ -15,7 +15,14 @@ export function DownloadProgressPanel({ items }: DownloadProgressPanelProps) {
           <div className="download-status">
             {item.status}{item.phase ? ` · ${item.phase}` : ''}
           </div>
-          <div className="progress-track">
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label={`${item.progress}% complete`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={item.progress}
+          >
             <div className="progress-bar" style={{ width: `${item.progress}%` }} />
           </div>
         </div>

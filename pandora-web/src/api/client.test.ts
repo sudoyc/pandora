@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiGet } from './client';
+import { ApiError, apiGet, libraryFileUrl } from './client';
 
 describe('apiGet', () => {
   afterEach(() => {
@@ -43,5 +43,11 @@ describe('apiGet', () => {
       code: undefined,
       message: 'Gateway unavailable',
     });
+  });
+
+  it('builds a daemon URL for local library files', () => {
+    expect(libraryFileUrl('123', 'page/4')).toBe(
+      'http://127.0.0.1:7860/api/library/123/file?path=page/4',
+    );
   });
 });

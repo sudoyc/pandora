@@ -1,14 +1,18 @@
 import { galleryPageUrl } from '../api/client';
 
-interface ReaderProps {
+type ReaderProps = {
   gid: string;
-  token: string;
   pages: number;
   onClose: () => void;
-}
+} & ({ token: string; pageUrl?: never } | { token?: never; pageUrl: (page: number) => string });
 
-export function Reader({ gid, token, pages, onClose }: ReaderProps) {
-  const imageUrls = Array.from({ length: pages }, (_, index) => galleryPageUrl(gid, token, index + 1));
+export function Reader({ gid, pages, onClose, ...source }: ReaderProps) {
+  const imageUrls = Array.from(
+    { length: pages },
+    (_, index) => source.pageUrl !== undefined
+      ? source.pageUrl(index + 1)
+      : galleryPageUrl(gid, source.token, index + 1),
+  );
 
   return (
     <div className="reader-shell">

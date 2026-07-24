@@ -42,3 +42,8 @@ export function imageProxyUrl(url: string): string {
 export function galleryPageUrl(gid: string, token: string, page: number): string {
   return `${API_BASE_URL}/gallery/${gid}/${token}/page/${page}`;
 }
+
+export function libraryFileUrl(gid: string | number, path: 'cover' | `thumb/${number}` | `page/${number}`): string {
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  return `${API_BASE_URL}/library/${encodeURIComponent(String(gid))}/file?path=${encodedPath}`;
+}
