@@ -5,14 +5,17 @@ Provides endpoints for browsing downloaded galleries from the local filesystem.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
+from typing import NoReturn
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 from starlette.requests import Request
 
+from pandora_daemon.diagnostics import get_correlation_id, get_request_id
 from pandora_daemon.pdf_export import (
     PdfExportError,
     execute_gallery_pdf_export,
@@ -20,6 +23,7 @@ from pandora_daemon.pdf_export import (
 )
 
 router = APIRouter(prefix="/api/library", tags=["library"])
+logger = logging.getLogger(__name__)
 
 
 class PdfExportBody(BaseModel):
@@ -46,6 +50,58 @@ def _detect_media_type(data: bytes) -> str:
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
     return "image/jpeg"
+
+
+async def _broadcast_pdf_event(
+    ws,
+    event: str,
+    gid: str,
+    request_id: str,
+    correlation_id: str,
+    **fields,
+) -> None:
+    payload = {
+        **fields,
+        "event": event,
+        "gid": gid,
+        "request_id": request_id,
+        "correlation_id": correlation_id,
+    }
+    logger.info(
+        "PDF export event request_id=%s correlation_id=%s gid=%s event=%s",
+        request_id,
+        correlation_id,
+        gid,
+        event,
+    )
+    if ws is not None:
+        await ws.broadcast(payload)
+
+
+async def _raise_pdf_export_http_error(
+    ws,
+    gid: str,
+    request_id: str,
+    correlation_id: str,
+    exc: Exception,
+) -> NoReturn:
+    await _broadcast_pdf_event(
+        ws,
+        "pdf_export_error",
+        gid,
+        request_id,
+        correlation_id,
+        error="PDF export failed",
+    )
+    logger.warning(
+        "PDF export failed request_id=%s correlation_id=%s gid=%s exception=%s",
+        request_id,
+        correlation_id,
+        gid,
+        type(exc).__name__,
+    )
+    status_code = 400 if isinstance(exc, PdfExportError) else 500
+    raise HTTPException(status_code=status_code, detail="PDF export failed") from exc
 
 
 @router.get("")
@@ -76,6 +132,8 @@ async def list_library(request: Request):
 
 @router.post("/{gid}/export/pdf")
 async def export_library_pdf(gid: str, body: PdfExportBody, request: Request):
+    request_id = get_request_id(request)
+    correlation_id = get_correlation_id(request)
     if not gid.isdigit():
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
@@ -94,37 +152,46 @@ async def export_library_pdf(gid: str, body: PdfExportBody, request: Request):
             output_name=body.output_name,
             include_cover=body.include_cover,
         )
-    except PdfExportError as exc:
-        if ws is not None:
-            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
-        raise HTTPException(status_code=400, detail="PDF export failed") from exc
     except Exception as exc:
-        if ws is not None:
-            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
-        raise HTTPException(status_code=500, detail="PDF export failed") from exc
+        await _raise_pdf_export_http_error(
+            ws,
+            gid,
+            request_id,
+            correlation_id,
+            exc,
+        )
 
-    if ws is not None:
-        await ws.broadcast({"event": "pdf_export_started", "gid": gid})
+    await _broadcast_pdf_event(
+        ws,
+        "pdf_export_started",
+        gid,
+        request_id,
+        correlation_id,
+    )
 
     try:
         result = execute_gallery_pdf_export(plan, password=body.password)
-    except PdfExportError as exc:
-        if ws is not None:
-            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
-        raise HTTPException(status_code=400, detail="PDF export failed") from exc
     except Exception as exc:
-        if ws is not None:
-            await ws.broadcast({"event": "pdf_export_error", "gid": gid, "error": "PDF export failed"})
-        raise HTTPException(status_code=500, detail="PDF export failed") from exc
+        await _raise_pdf_export_http_error(
+            ws,
+            gid,
+            request_id,
+            correlation_id,
+            exc,
+        )
 
     payload = result.to_dict()
-    if ws is not None:
-        await ws.broadcast({
-            "event": "pdf_export_complete",
-            "gid": gid,
-            "path": payload["path"],
-            "password_protected": payload["password_protected"],
-        })
+    payload["request_id"] = request_id
+    payload["correlation_id"] = correlation_id
+    await _broadcast_pdf_event(
+        ws,
+        "pdf_export_complete",
+        gid,
+        request_id,
+        correlation_id,
+        path=payload["path"],
+        password_protected=payload["password_protected"],
+    )
     return payload
 
 

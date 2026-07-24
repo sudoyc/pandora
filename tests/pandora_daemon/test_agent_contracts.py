@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from jsonschema import validate
 
 from exhentai_api.models.comment import GalleryComment
 from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
@@ -429,7 +430,9 @@ def test_bootstrap_docs_use_canonical_diagnostic_order():
 
 
 def test_websocket_event_contract_examples():
-    examples = [
+    request_id = "1" * 32
+    correlation_id = "2" * 32
+    base_examples = [
         {"event": "download_queued", "gid": "123", "title": "Download"},
         {"event": "download_progress", "gid": "123", "phase": "pages", "page": 1, "total": 5},
         {"event": "download_complete", "gid": "123"},
@@ -442,13 +445,61 @@ def test_websocket_event_contract_examples():
         {"event": "pdf_export_complete", "gid": "123", "path": "/downloads/123-Download/exports/123.pdf", "password_protected": True},
         {"event": "pdf_export_error", "gid": "123", "error": "boom"},
     ]
+    examples = [
+        {
+            **event,
+            "request_id": request_id,
+            "correlation_id": correlation_id,
+        }
+        for event in base_examples
+    ]
 
     for event in examples:
         assert "event" in event
         assert "type" not in event
         assert isinstance(event["gid"], str)
+        assert event["request_id"] == request_id
+        assert event["correlation_id"] == correlation_id
         if event["event"].startswith("download_"):
             assert "path" not in event
+            schema_name = "download-event.schema.json"
+        else:
+            schema_name = "pdf-export-event.schema.json"
+        schema = json.loads(
+            (Path("docs/agent/schemas") / schema_name).read_text(encoding="utf-8")
+        )
+        validate(event, schema)
+
+
+def test_diagnostic_ids_are_documented_as_optional_v1_fields():
+    schema_names = [
+        "download-task-response.schema.json",
+        "download-list-response.schema.json",
+        "download-pages-response.schema.json",
+        "download-event.schema.json",
+        "pdf-export-event.schema.json",
+    ]
+    for schema_name in schema_names:
+        schema = json.loads(
+            (Path("docs/agent/schemas") / schema_name).read_text(encoding="utf-8")
+        )
+        object_schema = schema["items"] if schema["type"] == "array" else schema
+        properties = object_schema["properties"]
+        assert properties["request_id"]["pattern"] == "^[0-9a-f]{32}$"
+        assert properties["correlation_id"]["pattern"] == "^[0-9a-f]{32}$"
+        assert "request_id" not in object_schema.get("required", [])
+        assert "correlation_id" not in object_schema.get("required", [])
+
+    for path in (
+        Path("docs/agent/contract.md"),
+        Path("docs/api_reference.md"),
+        Path(".agents/skills/pandora/SKILL.md"),
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "X-Request-ID" in text
+        assert "X-Correlation-ID" in text
+        assert "request_id" in text
+        assert "correlation_id" in text
 
 
 def test_pdf_export_event_schema_and_agent_docs_exist():

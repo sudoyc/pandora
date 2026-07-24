@@ -63,7 +63,10 @@ async with ExhentaiAPI(client=client) as api:
 - `GalleryDetail`: metadata, tags, page counts, comments, and archive/torrent metadata. Daemon-internal helper fields used by the daemon, including `api_uid`, `api_key`, `viewer_urls`, `thumb_urls`, and `thumb_sprites`, are internal-only and not part of the public agent contract. CLI machine output redacts `api_uid` and `api_key` by default.
 - `ImageDetail`: `gid`, `page`, `image_url`, `nl` reload token.
 - `FavoritesResponse`: `categories`, `galleries`.
-- `DownloadTask` (daemon): `gid`, `title`, `status`, progress counters, and page states on public machine surfaces. Daemon-local fields such as `token` and output directory/path values are internal-only and not part of the public stable contract.
+- `DownloadTask` (daemon): `gid`, `title`, `status`, progress counters, page
+  states, `request_id`, and `correlation_id` on public machine surfaces.
+  Daemon-local fields such as `token` and output directory/path values are
+  internal-only and not part of the public stable contract.
 
 ## Daemon REST API
 
@@ -75,6 +78,22 @@ The application version and machine contract version are independent. Clients
 can read `contract_version: "1"` from `GET /api/health`; compatibility and
 deprecation rules are defined in the
 [`Agent Contract`](agent/contract.md#machine-contract-versioning).
+
+### Diagnostic IDs
+
+Daemon responses include `X-Request-ID`; callers may provide a UUID in 32- or
+36-character form, and the daemon returns canonical 32-character lowercase
+hex. Download submission and PDF export also accept and return
+`X-Correlation-ID`. Their REST objects and WebSocket events expose the same
+values as `request_id` and `correlation_id`.
+
+For downloads, the correlation ID persists with the logical task across events
+and daemon restart, while the request ID tracks the submit or most recent
+cancel/resume/retry request. The CLI sets request IDs automatically and also
+sets a correlation ID when starting a download or PDF export. Server logs use
+route templates and minimal structured diagnostic fields without request
+bodies, credentials, passwords, dynamic paths, local output paths, or raw
+exception text.
 
 ### REST service error classification
 
@@ -170,6 +189,9 @@ whose pages have already been restored normalizes directly to `completed`.
 After daemon restart, active tasks are reconciled and persisted as `queued`
 before workers start; final tasks are not requeued. Internal page state `done`
 is exposed as `completed` by REST and CLI surfaces.
+Task/list/pages responses include the task's diagnostic IDs. The correlation ID
+is stable for the logical download; cancel, resume, and retry replace the task's
+request ID with the ID of the state-changing request.
 
 ### Local database endpoints
 
@@ -213,6 +235,7 @@ is exposed as `completed` by REST and CLI surfaces.
 | GET | `/api/library/{gid}/file?path=cover` | Serve local cover |
 | GET | `/api/library/{gid}/file?path=thumb/{page}` | Serve local thumbnail |
 | GET | `/api/library/{gid}/file?path=page/{page}` | Serve local page |
+| POST | `/api/library/{gid}/export/pdf` | Export a PDF; body supports `password`, `output_name`, and `include_cover` |
 
 The successful health, readiness, tag, and library list envelopes are defined
 by [`health-response.schema.json`](agent/schemas/health-response.schema.json),
@@ -227,6 +250,9 @@ Path: `WS /ws`
 
 Download event examples:
 
+Daemon download events also contain `request_id` and `correlation_id`; those
+fields are omitted from the abbreviated matrix below.
+
 ```json
 {"event":"download_queued","gid":"123","title":"..."}
 {"event":"download_progress","gid":"123","phase":"cover"}
@@ -240,6 +266,14 @@ Download event examples:
 {"event":"download_auth_failed","gid":"123","error":"..."}
 ```
 
+PDF export events use the same diagnostic pair:
+
+```json
+{"event":"pdf_export_started","gid":"123","request_id":"11111111111111111111111111111111","correlation_id":"22222222222222222222222222222222"}
+{"event":"pdf_export_complete","gid":"123","path":"/path/to/file.pdf","password_protected":true,"request_id":"11111111111111111111111111111111","correlation_id":"22222222222222222222222222222222"}
+{"event":"pdf_export_error","gid":"123","error":"PDF export failed","request_id":"11111111111111111111111111111111","correlation_id":"22222222222222222222222222222222"}
+```
+
 ## CLI
 
 Deployment, daemon startup, readiness checks, and systemd examples live in [`docs/deployment.md`](deployment.md).
@@ -251,6 +285,8 @@ Global options on daemon-backed commands:
 - `--timeout 30`
 
 For bots, use `download run <url|gid> [token] --ndjson` as the supported successful streaming machine mode. It attaches to `WS /ws` before posting `/api/downloads`, emits a `download_submitted` machine event, and then watches until a terminal event. If `/api/downloads` returns HTTP 409 for an already-active task, `download run` emits `download_already_queued` and continues watching instead of failing. `download add` plus `download watch` remains available, but a late watcher can miss events emitted between the two commands.
+The submitted event includes the request and correlation IDs echoed by the
+daemon, and subsequent WebSocket events retain the task correlation ID.
 
 `download watch --json` is accepted for JSON error envelopes, while successful watch output is still event-by-event. `download pages --json` normalizes internal page state `done` to public state `completed`. Public REST/CLI download surfaces do not expose daemon-local output directory/path fields as public contract; treat any such values as internal-only.
 
@@ -317,6 +353,7 @@ pandora search "keyword" --page 0 --json
 pandora search "female:stockings" --search-tags --json
 pandora gallery <url|gid> [token] --json
 pandora library list --json
+pandora library export-pdf <gid> [--password PDF_PASSWORD] --json
 pandora tags status --json
 pandora tags refresh [--force] --json
 pandora tags suggest "tag" --json

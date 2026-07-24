@@ -65,12 +65,20 @@ def test_public_task_uses_completed_page_state_without_mutating_internal_state(m
 async def test_cancel_is_idempotent_and_emits_one_terminal_event(manager):
     task = _task(manager, status="queued")
     manager._tasks[task.gid] = task
+    request_id = "1" * 32
 
-    assert await manager.cancel(task.gid) is True
+    assert await manager.cancel(task.gid, request_id=request_id) is True
     assert await manager.cancel(task.gid) is False
 
     assert task.status == "cancelled"
-    assert _events(manager) == [{"event": "download_cancelled", "gid": task.gid}]
+    assert _events(manager) == [
+        {
+            "event": "download_cancelled",
+            "gid": task.gid,
+            "request_id": request_id,
+            "correlation_id": task.correlation_id,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -112,7 +120,13 @@ async def test_resume_reconciles_disk_clears_error_and_emits_queued(manager):
     assert task.page_states == {1: "pending", 2: "done", 3: "pending"}
     assert manager._queue.get_nowait() == task.gid
     assert _events(manager) == [
-        {"event": "download_queued", "gid": task.gid, "title": task.title}
+        {
+            "event": "download_queued",
+            "gid": task.gid,
+            "title": task.title,
+            "request_id": task.request_id,
+            "correlation_id": task.correlation_id,
+        }
     ]
     persisted = json.loads(manager._state_file.read_text(encoding="utf-8"))
     assert persisted["tasks"][task.gid]["status"] == "queued"
@@ -181,7 +195,14 @@ async def test_retry_normalizes_restored_failed_pages_without_network_work(manag
     assert task.failed_pages == []
     assert task.page_states == {1: "done", 2: "done"}
     assert manager._queue.empty()
-    assert _events(manager) == [{"event": "download_complete", "gid": task.gid}]
+    assert _events(manager) == [
+        {
+            "event": "download_complete",
+            "gid": task.gid,
+            "request_id": task.request_id,
+            "correlation_id": task.correlation_id,
+        }
+    ]
     manager._api.client.get_html.assert_not_awaited()
 
 

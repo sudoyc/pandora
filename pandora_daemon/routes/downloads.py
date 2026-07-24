@@ -4,10 +4,11 @@ Provides endpoints for submitting, listing, and cancelling gallery downloads.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from pandora_daemon.dependencies import get_downloads
+from pandora_daemon.diagnostics import get_correlation_id, get_request_id
 from pandora_daemon.download import DownloadManager
 
 router = APIRouter(prefix="/api/downloads", tags=["downloads"])
@@ -23,10 +24,19 @@ class RecoveryBody(BaseModel):
 
 
 @router.post("")
-async def submit_download(body: SubmitBody, downloads: DownloadManager = Depends(get_downloads)):
+async def submit_download(
+    body: SubmitBody,
+    request: Request,
+    downloads: DownloadManager = Depends(get_downloads),
+):
     """Submit a gallery for download."""
     try:
-        task = await downloads.submit(body.gid, body.token)
+        task = await downloads.submit(
+            body.gid,
+            body.token,
+            request_id=get_request_id(request),
+            correlation_id=get_correlation_id(request),
+        )
         return task.to_public_dict()
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -72,23 +82,35 @@ async def forget_download(
 
 
 @router.delete("/{gid}")
-async def cancel_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
+async def cancel_download(
+    gid: str,
+    request: Request,
+    downloads: DownloadManager = Depends(get_downloads),
+):
     """Cancel a download task by gid."""
-    result = await downloads.cancel(gid)
+    result = await downloads.cancel(gid, request_id=get_request_id(request))
     return {"success": result}
 
 
 @router.post("/{gid}/retry")
-async def retry_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
-    result = await downloads.retry_failed(gid)
+async def retry_download(
+    gid: str,
+    request: Request,
+    downloads: DownloadManager = Depends(get_downloads),
+):
+    result = await downloads.retry_failed(gid, request_id=get_request_id(request))
     if not result:
         raise HTTPException(status_code=404, detail="Task not found or has no missing pages to retry")
     return {"success": True}
 
 
 @router.post("/{gid}/resume")
-async def resume_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
-    result = await downloads.resume(gid)
+async def resume_download(
+    gid: str,
+    request: Request,
+    downloads: DownloadManager = Depends(get_downloads),
+):
+    result = await downloads.resume(gid, request_id=get_request_id(request))
     if not result:
         raise HTTPException(status_code=404, detail="Task not found or not paused")
     return {"success": True}
@@ -106,4 +128,6 @@ async def get_page_status(gid: str, downloads: DownloadManager = Depends(get_dow
         "downloaded_pages": task.downloaded_pages,
         "failed_pages": task.failed_pages,
         "page_states": task.to_public_dict()["page_states"],
+        "request_id": task.request_id,
+        "correlation_id": task.correlation_id,
     }

@@ -20,6 +20,7 @@ from exhentai_api.exceptions import (
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import _ext_from_url
+from pandora_daemon.diagnostics import new_diagnostic_id, normalize_diagnostic_id
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,8 @@ class DownloadTask:
     metadata_saved: bool = False
     error: str = ""
     created_at: str = ""
+    request_id: str = ""
+    correlation_id: str = ""
     viewer_urls: list[str] = field(default_factory=list)
     thumb_urls: list[str] = field(default_factory=list)
     thumb_sprites: list[dict] = field(default_factory=list)  # [{url, offset_x, offset_y, width, height}]
@@ -102,6 +105,10 @@ class DownloadTask:
     def __post_init__(self) -> None:
         if not self.created_at:
             self.created_at = datetime.now(timezone.utc).isoformat()
+        self.request_id = normalize_diagnostic_id(self.request_id) or new_diagnostic_id()
+        self.correlation_id = (
+            normalize_diagnostic_id(self.correlation_id) or new_diagnostic_id()
+        )
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -119,6 +126,8 @@ class DownloadTask:
             "metadata_saved": self.metadata_saved,
             "error": self.error,
             "created_at": self.created_at,
+            "request_id": self.request_id,
+            "correlation_id": self.correlation_id,
             "page_states": {
                 page: "completed" if state == "done" else state
                 for page, state in self.page_states.items()
@@ -144,6 +153,37 @@ class DownloadManager:
         self._save_dirty: bool = False
         self._save_task: asyncio.Task | None = None
         self._submit_lock = asyncio.Lock()
+
+    async def _broadcast_task_event(
+        self,
+        task: DownloadTask,
+        event: str,
+        **fields,
+    ) -> None:
+        payload = {
+            **fields,
+            "event": event,
+            "gid": task.gid,
+            "request_id": task.request_id,
+            "correlation_id": task.correlation_id,
+        }
+        logger.info(
+            "Download event request_id=%s correlation_id=%s gid=%s "
+            "event=%s status=%s phase=%s",
+            task.request_id,
+            task.correlation_id,
+            task.gid,
+            event,
+            task.status,
+            fields.get("phase", "none"),
+        )
+        await self._ws.broadcast(payload)
+
+    @staticmethod
+    def _set_request_id(task: DownloadTask, request_id: str | None) -> None:
+        normalized = normalize_diagnostic_id(request_id)
+        if normalized is not None:
+            task.request_id = normalized
 
     async def start(self) -> None:
         self._load_state()
@@ -187,7 +227,14 @@ class DownloadManager:
             thumb_sprites.extend(asdict(sprite) for sprite in page_detail.thumb_sprites)
         return viewer_urls, thumb_urls, thumb_sprites
 
-    async def submit(self, gid: str, token: str) -> DownloadTask:
+    async def submit(
+        self,
+        gid: str,
+        token: str,
+        *,
+        request_id: str = "",
+        correlation_id: str = "",
+    ) -> DownloadTask:
         async with self._submit_lock:
             existing = self._tasks.get(gid)
             if existing and existing.status in ("queued", "downloading"):
@@ -210,6 +257,8 @@ class DownloadManager:
                 title=detail.title,
                 total_pages=detail.pages,
                 output_dir=output_dir,
+                request_id=request_id,
+                correlation_id=correlation_id,
                 viewer_urls=viewer_urls,
                 thumb_urls=thumb_urls,
                 thumb_sprites=thumb_sprites,
@@ -217,38 +266,46 @@ class DownloadManager:
             self._tasks[gid] = task
             await self._queue.put(gid)
 
-            await self._ws.broadcast({"event": "download_queued", "gid": gid, "title": detail.title})
+            await self._broadcast_task_event(
+                task,
+                "download_queued",
+                title=detail.title,
+            )
             self._save_state()
             return task
 
-    async def cancel(self, gid: str) -> bool:
+    async def cancel(self, gid: str, *, request_id: str | None = None) -> bool:
         task = self._tasks.get(gid)
         if task is None or task.status not in {"queued", "downloading", "paused"}:
             return False
 
         self._cancelled.add(gid)
+        self._set_request_id(task, request_id)
         task.status = "cancelled"
-        await self._ws.broadcast({"event": "download_cancelled", "gid": gid})
+        await self._broadcast_task_event(task, "download_cancelled")
         self._save_state()
         return True
 
-    async def resume(self, gid: str) -> bool:
+    async def resume(self, gid: str, *, request_id: str | None = None) -> bool:
         """Resume a paused task."""
         task = self._tasks.get(gid)
         if task is None or task.status != "paused":
             return False
+        self._set_request_id(task, request_id)
         self._cancelled.discard(gid)
         self._reconcile_pages(task)
         task.status = "queued"
         task.error = ""
         self._save_state()
         await self._queue.put(gid)
-        await self._ws.broadcast(
-            {"event": "download_queued", "gid": gid, "title": task.title}
+        await self._broadcast_task_event(
+            task,
+            "download_queued",
+            title=task.title,
         )
         return True
 
-    async def retry_failed(self, gid: str) -> bool:
+    async def retry_failed(self, gid: str, *, request_id: str | None = None) -> bool:
         """Retry missing pages of a completed or completed_with_errors task."""
         task = self._tasks.get(gid)
         if task is None or task.status not in {"completed", "completed_with_errors"}:
@@ -259,20 +316,23 @@ class DownloadManager:
         if task.status == "completed" and expected_pages <= present_pages:
             return False
 
+        self._set_request_id(task, request_id)
         self._cancelled.discard(gid)
         missing_pages = self._reconcile_pages(task, present_pages=present_pages)
         task.error = ""
         if not missing_pages:
             task.status = "completed"
             self._save_state()
-            await self._ws.broadcast({"event": "download_complete", "gid": gid})
+            await self._broadcast_task_event(task, "download_complete")
             return True
 
         task.status = "queued"
         self._save_state()
         await self._queue.put(gid)
-        await self._ws.broadcast(
-            {"event": "download_queued", "gid": gid, "title": task.title}
+        await self._broadcast_task_event(
+            task,
+            "download_queued",
+            title=task.title,
         )
         return True
 
@@ -655,10 +715,13 @@ class DownloadManager:
                 if last_exc is not None:
                     task.page_states[page_num] = "failed"
 
-                await self._ws.broadcast({
-                    "event": "download_progress", "gid": task.gid,
-                    "phase": "pages", "page": page_num, "total": task.total_pages,
-                })
+                await self._broadcast_task_event(
+                    task,
+                    "download_progress",
+                    phase="pages",
+                    page=page_num,
+                    total=task.total_pages,
+                )
                 self._mark_dirty()
 
         coros = [_download_single_page(p) for p in range(1, task.total_pages + 1)]
@@ -718,8 +781,10 @@ class DownloadManager:
                 if self._task_is_stopped(task):
                     return
                 task.cover_downloaded = True
-                await self._ws.broadcast(
-                    {"event": "download_progress", "gid": task.gid, "phase": "cover"}
+                await self._broadcast_task_event(
+                    task,
+                    "download_progress",
+                    phase="cover",
                 )
                 self._save_state()
 
@@ -762,10 +827,13 @@ class DownloadManager:
                 if self._task_is_stopped(task):
                     return
                 task.downloaded_thumbs = page_num
-                await self._ws.broadcast({
-                    "event": "download_progress", "gid": task.gid,
-                    "phase": "thumbs", "page": page_num, "total": task.total_pages,
-                })
+                await self._broadcast_task_event(
+                    task,
+                    "download_progress",
+                    phase="thumbs",
+                    page=page_num,
+                    total=task.total_pages,
+                )
                 self._mark_dirty()
 
             if self._task_is_stopped(task):
@@ -777,24 +845,25 @@ class DownloadManager:
             if task.failed_pages:
                 task.status = "completed_with_errors"
                 task.error = f"{len(task.failed_pages)} pages failed"
-                await self._ws.broadcast(
-                    {"event": "download_complete_with_errors", "gid": task.gid,
-                     "failed_pages": task.failed_pages}
+                await self._broadcast_task_event(
+                    task,
+                    "download_complete_with_errors",
+                    failed_pages=task.failed_pages,
                 )
             else:
                 task.status = "completed"
                 task.error = ""
-                await self._ws.broadcast(
-                    {"event": "download_complete", "gid": task.gid}
-                )
+                await self._broadcast_task_event(task, "download_complete")
 
         except AuthenticationError as e:
             if self._task_is_stopped(task):
                 return
             task.status = "failed"
             task.error = str(e)
-            await self._ws.broadcast(
-                {"event": "download_auth_failed", "gid": task.gid, "error": str(e)}
+            await self._broadcast_task_event(
+                task,
+                "download_auth_failed",
+                error=str(e),
             )
             await self._pause_all_tasks()
 
@@ -803,8 +872,10 @@ class DownloadManager:
                 return
             task.status = "paused"
             task.error = str(e)
-            await self._ws.broadcast(
-                {"event": "download_paused", "gid": task.gid, "reason": "image_limit"}
+            await self._broadcast_task_event(
+                task,
+                "download_paused",
+                reason="image_limit",
             )
 
         except GalleryNotFoundError as e:
@@ -812,8 +883,10 @@ class DownloadManager:
                 return
             task.status = "failed"
             task.error = str(e)
-            await self._ws.broadcast(
-                {"event": "download_error", "gid": task.gid, "error": str(e)}
+            await self._broadcast_task_event(
+                task,
+                "download_error",
+                error=str(e),
             )
 
         except Exception as e:
@@ -821,8 +894,10 @@ class DownloadManager:
                 return
             task.status = "failed"
             task.error = str(e)
-            await self._ws.broadcast(
-                {"event": "download_error", "gid": task.gid, "error": str(e)}
+            await self._broadcast_task_event(
+                task,
+                "download_error",
+                error=str(e),
             )
 
         finally:
@@ -833,8 +908,10 @@ class DownloadManager:
         for t in self._tasks.values():
             if t.status in ("queued", "downloading"):
                 t.status = "paused"
-                await self._ws.broadcast(
-                    {"event": "download_paused", "gid": t.gid, "reason": "auth_failed"}
+                await self._broadcast_task_event(
+                    t,
+                    "download_paused",
+                    reason="auth_failed",
                 )
         self._save_state()
 
@@ -942,6 +1019,7 @@ class DownloadManager:
 
         loaded_tasks = {}
         corrupt_entry = False
+        diagnostic_migration = False
         for gid, task_dict in task_data.items():
             try:
                 if not isinstance(task_dict, dict):
@@ -956,6 +1034,11 @@ class DownloadManager:
                 task = DownloadTask(**normalized)
                 if task.gid != gid:
                     raise ValueError("Download task gid does not match its state key")
+                if (
+                    normalized.get("request_id") != task.request_id
+                    or normalized.get("correlation_id") != task.correlation_id
+                ):
+                    diagnostic_migration = True
                 loaded_tasks[gid] = task
             except Exception:
                 corrupt_entry = True
@@ -964,5 +1047,5 @@ class DownloadManager:
         self._tasks.update(loaded_tasks)
         if corrupt_entry:
             self._recover_corrupt_state()
-        elif legacy_format:
+        elif legacy_format or diagnostic_migration:
             self._save_state()

@@ -14,6 +14,12 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from pandora_daemon.config import load_config
+from pandora_daemon.diagnostics import (
+    CORRELATION_ID_HEADER,
+    REQUEST_ID_HEADER,
+    new_diagnostic_id,
+    normalize_diagnostic_id,
+)
 
 _GALLERY_URL_RE = re.compile(r"/g/(\d+)/([0-9a-fA-F]{10})")
 
@@ -84,6 +90,23 @@ def _normalize_download_pages_output(data: Any) -> Any:
         for page, state in data["page_states"].items()
     }
     return normalized
+
+
+def _response_diagnostic_fields(
+    response: httpx.Response,
+    data: Any,
+) -> dict[str, str]:
+    body = data if isinstance(data, dict) else {}
+    fields = {}
+    for name, header in (
+        ("request_id", REQUEST_ID_HEADER),
+        ("correlation_id", CORRELATION_ID_HEADER),
+    ):
+        value = normalize_diagnostic_id(body.get(name))
+        value = value or normalize_diagnostic_id(response.headers.get(header))
+        if value is not None:
+            fields[name] = value
+    return fields
 
 
 class PandoraArgumentParser(argparse.ArgumentParser):
@@ -216,12 +239,17 @@ async def _run_download_run(client: httpx.AsyncClient, daemon_url: str, args: ar
     ndjson = bool(getattr(args, "ndjson", False))
     json_output = bool(getattr(args, "json", False))
     ws_url = daemon_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws"
+    correlation_id = new_diagnostic_id()
 
     try:
         import websockets
 
         async with websockets.connect(ws_url) as ws:
-            response = await client.post("/api/downloads", json={"gid": gid, "token": token})
+            response = await client.post(
+                "/api/downloads",
+                json={"gid": gid, "token": token},
+                headers={CORRELATION_ID_HEADER: correlation_id},
+            )
 
             if response.status_code == 409:
                 detail = response.json().get("detail", response.text)
@@ -243,6 +271,7 @@ async def _run_download_run(client: httpx.AsyncClient, daemon_url: str, args: ar
                         "gid": str(data.get("gid", gid)),
                         "status": data.get("status", "queued"),
                         "title": data.get("title", gid),
+                        **_response_diagnostic_fields(response, data),
                     },
                     ndjson=ndjson,
                 )
@@ -273,7 +302,13 @@ async def _run_download_run(client: httpx.AsyncClient, daemon_url: str, args: ar
         return 1
 
 
-async def download_command(target: str, daemon_url: str, token: str | None = None) -> int:
+async def download_command(
+    target: str,
+    daemon_url: str,
+    token: str | None = None,
+    *,
+    request_id: str | None = None,
+) -> int:
     """Submit a download and monitor progress via WebSocket. Returns exit code."""
     console = Console()
 
@@ -283,17 +318,33 @@ async def download_command(target: str, daemon_url: str, token: str | None = Non
         console.print(f"[red]{e}[/red]")
         return 1
 
+    request_id = request_id or new_diagnostic_id()
+    correlation_id = new_diagnostic_id()
+    headers = {REQUEST_ID_HEADER: request_id}
+
     try:
-        async with httpx.AsyncClient(base_url=daemon_url, timeout=5.0) as client:
+        async with httpx.AsyncClient(
+            base_url=daemon_url,
+            timeout=5.0,
+            headers=headers,
+        ) as client:
             await client.get("/api/config")
     except (httpx.ConnectError, httpx.TimeoutException):
         console.print(f"[red]Cannot connect to daemon at {daemon_url}[/red]")
         console.print("[dim]Start the daemon first: uv run python -m pandora_daemon[/dim]")
         return 1
 
-    async with httpx.AsyncClient(base_url=daemon_url, timeout=30.0) as client:
+    async with httpx.AsyncClient(
+        base_url=daemon_url,
+        timeout=30.0,
+        headers=headers,
+    ) as client:
         try:
-            resp = await client.post("/api/downloads", json={"gid": gid, "token": resolved_token})
+            resp = await client.post(
+                "/api/downloads",
+                json={"gid": gid, "token": resolved_token},
+                headers={CORRELATION_ID_HEADER: correlation_id},
+            )
         except httpx.HTTPError as e:
             console.print(f"[red]HTTP error: {e}[/red]")
             return 1
@@ -382,12 +433,21 @@ async def download_command(target: str, daemon_url: str, token: str | None = Non
     return 0
 
 
-async def status_command(daemon_url: str) -> int:
+async def status_command(
+    daemon_url: str,
+    *,
+    request_id: str | None = None,
+) -> int:
     """Show current download queue status."""
     console = Console()
+    request_id = request_id or new_diagnostic_id()
 
     try:
-        async with httpx.AsyncClient(base_url=daemon_url, timeout=5.0) as client:
+        async with httpx.AsyncClient(
+            base_url=daemon_url,
+            timeout=5.0,
+            headers={REQUEST_ID_HEADER: request_id},
+        ) as client:
             tasks = await _download_statuses(client)
     except (httpx.ConnectError, httpx.TimeoutException):
         console.print(f"[red]Cannot connect to daemon at {daemon_url}[/red]")
@@ -675,9 +735,14 @@ async def _run_http_command(args: argparse.Namespace) -> int:
     daemon_url = _resolve_daemon_url(args)
     machine_mode = _is_machine_mode(args)
     machine_ndjson = _machine_ndjson(args)
+    request_id = new_diagnostic_id()
 
     try:
-        async with httpx.AsyncClient(base_url=daemon_url, timeout=_client_timeout(args)) as client:
+        async with httpx.AsyncClient(
+            base_url=daemon_url,
+            timeout=_client_timeout(args),
+            headers={REQUEST_ID_HEADER: request_id},
+        ) as client:
             if command == "health":
                 data = await _request_json(client, "GET", "/api/health")
                 if args.json:
@@ -705,7 +770,7 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                 tasks = await _download_statuses(client)
                 if args.json:
                     return _dispatch_json({"tasks": tasks})
-                return await status_command(daemon_url)
+                return await status_command(daemon_url, request_id=request_id)
 
             if command == "download":
                 download_command_name = getattr(args, "download_command", None)
@@ -715,14 +780,29 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                 if download_command_name == "legacy":
                     if args.json:
                         gid, token = resolve_gallery_target(args.target, args.token)
-                        response = await client.post("/api/downloads", json={"gid": gid, "token": token})
+                        response = await client.post(
+                            "/api/downloads",
+                            json={"gid": gid, "token": token},
+                            headers={CORRELATION_ID_HEADER: new_diagnostic_id()},
+                        )
                         response.raise_for_status()
                         return _dispatch_json(response.json())
-                    return await download_command(args.target, daemon_url, args.token)
+                    return await download_command(
+                        args.target,
+                        daemon_url,
+                        args.token,
+                        request_id=request_id,
+                    )
 
                 if download_command_name == "add":
                     gid, token = resolve_gallery_target(args.target, args.token)
-                    data = await _request_json(client, "POST", "/api/downloads", json={"gid": gid, "token": token})
+                    data = await _request_json(
+                        client,
+                        "POST",
+                        "/api/downloads",
+                        json={"gid": gid, "token": token},
+                        headers={CORRELATION_ID_HEADER: new_diagnostic_id()},
+                    )
                     return _dispatch_json(data)
 
                 if download_command_name == "run":
@@ -803,7 +883,13 @@ async def _run_http_command(args: argparse.Namespace) -> int:
                         body["output_name"] = args.output_name
                     if getattr(args, "include_cover", False):
                         body["include_cover"] = True
-                    data = await _request_json(client, "POST", f"/api/library/{args.gid}/export/pdf", json=body)
+                    data = await _request_json(
+                        client,
+                        "POST",
+                        f"/api/library/{args.gid}/export/pdf",
+                        json=body,
+                        headers={CORRELATION_ID_HEADER: new_diagnostic_id()},
+                    )
                     return _dispatch_json(data) if args.json else _dispatch_json(data)
 
             if command == "tags" and getattr(args, "tags_command", None) == "suggest":

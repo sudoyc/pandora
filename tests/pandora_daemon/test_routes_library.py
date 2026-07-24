@@ -16,6 +16,14 @@ from pandora_daemon.routes.library import router
 from pandora_daemon.state import AppState
 
 
+REQUEST_ID = "1" * 32
+CORRELATION_ID = "2" * 32
+DIAGNOSTIC_HEADERS = {
+    "X-Request-ID": REQUEST_ID,
+    "X-Correlation-ID": CORRELATION_ID,
+}
+
+
 def _make_app(download_path: str):
     app = FastAPI()
     app.include_router(router)
@@ -198,13 +206,26 @@ class TestLibraryRoutes:
 
         app = _make_app(str(tmp_path))
         client = TestClient(app)
-        resp = client.post("/api/library/12345/export/pdf", json={"password": "secret-pass"})
+        resp = client.post(
+            "/api/library/12345/export/pdf",
+            json={"password": "secret-pass"},
+            headers=DIAGNOSTIC_HEADERS,
+        )
 
         assert resp.status_code == 200
+        assert resp.json()["request_id"] == REQUEST_ID
+        assert resp.json()["correlation_id"] == CORRELATION_ID
         broadcasted = [call.args[0] for call in app.state.pandora.ws.broadcast.await_args_list]
-        assert broadcasted[0] == {"event": "pdf_export_started", "gid": "12345"}
+        assert broadcasted[0] == {
+            "event": "pdf_export_started",
+            "gid": "12345",
+            "request_id": REQUEST_ID,
+            "correlation_id": CORRELATION_ID,
+        }
         assert broadcasted[1]["event"] == "pdf_export_complete"
         assert broadcasted[1]["gid"] == "12345"
+        assert broadcasted[1]["request_id"] == REQUEST_ID
+        assert broadcasted[1]["correlation_id"] == CORRELATION_ID
         assert broadcasted[1]["password_protected"] is True
         assert "secret-pass" not in json.dumps(broadcasted, ensure_ascii=False)
 
@@ -215,9 +236,21 @@ class TestLibraryRoutes:
 
         app = _make_app(str(tmp_path))
         client = TestClient(app)
-        resp = client.post("/api/library/12345/export/pdf", json={"output_name": "comic.pdf"})
+        resp = client.post(
+            "/api/library/12345/export/pdf",
+            json={"output_name": "comic.pdf"},
+            headers=DIAGNOSTIC_HEADERS,
+        )
 
         assert resp.status_code == 400
         broadcasted = [call.args[0] for call in app.state.pandora.ws.broadcast.await_args_list]
-        assert broadcasted == [{"event": "pdf_export_error", "gid": "12345", "error": "PDF export failed"}]
+        assert broadcasted == [
+            {
+                "event": "pdf_export_error",
+                "gid": "12345",
+                "error": "PDF export failed",
+                "request_id": REQUEST_ID,
+                "correlation_id": CORRELATION_ID,
+            }
+        ]
         assert all("started" not in item.get("event", "") for item in broadcasted)

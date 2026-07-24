@@ -213,6 +213,18 @@ Machine output safety:
 - `download report --json` is read-only, omits tokens/local paths, and reports consistency through `consistent` plus issue codes.
 - `download repair` and `download forget` default to preview; inspect actions before `--apply`. They update task state only and never delete library files.
 
+Diagnostic correlation:
+
+- Every CLI daemon request sends `X-Request-ID`; valid IDs are canonical
+  32-character lowercase UUID hex values.
+- Download submission and PDF export also send `X-Correlation-ID`.
+- New daemon task/list/pages responses and long-task WebSocket events contain
+  optional v1 `request_id` and `correlation_id` fields.
+- A download correlation ID persists across events and daemon restart. Its
+  request ID changes when cancel, resume, or retry changes task state.
+- Use IDs to correlate sanitized daemon logs. Do not log request bodies,
+  credentials, passwords, titles, local paths, or raw exception text.
+
 The corresponding successful task/list/pages/report responses are described by
 `download-task-response.schema.json`, `download-list-response.schema.json`,
 `download-pages-response.schema.json`, and
@@ -255,6 +267,7 @@ WS /ws
 ```
 
 Daemon event discriminator is `event`, not `type`.
+Every daemon download event also includes `request_id` and `correlation_id`.
 
 Terminal download events:
 
@@ -284,6 +297,7 @@ Library PDF export hook summary:
 - CLI entry: `library export-pdf <gid> --password "PDF_PASSWORD" --json`
 - REST entry: `POST /api/library/{gid}/export/pdf`
 - Hook events: `pdf_export_started`, `pdf_export_complete`, `pdf_export_error`
+- The REST response and every hook event share `request_id` and `correlation_id`.
 - `pdf_export_complete` is the success signal for bots.
 - Password handling and full hook contract live in `docs/agent/contract.md` and `docs/agent/workflows/library.md`.
 
@@ -297,6 +311,8 @@ Preserve these invariants when changing `pandora_daemon/download.py`:
 - `downloads.json` uses a version 1 envelope with `schema_version` and `tasks`; the deployed unversioned mapping is the legacy migration input.
 - Corrupt state is retained as a unique `.corrupt[.N]` backup before valid tasks are rewritten; explicit unknown versions must remain untouched and abort startup.
 - Persisted `page_states` JSON keys must load back as integer page numbers.
+- Existing v1 tasks without diagnostic IDs are assigned and atomically
+  rewritten with both IDs when state loads.
 - Public task statuses are `queued`, `downloading`, `completed`, `completed_with_errors`, `paused`, `failed`, and `cancelled`; public page state uses `completed`, never internal `done`.
 - Cancel accepts only `queued`, `downloading`, or `paused` and is eventless when repeated or applied to a final task.
 - Resume accepts only `paused`; retry accepts `completed_with_errors` and a `completed` task with missing files.

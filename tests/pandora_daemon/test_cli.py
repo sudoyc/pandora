@@ -324,6 +324,9 @@ async def test_cli_machine_mode_commands_call_expected_daemon_routes(monkeypatch
 
     def handler(request):
         seen.append((request.method, request.url.path, dict(request.url.params), request.content.decode() if request.content else ""))
+        request_id = request.headers["X-Request-ID"]
+        assert len(request_id) == 32
+        int(request_id, 16)
         if expected_json is not None:
             assert request.headers["content-type"].startswith("application/json")
             assert request.read() == httpx.Request(method, "http://daemon", json=expected_json).read()
@@ -507,8 +510,17 @@ async def test_download_report_json_preserves_report(monkeypatch, capsys):
 
 @pytest.mark.asyncio
 async def test_library_export_pdf_json_does_not_echo_password(monkeypatch, capsys):
+    request_id = "1" * 32
+    correlation_id = "2" * 32
+    monkeypatch.setattr(
+        "pandora_daemon.cli.new_diagnostic_id",
+        MagicMock(side_effect=[request_id, correlation_id]),
+    )
+
     def handler(request):
         assert request.url.path == "/api/library/12345/export/pdf"
+        assert request.headers["X-Request-ID"] == request_id
+        assert request.headers["X-Correlation-ID"] == correlation_id
         assert json.loads(request.content.decode()) == {"password": "secret-pass"}
         return httpx.Response(
             200,
@@ -518,6 +530,8 @@ async def test_library_export_pdf_json_does_not_echo_password(monkeypatch, capsy
                 "format": "pdf",
                 "path": "/downloads/12345-Test/exports/12345.pdf",
                 "password_protected": True,
+                "request_id": request_id,
+                "correlation_id": correlation_id,
             },
         )
 
@@ -540,6 +554,8 @@ async def test_library_export_pdf_json_does_not_echo_password(monkeypatch, capsy
     assert "secret-pass" not in output
     data = json.loads(output)
     assert data["password_protected"] is True
+    assert data["request_id"] == request_id
+    assert data["correlation_id"] == correlation_id
 
 
 @pytest.mark.asyncio
@@ -606,6 +622,60 @@ async def test_download_run_ndjson_submits_emits_submitted_then_watches(monkeypa
     assert requests == [("POST", "/api/downloads", {"gid": "1234567", "token": "a1b2c3d4e5"})]
     assert lines[0] == {"event": "download_submitted", "gid": "1234567", "status": "queued", "title": "Queued"}
     assert lines[1] == {"event": "download_complete", "gid": "1234567"}
+
+
+@pytest.mark.asyncio
+async def test_download_run_preserves_rest_and_ws_diagnostic_ids(monkeypatch, capsys):
+    request_id = "1" * 32
+    correlation_id = "2" * 32
+    generated_ids = MagicMock(side_effect=[request_id, correlation_id])
+    monkeypatch.setattr("pandora_daemon.cli.new_diagnostic_id", generated_ids)
+
+    def handler(request):
+        assert request.headers["X-Request-ID"] == request_id
+        assert request.headers["X-Correlation-ID"] == correlation_id
+        return httpx.Response(
+            200,
+            headers={
+                "X-Request-ID": request_id,
+                "X-Correlation-ID": correlation_id,
+            },
+            json={
+                "gid": "1234567",
+                "status": "queued",
+                "title": "Queued",
+                "request_id": request_id,
+                "correlation_id": correlation_id,
+            },
+        )
+
+    _mock_http_client(monkeypatch, handler)
+    fake_connect = MagicMock(return_value=_FakeWebSocket([
+        json.dumps({
+            "event": "download_complete",
+            "gid": "1234567",
+            "request_id": request_id,
+            "correlation_id": correlation_id,
+        })
+    ]))
+    with patch.dict("sys.modules", {"websockets": type("Ws", (), {"connect": fake_connect})}):
+        args = build_parser().parse_args([
+            "download",
+            "run",
+            "1234567",
+            "a1b2c3d4e5",
+            "--ndjson",
+            "--daemon-url",
+            "http://daemon",
+        ])
+        code = await _run_http_command(args)
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert code == 0
+    assert lines[0]["request_id"] == request_id
+    assert lines[0]["correlation_id"] == correlation_id
+    assert lines[1]["request_id"] == request_id
+    assert lines[1]["correlation_id"] == correlation_id
 
 
 @pytest.mark.asyncio

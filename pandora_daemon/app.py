@@ -19,6 +19,12 @@ from exhentai_api.exceptions import (
     NetworkError,
 )
 from pandora_daemon.config import load_config
+from pandora_daemon.diagnostics import (
+    CORRELATION_ID_HEADER,
+    REQUEST_ID_HEADER,
+    get_request_id,
+    normalize_diagnostic_id,
+)
 from pandora_daemon.state import AppState
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
@@ -41,6 +47,11 @@ EXHENTAI_ERROR_DETAIL = "Upstream request failed"
 RUNTIME_ERROR_DETAIL = "Internal server error"
 
 
+def _route_label(request: Request) -> str:
+    route = request.scope.get("route")
+    return getattr(route, "path", "<unmatched>")
+
+
 def _log_request_error(
     request: Request,
     code: str,
@@ -48,11 +59,18 @@ def _log_request_error(
     *,
     level: int = logging.WARNING,
 ) -> None:
+    correlation_id = normalize_diagnostic_id(
+        getattr(request.state, "correlation_id", None)
+    )
     logger.log(
         level,
-        "Request failed code=%s path=%s exception=%s",
+        "Request failed request_id=%s correlation_id=%s code=%s method=%s "
+        "route=%s exception=%s",
+        get_request_id(request),
+        correlation_id or "none",
         code,
-        request.url.path,
+        request.method,
+        _route_label(request),
         type(exc).__name__,
     )
 
@@ -127,7 +145,29 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER, CORRELATION_ID_HEADER],
     )
+
+    @app.middleware("http")
+    async def diagnostic_context(request: Request, call_next):
+        request_id = get_request_id(request)
+        response = await call_next(request)
+        response.headers[REQUEST_ID_HEADER] = request_id
+        correlation_id = normalize_diagnostic_id(
+            getattr(request.state, "correlation_id", None)
+        )
+        if correlation_id is not None:
+            response.headers[CORRELATION_ID_HEADER] = correlation_id
+        logger.info(
+            "Request completed request_id=%s correlation_id=%s method=%s "
+            "route=%s status=%s",
+            request_id,
+            correlation_id or "none",
+            request.method,
+            _route_label(request),
+            response.status_code,
+        )
+        return response
 
     @app.exception_handler(AuthenticationError)
     async def auth_error_handler(request: Request, exc: AuthenticationError):

@@ -49,6 +49,9 @@ POST /api/library/{gid}/export/pdf
 
 Hook events:
 
+The response and every hook event carry the same `request_id` and
+`correlation_id`; the abbreviated matrix omits them.
+
 ```json
 {"event":"pdf_export_started","gid":"123"}
 {"event":"pdf_export_complete","gid":"123","path":"/path/to/file.pdf","password_protected":true}
@@ -59,6 +62,8 @@ Notes:
 - Use the explicit CLI/REST password entry only when a protected PDF is required.
 - Do not echo or persist the password in your own agent state.
 - Treat `pdf_export_complete` as success and `pdf_export_error` as failure.
+- Use `correlation_id` to associate the REST result, hook events, and sanitized
+  daemon logs for one export.
 
 ## State Boundary
 

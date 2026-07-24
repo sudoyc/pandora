@@ -47,6 +47,30 @@ release. Removal occurs only in a new machine contract major. Consumers should
 branch on stable codes and structured fields, not human-facing `detail` or
 `message` text.
 
+## Diagnostic Correlation
+
+Every daemon REST response includes `X-Request-ID`. A caller may supply either
+a 32-character hexadecimal UUID or the standard 36-character UUID form; the
+daemon canonicalizes valid input to 32 lowercase hexadecimal characters and
+replaces invalid input. CLI daemon requests set this header automatically.
+
+Download submission and PDF export also use `X-Correlation-ID`. The daemon
+echoes both IDs in response headers and includes them as the optional v1 fields
+`request_id` and `correlation_id` in long-task REST responses and WebSocket
+events. `download run` preserves the echoed fields in its initial
+`download_submitted` NDJSON event; later WebSocket events pass them through.
+
+For a download, `correlation_id` identifies the logical task and survives
+daemon restart. `request_id` identifies the request that submitted or most
+recently changed that task, including cancel, resume, or retry. PDF export uses
+one pair for its REST response and all hook events. Treat both values as opaque
+diagnostic identifiers, not authorization tokens.
+
+Request logs use the route template rather than dynamic path values. Long-task
+logs contain only correlation fields such as IDs, `gid`, event, status, phase,
+and exception type; they do not record request bodies, headers, tokens,
+passwords, titles, local paths, or raw exception text.
+
 ## Readiness Probes
 
 ```bash
@@ -192,6 +216,14 @@ The daemon event discriminator is `event`, not `type`.
 
 Common events:
 
+Every event emitted by the daemon includes `request_id` and `correlation_id`.
+They are omitted from the abbreviated event matrix below. A complete event has
+this form:
+
+```json
+{"event":"download_progress","gid":"123","phase":"pages","page":5,"total":20,"request_id":"11111111111111111111111111111111","correlation_id":"22222222222222222222222222222222"}
+```
+
 ```json
 {"event":"download_queued","gid":"123","title":"..."}
 {"event":"download_progress","gid":"123","phase":"pages","page":5,"total":20}
@@ -238,6 +270,9 @@ returns an array of the same objects. They are defined by
 [`schemas/download-task-response.schema.json`](schemas/download-task-response.schema.json)
 and [`schemas/download-list-response.schema.json`](schemas/download-list-response.schema.json).
 Neither shape contains the task token or local output path.
+Both may include `request_id` and `correlation_id`; new daemon responses emit
+both fields, while v1 consumers must continue treating additive fields as
+optional.
 
 Control operations have these state boundaries:
 
@@ -268,6 +303,7 @@ CLI page output expose it as `completed`.
 
 `GET /api/downloads/{gid}/pages` is validated by
 [`schemas/download-pages-response.schema.json`](schemas/download-pages-response.schema.json).
+The response also carries the task's `request_id` and `correlation_id`.
 
 Download status/detail surfaces are public machine interfaces for download state, not daemon-local bookkeeping. Fields such as `token` and daemon-local output directory/path values are internal-only and not part of the public stable contract.
 
@@ -403,6 +439,8 @@ Request body fields:
 
 Export hook events on `WS /ws`:
 
+Each event below also includes the same `request_id` and `correlation_id` pair.
+
 ```json
 {"event":"pdf_export_started","gid":"123"}
 {"event":"pdf_export_complete","gid":"123","path":"/path/to/file.pdf","password_protected":true}
@@ -411,7 +449,8 @@ Export hook events on `WS /ws`:
 
 Bot success criteria:
 
-- CLI/REST response includes `ok: true`, `format: "pdf"`, `path`, and `password_protected`.
+- CLI/REST response includes `ok: true`, `format: "pdf"`, `path`,
+  `password_protected`, `request_id`, and `correlation_id`.
 - `pdf_export_complete` means export finished successfully.
 - Never echo or log the password in prompts, events, JSON output, or docs.
 

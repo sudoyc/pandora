@@ -64,6 +64,27 @@ def test_load_state_migrates_unversioned_legacy_mapping(tmp_path):
     assert list(tmp_path.glob("downloads.json.corrupt*")) == []
 
 
+def test_load_state_adds_and_persists_diagnostic_ids_for_existing_v1_tasks(tmp_path):
+    manager = _manager(tmp_path)
+    task_data = _task().to_dict()
+    task_data.pop("request_id")
+    task_data.pop("correlation_id")
+    manager._state_file.write_text(
+        json.dumps({"schema_version": 1, "tasks": {"123": task_data}}),
+        encoding="utf-8",
+    )
+
+    manager._load_state()
+
+    task = manager._tasks["123"]
+    assert len(task.request_id) == 32
+    assert len(task.correlation_id) == 32
+    persisted = json.loads(manager._state_file.read_text(encoding="utf-8"))
+    assert persisted["tasks"]["123"]["request_id"] == task.request_id
+    assert persisted["tasks"]["123"]["correlation_id"] == task.correlation_id
+    assert list(tmp_path.glob("downloads.json.corrupt*")) == []
+
+
 @pytest.mark.asyncio
 async def test_load_state_rejects_unknown_version_without_modifying_file(tmp_path):
     manager = _manager(tmp_path)

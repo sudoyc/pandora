@@ -22,6 +22,8 @@
       ]
     },
     "gid": {"type": "string"},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "correlation_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
     "title": {"type": "string"},
     "status": {"type": "string"},
     "detail": {"type": "string"},

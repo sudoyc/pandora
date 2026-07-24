@@ -40,6 +40,8 @@
     "metadata_saved": {"type": "boolean"},
     "error": {"type": "string"},
     "created_at": {"type": "string"},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "correlation_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
     "page_states": {
       "type": "object",
       "additionalProperties": {

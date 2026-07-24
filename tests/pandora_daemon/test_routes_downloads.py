@@ -12,6 +12,14 @@ from pandora_daemon.routes.downloads import router
 from pandora_daemon.state import AppState
 
 
+REQUEST_ID = "1" * 32
+CORRELATION_ID = "2" * 32
+DIAGNOSTIC_HEADERS = {
+    "X-Request-ID": REQUEST_ID,
+    "X-Correlation-ID": CORRELATION_ID,
+}
+
+
 def _make_app(mock_downloads):
     app = FastAPI()
     app.include_router(router)
@@ -72,9 +80,18 @@ class TestSubmitDownload:
         app = _make_app(mock_downloads)
         client = TestClient(app)
 
-        client.post("/api/downloads", json={"gid": "456", "token": "xyz"})
+        client.post(
+            "/api/downloads",
+            json={"gid": "456", "token": "xyz"},
+            headers=DIAGNOSTIC_HEADERS,
+        )
 
-        mock_downloads.submit.assert_called_once_with("456", "xyz")
+        mock_downloads.submit.assert_called_once_with(
+            "456",
+            "xyz",
+            request_id=REQUEST_ID,
+            correlation_id=CORRELATION_ID,
+        )
 
     def test_submit_download_duplicate_returns_409(self):
         mock_downloads = MagicMock()
@@ -241,9 +258,9 @@ class TestCancelDownload:
         app = _make_app(mock_downloads)
         client = TestClient(app)
 
-        client.delete("/api/downloads/456")
+        client.delete("/api/downloads/456", headers=DIAGNOSTIC_HEADERS)
 
-        mock_downloads.cancel.assert_called_once_with("456")
+        mock_downloads.cancel.assert_called_once_with("456", request_id=REQUEST_ID)
 
     def test_cancel_nonexistent_returns_success_false(self):
         mock_downloads = MagicMock()
@@ -265,10 +282,16 @@ class TestRetryDownload:
         app = _make_app(mock_downloads)
         client = TestClient(app)
 
-        response = client.post("/api/downloads/123/retry")
+        response = client.post(
+            "/api/downloads/123/retry",
+            headers=DIAGNOSTIC_HEADERS,
+        )
         assert response.status_code == 200
         assert response.json() == {"success": True}
-        mock_downloads.retry_failed.assert_called_once_with("123")
+        mock_downloads.retry_failed.assert_called_once_with(
+            "123",
+            request_id=REQUEST_ID,
+        )
 
     def test_retry_not_found_returns_404(self):
         mock_downloads = MagicMock()
@@ -287,10 +310,13 @@ class TestResumeDownload:
         app = _make_app(mock_downloads)
         client = TestClient(app)
 
-        response = client.post("/api/downloads/123/resume")
+        response = client.post(
+            "/api/downloads/123/resume",
+            headers=DIAGNOSTIC_HEADERS,
+        )
         assert response.status_code == 200
         assert response.json() == {"success": True}
-        mock_downloads.resume.assert_called_once_with("123")
+        mock_downloads.resume.assert_called_once_with("123", request_id=REQUEST_ID)
 
     def test_resume_not_paused_returns_404(self):
         mock_downloads = MagicMock()
@@ -320,6 +346,8 @@ class TestGetPageStatus:
         assert data["downloaded_pages"] == 5
         assert data["failed_pages"] == [3]
         assert data["page_states"] == {"1": "completed", "2": "completed", "3": "failed"}
+        assert data["request_id"] == task.request_id
+        assert data["correlation_id"] == task.correlation_id
 
     def test_get_pages_not_found_returns_404(self):
         mock_downloads = MagicMock()
