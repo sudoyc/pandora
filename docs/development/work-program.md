@@ -12,14 +12,14 @@
 
 | 字段 | 当前值 |
 |---|---|
-| Program | In Progress |
-| Active work package | `CI-01` |
-| Next work package | None |
-| Last completed work package | `UP-01` |
+| Program | Ready |
+| Active work package | None |
+| Next work package | `CI-02` |
+| Last completed work package | `CI-01` |
 | Blockers | `UP-02`：缺少当前脱敏上游 fixture，实网上游探针未获授权 |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 543 passed（2026-07-24；`uv run python -m pytest -q`） |
-| Last Web evidence | lint/build passed（基线记录；Web 工作开始前必须重跑） |
+| Last full Python evidence | 549 passed（2026-07-24；隔离 clone 统一检查） |
+| Last Web evidence | lint/build passed（2026-07-24；隔离 clone 统一检查） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -50,8 +50,8 @@
 | `DL-02` | Yes | Queued | `DL-01` | 下载状态有 schema version、原子迁移和损坏文件恢复 | 旧版本迁移、未知版本、截断/损坏文件测试 |
 | `DL-03` | Yes | Queued | `DL-01`, `DL-02` | 提供显式 dry-run repair/forget，幂等且不静默删除页面 | preview/apply/idempotency/no-delete tests 和机器契约 |
 | `DL-04` | Yes | Queued | `DL-03` | cancel/resume/retry/restart/reconcile 状态和终态词汇一致 | 生命周期集成测试、重启恢复 smoke、文档同步 |
-| `CI-01` | Yes | In Progress | - | 建立一个本地统一检查入口，覆盖锁文件、Markdown 链接、Agent schema、Python 和 Web | 干净 clone 可执行；每个失败能定位具体检查 |
-| `CI-02` | Yes | Queued | `CI-01` | 主分支 CI 使用与本地一致的检查，不依赖凭据或真实内容 | workflow 配置、fixture-only run、分层 job 结果 |
+| `CI-01` | Yes | Done | - | 建立一个本地统一检查入口，覆盖锁文件、Markdown 链接、Agent schema、Python 和 Web | 干净 clone 可执行；每个失败能定位具体检查 |
+| `CI-02` | Yes | Ready | `CI-01` | 主分支 CI 使用与本地一致的检查，不依赖凭据或真实内容 | workflow 配置、fixture-only run、分层 job 结果 |
 | `REL-01` | Yes | Queued | `CI-02`, `CT-01` | 统一版本/changelog/tag/构建/回滚规则并产出内部 release candidate | 版本一致性检查、artifact build/install dry-run、回滚 runbook |
 | `CT-01` | Yes | Queued | `UP-04`, `DL-04` | 定义 REST/CLI/WS 版本兼容、错误码、退出码和弃用策略 | 决策/contract 文档、错误矩阵 contract tests |
 | `CT-02` | Yes | Queued | `CT-01` | 主要成功响应都有 JSON Schema 并由真实 serializer fixture 校验 | health/readiness/search/gallery/download/library/tag schema tests |
@@ -114,6 +114,7 @@
 | ID | 完成日期 | Commit | 验证证据 | 备注 |
 |---|---|---|---|---|
 | `UP-01` | 2026-07-24 | `5484566` | `uv run python -m pytest tests/exhentai_api/test_api.py tests/exhentai_api/test_api_new.py tests/exhentai_api/test_exceptions.py tests/exhentai_api/test_client_exceptions.py tests/pandora_daemon/test_exception_handlers.py -q`（86 passed）；`uv run python -m pytest tests/pandora_daemon -q`（420 passed）；`uv run python -m pytest -q`（543 passed）；`git diff --check`（passed） | REST/Agent/schema 契约同步；响应和日志脱敏测试通过 |
+| `CI-01` | 2026-07-24 | `cdace52` | 隔离 clone（初始无 `.venv`、`node_modules`、`dist`）执行 `uv run --frozen python scripts/check.py`：Python/Web lock、Markdown links、5 个 Agent schema、549 tests、Web lint/build、`git diff --check` 全部 passed | 失败阶段标签回归测试 6 passed；生产依赖 `npm audit --omit=dev` 为 0 vulnerabilities |
 
 ## 7. 阻塞与人工门记录
 
