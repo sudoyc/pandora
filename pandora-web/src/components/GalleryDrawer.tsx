@@ -1,7 +1,8 @@
 // pandora-web/src/components/GalleryDrawer.tsx
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
-import { useState } from 'react';
+import { X } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher, imageProxyUrl } from '../api/client';
 import type { GalleryDetail } from '../models';
@@ -16,18 +17,45 @@ type GalleryDrawerProps = {
 
 export const GalleryDrawer = ({ open, onOpenChange, gid, token }: GalleryDrawerProps) => {
   const [readerOpen, setReaderOpen] = useState(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const { data: detail, error, isLoading } = useSWR<GalleryDetail>(
     open ? `/gallery/${gid}/${token}` : null,
     fetcher,
   );
+
+  useLayoutEffect(() => {
+    if (open && document.activeElement instanceof HTMLElement) {
+      returnFocusRef.current = document.activeElement;
+    }
+  }, [open]);
 
   return (
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className="drawer-overlay" />
-          <Dialog.Content className="drawer-content" aria-describedby={undefined}>
-            <Dialog.Title>{detail?.title ?? 'Gallery details'}</Dialog.Title>
+          <Dialog.Content
+            className="drawer-content"
+            aria-describedby={undefined}
+            onEscapeKeyDown={(event) => {
+              if (readerOpen) event.preventDefault();
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
+            }}
+          >
+            <Dialog.Title className="drawer-title">{detail?.title ?? 'Gallery details'}</Dialog.Title>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="drawer-close"
+                aria-label="Close gallery details"
+                title="Close gallery details"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </Dialog.Close>
             <Tabs.Root defaultValue="info">
               <Tabs.List className="drawer-tabs">
                 <Tabs.Trigger value="info">Info</Tabs.Trigger>
@@ -53,7 +81,6 @@ export const GalleryDrawer = ({ open, onOpenChange, gid, token }: GalleryDrawerP
                     </div>
                     <div className="drawer-actions">
                       <button type="button" onClick={() => setReaderOpen(true)}>Read</button>
-                      <Dialog.Close asChild><button type="button">Close</button></Dialog.Close>
                     </div>
                   </>
                 )}

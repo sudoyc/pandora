@@ -24,7 +24,7 @@ export function GalleryHeader({ view, searchHistory, onSearch }: GalleryHeaderPr
           <div className="muted">Recent: {searchHistory.slice(0, 3).join(' · ')}</div>
         )}
       </div>
-      <form onSubmit={handleSubmit} className="search-form">
+      <form onSubmit={handleSubmit} className="search-form" role="search" aria-label="Gallery search">
         <input
           type="text"
           value={searchTerm}

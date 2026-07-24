@@ -20,7 +20,7 @@ describe('Reader', () => {
     expect(pages[0]).toHaveAttribute('loading', 'eager');
     expect(pages[2]).toHaveAttribute('loading', 'lazy');
 
-    await user.click(screen.getByRole('button', { name: 'Exit' }));
+    await user.click(screen.getByRole('button', { name: 'Exit reader' }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 });

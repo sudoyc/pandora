@@ -59,9 +59,29 @@ describe('GalleryDrawer', () => {
     expect(screen.getByText('2 pages')).toBeVisible();
     expect(screen.getAllByRole('img', { name: /Page/ })).toHaveLength(2);
 
-    await user.click(screen.getByRole('button', { name: 'Exit' }));
+    await user.click(screen.getByRole('button', { name: 'Exit reader' }));
     expect(screen.queryByText('2 pages')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Close gallery details' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it.each([
+    ['loading', { data: undefined, error: undefined, isLoading: true }],
+    ['error', { data: undefined, error: new Error('fixture failure'), isLoading: false }],
+  ])('keeps the drawer close control available while %s', async (_state, response) => {
+    vi.mocked(useSWR).mockReturnValue(response as ReturnType<typeof useSWR>);
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <GalleryDrawer
+        open
+        onOpenChange={onOpenChange}
+        gid="123"
+        token="abcdef0123"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Close gallery details' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

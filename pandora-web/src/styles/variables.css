@@ -44,6 +44,7 @@ button {
 
 .sidebar {
   width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
   background-color: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   border-right: 1px solid #333;
@@ -311,9 +312,19 @@ input:focus-visible {
   gap: 20px;
 }
 
+.main-header > div {
+  min-width: 0;
+}
+
+.main-header h1,
+.main-header .muted {
+  overflow-wrap: anywhere;
+}
+
 .search-form {
   display: flex;
   gap: 10px;
+  min-width: 0;
 }
 
 .search-form input {
@@ -323,6 +334,7 @@ input:focus-visible {
   background-color: var(--bg-card);
   color: var(--text-primary);
   width: 300px;
+  min-width: 0;
 }
 
 .search-form button,
@@ -382,6 +394,7 @@ input:focus-visible {
 .gallery-card__title {
   font-size: 0.82rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .gallery-card__meta {
@@ -417,6 +430,35 @@ input:focus-visible {
   background: var(--bg-sidebar);
   padding: 20px;
   box-shadow: var(--shadow-main);
+}
+
+.drawer-title {
+  margin: 0 48px 18px 0;
+  overflow-wrap: anywhere;
+}
+
+.drawer-close,
+.reader-close {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.drawer-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.drawer-close:hover,
+.reader-close:hover {
+  background: var(--bg-hover);
 }
 
 .drawer-tabs {
@@ -456,6 +498,13 @@ input:focus-visible {
 
 .detail-grid span {
   color: var(--text-secondary);
+}
+
+.detail-grid strong,
+.tag-row,
+.comment-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .drawer-actions {
@@ -568,6 +617,10 @@ input:focus-visible {
     width: 100%;
   }
 
+  .search-form {
+    flex-direction: column;
+  }
+
   .search-form button,
   .workspace-refresh {
     min-height: 44px;
@@ -594,5 +647,15 @@ input:focus-visible {
 
   .nav-item {
     flex-basis: calc(50% - 6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-card {
+    transition: none;
+  }
+
+  .gallery-card:hover {
+    transform: none;
   }
 }

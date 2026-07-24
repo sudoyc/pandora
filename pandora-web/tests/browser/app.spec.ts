@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { WebSocketRoute } from '@playwright/test';
+import type { Page, WebSocketRoute } from '@playwright/test';
 
 const gallery = {
   gid: '123',
@@ -31,6 +31,30 @@ const detail = {
   comments_has_more: false,
   url: 'https://example.test/g/123/abcdef0123/',
 };
+
+async function mockGalleryBrowse(page: Page, item = gallery) {
+  await page.route('http://127.0.0.1:7860/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/homepage' || path === '/api/search') {
+      await route.fulfill({ json: [item] });
+      return;
+    }
+    if (path === '/api/downloads') {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path === '/api/gallery/123/abcdef0123') {
+      await route.fulfill({ json: detail });
+      return;
+    }
+    if (path.startsWith('/api/image/proxy') || path.includes('/page/')) {
+      await route.fulfill({ status: 200, contentType: 'image/jpeg', body: '' });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { detail: 'Fixture route missing' } });
+  });
+  await page.routeWebSocket('ws://127.0.0.1:7860/ws', () => {});
+}
 
 test('loads the feed and opens detail and reader views', async ({ page }) => {
   await page.route('http://127.0.0.1:7860/api/**', async (route) => {
@@ -87,8 +111,89 @@ test('loads the feed and opens detail and reader views', async ({ page }) => {
     'http://127.0.0.1:7860/api/gallery/123/abcdef0123/page/1',
   );
 
-  await page.getByRole('button', { name: 'Exit' }).click();
+  await page.getByRole('button', { name: 'Exit reader' }).click();
   await expect(page.locator('.reader-shell')).toBeHidden();
+});
+
+test('keeps desktop and mobile layouts within their viewport', async ({ page }) => {
+  const longTitle = `Fixture-${'unbroken-title-'.repeat(24)}`;
+  await mockGalleryBrowse(page, { ...gallery, title: longTitle });
+  await page.goto('/');
+
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole('search', { name: 'Gallery search' })).toBeVisible();
+    await expect(page.getByText(longTitle)).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const sidebar = document.querySelector<HTMLElement>('.sidebar')!;
+      const main = document.querySelector<HTMLElement>('.main-panel')!;
+      const title = document.querySelector<HTMLElement>('.gallery-card__title')!;
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const mainRect = main.getBoundingClientRect();
+
+      return {
+        documentWidth: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+        mainWidth: [main.scrollWidth, main.clientWidth],
+        titleWidth: [title.scrollWidth, title.clientWidth],
+        sidebarRect: {
+          right: sidebarRect.right,
+          bottom: sidebarRect.bottom,
+        },
+        mainRect: {
+          left: mainRect.left,
+          top: mainRect.top,
+        },
+      };
+    });
+
+    expect(layout.documentWidth[0]).toBeLessThanOrEqual(layout.documentWidth[1]);
+    expect(layout.mainWidth[0]).toBeLessThanOrEqual(layout.mainWidth[1]);
+    expect(layout.titleWidth[0]).toBeLessThanOrEqual(layout.titleWidth[1]);
+    if (viewport.width > 760) {
+      expect(layout.sidebarRect.right).toBeLessThanOrEqual(layout.mainRect.left);
+    } else {
+      expect(layout.sidebarRect.bottom).toBeLessThanOrEqual(layout.mainRect.top);
+    }
+  }
+});
+
+test('contains and restores focus across the drawer and reader', async ({ page }) => {
+  await mockGalleryBrowse(page);
+  await page.goto('/');
+
+  const galleryTrigger = page.getByRole('button', { name: /Fixture Browser Gallery/ });
+  await galleryTrigger.focus();
+  await expect(galleryTrigger).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  const drawer = page.locator('.drawer-content');
+  await expect(drawer).toBeVisible();
+  await expect.poll(() => drawer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+  const readButton = page.getByRole('button', { name: 'Read' });
+  await readButton.click();
+
+  const reader = page.getByRole('dialog', { name: 'Gallery reader' });
+  const exitReader = page.getByRole('button', { name: 'Exit reader' });
+  await expect(reader).toBeVisible();
+  await expect(exitReader).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(exitReader).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(exitReader).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(reader).toBeHidden();
+  await expect(drawer).toBeVisible();
+  await expect(readButton).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+  await expect(galleryTrigger).toBeFocused();
 });
 
 test('reconciles download progress after a daemon restart', async ({ page }) => {
@@ -250,7 +355,7 @@ test('navigates workspace views and reads a local library gallery', async ({ pag
     'src',
     'http://127.0.0.1:7860/api/library/888/file?path=page/1',
   );
-  await page.getByRole('button', { name: 'Exit' }).click();
+  await page.getByRole('button', { name: 'Exit reader' }).click();
   await expect(page.locator('.reader-shell')).toBeHidden();
   expect(consoleErrors).toEqual([]);
 });
