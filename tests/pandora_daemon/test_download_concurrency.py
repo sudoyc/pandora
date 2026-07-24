@@ -576,7 +576,9 @@ class TestResumeRetry:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_retry_failed_no_failed_pages_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
+    async def test_retry_reconciles_missing_pages_when_failed_list_is_stale(
+        self, mock_api, mock_ws, mock_image_service, dl_config, state_file
+    ):
         mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.submit("1", "t")
         task = mgr._tasks["1"]
@@ -584,4 +586,6 @@ class TestResumeRetry:
         task.failed_pages = []
 
         result = await mgr.retry_failed("1")
-        assert result is False
+        assert result is True
+        assert task.status == "queued"
+        assert task.page_states == {1: "pending", 2: "pending", 3: "pending"}

@@ -82,7 +82,7 @@ async def cancel_download(gid: str, downloads: DownloadManager = Depends(get_dow
 async def retry_download(gid: str, downloads: DownloadManager = Depends(get_downloads)):
     result = await downloads.retry_failed(gid)
     if not result:
-        raise HTTPException(status_code=404, detail="Task not found or not in completed_with_errors state")
+        raise HTTPException(status_code=404, detail="Task not found or has no missing pages to retry")
     return {"success": True}
 
 
@@ -105,5 +105,5 @@ async def get_page_status(gid: str, downloads: DownloadManager = Depends(get_dow
         "total_pages": task.total_pages,
         "downloaded_pages": task.downloaded_pages,
         "failed_pages": task.failed_pages,
-        "page_states": task.page_states,
+        "page_states": task.to_public_dict()["page_states"],
     }

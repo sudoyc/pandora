@@ -267,7 +267,11 @@ Preserve these invariants when changing `pandora_daemon/download.py`:
 - `downloads.json` uses a version 1 envelope with `schema_version` and `tasks`; the deployed unversioned mapping is the legacy migration input.
 - Corrupt state is retained as a unique `.corrupt[.N]` backup before valid tasks are rewritten; explicit unknown versions must remain untouched and abort startup.
 - Persisted `page_states` JSON keys must load back as integer page numbers.
-- Existing page files on disk count as completed during resume/retry.
+- Public task statuses are `queued`, `downloading`, `completed`, `completed_with_errors`, `paused`, `failed`, and `cancelled`; public page state uses `completed`, never internal `done`.
+- Cancel accepts only `queued`, `downloading`, or `paused` and is eventless when repeated or applied to a final task.
+- Resume accepts only `paused`; retry accepts `completed_with_errors` and a `completed` task with missing files.
+- Existing page files on disk are authoritative during resume, retry, and active-task restart recovery. Reconciliation clears stale errors/failures and preserves restored files.
+- Restart persists reconciled active tasks as `queued` before workers start; paused, cancelled, or otherwise final tasks are not requeued or overwritten by workers.
 - `completed_with_errors`, `paused`, `failed`, and `cancelled` are terminal from an agent watcher perspective.
 - Consistency reporting requires complete artifacts only for `completed` and `completed_with_errors`; it reports `orphan_task`, `missing_pages`, `missing_metadata`, `invalid_metadata`, and `unregistered_library` without modifying files.
 - Repair registers only a unique, complete unregistered library entry; forget rejects active tasks. Both default to preview, are idempotent, and preserve every library file.

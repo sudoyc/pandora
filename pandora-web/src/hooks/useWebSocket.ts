@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { DAEMON_URL } from '../api/client';
-import type { DownloadEvent, DownloadProgressItem } from '../models';
+import type { DownloadEvent, DownloadProgressItem, DownloadTaskStatus } from '../models';
 
-const TERMINAL_STATUS: Record<string, string> = {
+const EVENT_STATUS: Record<DownloadEvent['event'], DownloadTaskStatus> = {
+  download_queued: 'queued',
+  download_progress: 'downloading',
   download_complete: 'completed',
   download_complete_with_errors: 'completed_with_errors',
   download_error: 'failed',
   download_cancelled: 'cancelled',
   download_paused: 'paused',
-  download_auth_failed: 'auth_failed',
+  download_auth_failed: 'failed',
 };
 
 function toWsUrl(baseUrl: string): string {
@@ -39,10 +41,7 @@ export function useWebSocket(): DownloadProgressItem[] {
           const next: DownloadProgressItem = {
             gid: data.gid,
             title: eventName === 'download_queued' ? data.title : current?.title,
-            status:
-              eventName === 'download_progress'
-                ? 'downloading'
-                : TERMINAL_STATUS[eventName] ?? eventName.replace(/^download_/, ''),
+            status: EVENT_STATUS[eventName],
             phase: eventName === 'download_progress' ? data.phase : current?.phase,
             progress,
             error:

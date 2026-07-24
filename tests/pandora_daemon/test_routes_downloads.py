@@ -319,7 +319,7 @@ class TestGetPageStatus:
         assert data["total_pages"] == 10
         assert data["downloaded_pages"] == 5
         assert data["failed_pages"] == [3]
-        assert "page_states" in data
+        assert data["page_states"] == {"1": "completed", "2": "completed", "3": "failed"}
 
     def test_get_pages_not_found_returns_404(self):
         mock_downloads = MagicMock()

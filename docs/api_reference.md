@@ -138,10 +138,18 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 | GET | `/api/downloads/report` | Read-only task, metadata, page, and library consistency report |
 | POST | `/api/downloads/{gid}/repair` | Preview/apply registration of one complete library entry; body `{apply}` |
 | POST | `/api/downloads/{gid}/forget` | Preview/apply removal of inactive task state; body `{apply}` |
-| DELETE | `/api/downloads/{gid}` | Cancel task |
-| POST | `/api/downloads/{gid}/retry` | Retry failed pages for `completed_with_errors` task |
-| POST | `/api/downloads/{gid}/resume` | Resume paused task |
-| GET | `/api/downloads/{gid}/pages` | Page-level status detail |
+| DELETE | `/api/downloads/{gid}` | Cancel a `queued`, `downloading`, or `paused` task; other states are an eventless no-op |
+| POST | `/api/downloads/{gid}/retry` | Reconcile and retry missing pages for `completed_with_errors`, or for `completed` when files are missing |
+| POST | `/api/downloads/{gid}/resume` | Reconcile and resume a `paused` task |
+| GET | `/api/downloads/{gid}/pages` | Page-level status using `pending`, `downloading`, `completed`, or `failed` |
+
+Public download task statuses are `queued`, `downloading`, `completed`,
+`completed_with_errors`, `paused`, `failed`, and `cancelled`. Resume and retry
+reconcile actual page files before queueing and clear stale error state. A retry
+whose pages have already been restored normalizes directly to `completed`.
+After daemon restart, active tasks are reconciled and persisted as `queued`
+before workers start; final tasks are not requeued. Internal page state `done`
+is exposed as `completed` by REST and CLI surfaces.
 
 ### Local database endpoints
 

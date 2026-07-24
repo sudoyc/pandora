@@ -125,6 +125,12 @@ submit -> reject active duplicate -> fetch detail -> persist task -> queue worke
 `completed_with_errors`、`failed`、`paused` 和 `cancelled`；Agent watcher 的退出语义见
 [Agent Contract](../agent/contract.md)。
 
+公开 task 状态固定为 `queued`、`downloading`、`completed`、
+`completed_with_errors`、`paused`、`failed` 和 `cancelled`，公开页面状态使用
+`pending`、`downloading`、`completed` 和 `failed`。resume/retry 及活动 task 重启恢复都以
+实际页面文件为准：先精确重建页面计数和缺页状态，再清除陈旧错误并持久化 `queued`；重启时
+该持久化发生在 worker 启动前。暂停或取消后的 worker 不得覆盖其终态。
+
 `downloads.json` 当前使用 `schema_version: 1` 和 `tasks` envelope。既有无版本 task
 映射会在加载后以临时文件加 replace 原子迁移；截断、无效 envelope 或坏 task 会先把原始
 文件保留为唯一的 `.corrupt[.N]` 备份，再用可解析 task 重建当前格式。显式未知版本不会被
@@ -180,6 +186,5 @@ TUI 已冻结，不纳入默认功能开发验证。
 - `health` 保持轻量；上游会话和四项页面能力由显式 `readiness` 探针验证。
 - Web 仍是可选 WIP，缺少重连后的下载状态对账、完整页面和自动化 UI 测试。
 - 仓库尚无持续集成和正式 release/tag 流程。
-- 下载生命周期的 cancel/resume/retry/restart/reconcile 终态语义仍待统一。
 
 这些事项的处理顺序和验收标准见 [开发路线图](../roadmap.md)。

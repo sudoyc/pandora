@@ -61,10 +61,19 @@ export type DownloadEvent =
   | { event: 'download_paused'; gid: string; reason?: string }
   | { event: 'download_auth_failed'; gid: string; error?: string };
 
+export type DownloadTaskStatus =
+  | 'queued'
+  | 'downloading'
+  | 'completed'
+  | 'completed_with_errors'
+  | 'paused'
+  | 'failed'
+  | 'cancelled';
+
 export interface DownloadProgressItem {
   gid: string;
   title?: string;
-  status: string;
+  status: DownloadTaskStatus;
   phase?: string;
   progress: number;
   error?: string;

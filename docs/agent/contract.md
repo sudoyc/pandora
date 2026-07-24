@@ -158,13 +158,40 @@ Terminal watcher exit semantics:
 
 Schema: [`schemas/download-event.schema.json`](schemas/download-event.schema.json).
 
+## Download Task Lifecycle
+
+Public task status values are `queued`, `downloading`, `completed`,
+`completed_with_errors`, `paused`, `failed`, and `cancelled`. A
+`download_auth_failed` event corresponds to task status `failed`; there is no
+separate public `auth_failed` task status. The five final statuses are terminal
+for the current watcher. A `paused` task remains resumable.
+
+Control operations have these state boundaries:
+
+- Cancel accepts only `queued`, `downloading`, or `paused`. Missing tasks,
+  final tasks, and repeated cancellation return `success: false` without
+  changing state or emitting another event.
+- Resume accepts only `paused`. Before queueing, the daemon reconciles
+  `1..total_pages` against page files, clears stale failures and errors,
+  persists `queued`, and emits `download_queued`.
+- Retry accepts `completed_with_errors`, plus `completed` when expected page
+  files are missing. Disk files are authoritative. If every previously failed
+  page is already present, retry normalizes directly to `completed` without
+  network work; otherwise it clears stale failures, persists `queued`, and
+  emits `download_queued`.
+- On daemon restart, persisted `queued` and `downloading` tasks are reconciled
+  from disk and persisted as `queued` before workers start. Final tasks are not
+  requeued.
+
 ## Download Pages
 
 ```bash
 uv run python -m pandora_daemon.cli download pages 123 --json
 ```
 
-Public page state values include `completed` and `failed`. The CLI maps internal daemon state `done` to public state `completed`.
+Public page state values are `pending`, `downloading`, `completed`, and
+`failed`. Internal state may use `done`, but REST task/list/page responses and
+CLI page output expose it as `completed`.
 
 Download status/detail surfaces are public machine interfaces for download state, not daemon-local bookkeeping. Fields such as `token` and daemon-local output directory/path values are internal-only and not part of the public stable contract.
 

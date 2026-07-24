@@ -74,6 +74,10 @@ Actions:
 - Treat the watcher as terminal for the current automation step.
 - Report `reason` or `error`.
 - Inspect `download pages <gid> --json` if useful.
+- Resume only a task whose public status is `paused`. The daemon reconciles
+  existing page files and clears the old error before queueing it.
+- `download_auth_failed` leaves the failing task in `failed`; it is not a
+  separate `auth_failed` task status.
 - Do not read, print, or modify credentials unless the user explicitly asks for config work.
 
 ## Completed With Errors
@@ -82,4 +86,6 @@ Actions:
 
 - Inspect failed pages: `uv run python -m pandora_daemon.cli download pages <gid> --json`.
 - If the user wants recovery, run `uv run python -m pandora_daemon.cli download retry <gid> --json`.
+- Retry reconciles disk first, so restored pages are retained and stale failure
+  lists are not treated as authoritative.
 - Do not maintain a separate failed-page list outside the daemon.

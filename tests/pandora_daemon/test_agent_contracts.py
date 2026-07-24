@@ -172,6 +172,7 @@ def test_download_task_contract_shape():
     assert "thumb_urls" not in data
     assert "thumb_sprites" not in data
     assert isinstance(data["page_states"], dict)
+    assert data["page_states"][1] == "completed"
     assert json.loads(json.dumps(data))["page_states"]["5"] == "failed"
 
 
@@ -203,6 +204,26 @@ def test_cli_download_pages_contract_uses_public_page_state_values():
     data = cli._normalize_download_pages_output({"gid": "123", "page_states": {"1": "done", "2": "failed"}})
 
     assert data["page_states"] == {"1": "completed", "2": "failed"}
+
+
+def test_download_lifecycle_contract_is_documented():
+    contract = Path("docs/agent/contract.md").read_text(encoding="utf-8")
+    api_reference = Path("docs/api_reference.md").read_text(encoding="utf-8")
+    workflow = Path("docs/agent/workflows/download.md").read_text(encoding="utf-8")
+    skill = Path(".agents/skills/pandora/SKILL.md").read_text(encoding="utf-8")
+
+    for text in (contract, api_reference, workflow, skill):
+        for status in (
+            "queued",
+            "downloading",
+            "completed",
+            "completed_with_errors",
+            "paused",
+            "failed",
+            "cancelled",
+        ):
+            assert f"`{status}`" in text
+        assert "reconcile" in text.lower() or "reconciliation" in text.lower()
 
 
 def test_download_consistency_report_contract_is_documented():

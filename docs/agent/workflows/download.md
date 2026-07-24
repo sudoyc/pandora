@@ -41,6 +41,8 @@ uv run python -m pandora_daemon.cli download watch 123 --ndjson
 - `download_auth_failed`: terminal non-success, watcher exits 1.
 
 The event discriminator is `event`, not `type`.
+Task snapshots use `queued`, `downloading`, `completed`,
+`completed_with_errors`, `paused`, `failed`, or `cancelled`.
 
 ## Follow-Up Inspection
 
@@ -51,7 +53,8 @@ uv run python -m pandora_daemon.cli download pages 123 --json
 uv run python -m pandora_daemon.cli library list --json
 ```
 
-`download pages --json` reports public page states such as `completed`; internal daemon state may use `done`.
+`download pages --json` reports `pending`, `downloading`, `completed`, or
+`failed`; internal daemon state may use `done`.
 `download report --json` is read-only. Use its `consistent`, `summary`, and
 `issues` fields to diagnose registered terminal tasks versus metadata, pages,
 and unregistered library entries; do not scan the files from the agent.
@@ -68,8 +71,15 @@ uv run python -m pandora_daemon.cli download repair 123 --json
 uv run python -m pandora_daemon.cli download forget 123 --json
 ```
 
-Run `download report --json` first. Recovery commands default to preview; inspect
-their `actions`, then repeat the selected command with `--apply` only when the
+Cancel applies only to `queued`, `downloading`, or `paused`; repeated or final
+task cancellation is an eventless no-op. Resume applies only to `paused`.
+Retry applies to `completed_with_errors`, and to `completed` when page files
+are missing. Resume and retry reconcile actual files and clear stale errors
+before queueing. If all failed pages have already been restored, retry finishes
+immediately without network work.
+
+Run `download report --json` before repair or forget. Those two commands default
+to preview; inspect their `actions`, then repeat with `--apply` only when the
 user requested the state change. Repair registers a complete unregistered
 library entry. Forget removes inactive task state. Neither command deletes
 library files.
