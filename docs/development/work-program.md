@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `BUG-20260725-02` |
+| Active work package | None（等待 `REL-02` 人工门） |
 | Next work package | `REL-02`（Gated） |
-| Last completed work package | `BUG-20260725-01` |
+| Last completed work package | `BUG-20260725-02` |
 | Blockers | None；`REL-02` 尚未人工放行 |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 685 passed（2026-07-25；本地统一检查，implementation `fe3289f`） |
-| Last Web evidence | 25 unit/component + 5 Chromium browser passed；lint/build passed（2026-07-25；本地统一检查，implementation `fe3289f`） |
+| Last full Python evidence | 685 passed（2026-07-25；本地统一检查，implementation `19e23b2`） |
+| Last Web evidence | 25 unit/component + 5 Chromium browser passed；full audit/lint/build passed（2026-07-25；本地统一检查，implementation `19e23b2`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -65,7 +65,7 @@
 | `DIST-01` | Yes | Done | `REL-01`, `CT-04`, `WEB-05` | 用 ADR 选择一种维护成本可控的分发方式并构建 artifact | ADR、可重复 build、artifact 内容/版本检查 |
 | `DIST-02` | Yes | Done | `DIST-01` | 隔离环境完成安装、启动、health/readiness、升级和回滚 | clean-environment scripted smoke 和失败恢复记录 |
 | `BUG-20260725-01` | Yes | Done | `DIST-02` | 现役 roadmap/architecture 不再把已完成能力描述为未完成 | 陈旧声明扫描、Markdown links/schema、统一检查 |
-| `BUG-20260725-02` | Yes | In Progress | `WEB-05`, `CI-02` | 清除有修复版本的 Web 开发工具链依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查 |
+| `BUG-20260725-02` | Yes | Done | `WEB-05`, `CI-02` | 清除有修复版本的 Web 开发工具链依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查 |
 | `REL-02` | Yes | Gated | `DIST-02` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
 | `WRAP-01` | No | Gated | `CT-04`, `DIST-02` | 有真实需求时创建只包装 CLI/REST/WS 的薄 consumer | 需求证据、同一 contract suite、无第二状态层 |
 | `CLOSE-01` | Yes | Queued | 除自身外全部 Required | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
@@ -138,6 +138,7 @@
 | `DIST-01` | 2026-07-25 | `f9fb7e3` | `uv run --frozen python -m pytest tests/tools/test_release.py tests/tools/test_repo_checks.py -q`（16 passed）；两次执行 `uv run --frozen python scripts/release.py candidate --tag v0.2.0 --out-dir TEMP_DIR`（sdist→wheel、内容/版本/entry point 校验、临时 Python 3.12 安装和 CLI smoke passed）；`uv run --frozen python scripts/release.py verify --dist-dir TEMP_DIR`、独立 wheel `cmp`（passed）；wheel SHA-256 `c942ce844af72b9b48ce9d41530849026deaa71686e64b972934a376c6c9aa33`，sdist SHA-256 `310b7a9343866098517fb00ce440a9fe17c3bee4de6bf9961ef53ef82b5295d1`；`uv run --frozen python scripts/check.py`（677 passed，全部阶段 passed）；GitHub Actions `30116361699` 三个 job 全部 success | ADR-010 选择纯 Python wheel + 隔离 venv 为唯一默认运行分发；sdist 仅作构建/回滚伴随物；verifier 固定 Python 3.12 下限与两个 console entry point，排除 Web/TUI/凭据和运行状态 |
 | `DIST-02` | 2026-07-25 | `497cb5c` | `uv run --frozen python -m pytest tests/tools -q`（24 passed）；`0.1.0` 临时旧版 wheel → 已验证 `0.2.0` wheel → `0.1.0` 计划回滚 smoke 退出 0，三阶段 health/config/readiness/status、contract `1` 和隔离状态保持均通过；损坏 `0.3.0` wheel smoke 退出 1 且 `automatic_rollback_recovered: true`；`uv run --frozen python scripts/check.py`（685 passed，全部阶段 passed）；`npm audit --omit=dev`（0 vulnerabilities）；GitHub Actions `30117478268` 三个 job 全部 success | 临时 HOME/config/cache/download/venv 与空 tag fixture 避免凭据和上游访问；输出不含子进程日志、配置或临时路径；`cookie.txt` 未读取且未暂存；真实状态降级仍须配对备份，`REL-02` 保持人工门 |
 | `BUG-20260725-01` | 2026-07-25 | `fe3289f` | 现役文档陈旧声明扫描初始命中 5 处、修正后 0 处；`uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（11 passed）；`uv run --frozen python scripts/check.py --group repository`（全部阶段 passed）；`uv run --frozen python scripts/check.py`（685 passed，全部阶段 passed）；Agent contract/E2E 目标集（50 passed）；artifact verify、`0.1.0` → `0.2.0` → `0.1.0` smoke 和损坏候选自动恢复均 passed；`npm audit --omit=dev`（0 vulnerabilities） | roadmap 不再复制动态命令证据，现役架构记录分发 smoke 已完成；未执行真实账号探针，未创建 tag/release，`REL-02` 保持人工门 |
+| `BUG-20260725-02` | 2026-07-25 | `19e23b2` | 完整 `npm audit` 从 5 vulnerabilities（4 high、1 low）降至 0；fresh `npm ci`（305 packages、0 vulnerabilities）；`uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（11 passed）；`npm run test:unit`（7 files、25 tests passed）；`npm run test:browser`（5 Chromium tests passed）；`npm run lint`、`npm run build`（Vite 8.1.5，passed）；`uv run --frozen python scripts/check.py`（685 passed，全部阶段 passed） | 开发工具链升级至无已知告警版本；完整 Web 依赖审计纳入本地统一检查和 CI 共用分组；无运行时依赖增删，未执行真实上游请求，`REL-02` 保持人工门 |
 
 ## 7. 阻塞与人工门记录
 
