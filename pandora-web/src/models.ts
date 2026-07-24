@@ -70,6 +70,16 @@ export type DownloadTaskStatus =
   | 'failed'
   | 'cancelled';
 
+export interface DownloadTaskSnapshot {
+  gid: string;
+  title: string;
+  total_pages: number;
+  status: DownloadTaskStatus;
+  downloaded_pages: number;
+  error: string;
+  created_at: string;
+}
+
 export interface DownloadProgressItem {
   gid: string;
   title?: string;

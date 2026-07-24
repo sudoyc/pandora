@@ -12,10 +12,11 @@ Implemented:
 - gallery cards using the daemon image proxy (`/api/image/proxy`)
 - gallery detail drawer backed by `/api/gallery/{gid}/{token}`
 - fullscreen reader backed by `/api/gallery/{gid}/{token}/page/{page}`
-- WebSocket hook for daemon download events using the `event` field
+- download state reconciled from `/api/downloads` on load and WebSocket reconnect
+- bounded exponential-backoff WebSocket reconnect for daemon restarts
 - recent download progress panel
 - Vitest unit/component coverage for feed, detail, reader, and WebSocket state
-- Playwright browser smoke coverage for the feed-to-reader workflow
+- Playwright browser coverage for the feed-to-reader and daemon-restart workflows
 - typed daemon GET/error client and discriminated gallery view state
 - split sidebar, search/header, gallery feed, and download progress components
 - CSS variable based dark theme
@@ -23,9 +24,8 @@ Implemented:
 Still intentionally lightweight / next refactor targets:
 
 - The typed API client currently covers the GET/error behavior used by existing views; add endpoint-specific helpers as new workflows land.
-- WebSocket progress state is live-event only; reconcile with `/api/downloads` on load/reconnect.
 - Add dedicated pages for favorites, history, downloads, and local library.
-- Expand browser coverage for reconnect/restart behavior and the remaining views.
+- Expand browser coverage for the remaining views.
 - Generated `dist/` and `node_modules/` are ignored under `pandora-web/.gitignore` and should not be treated as source.
 
 ## Run
@@ -63,7 +63,7 @@ npm run build
 
 ## Recommended next work
 
-1. Reconcile WebSocket download state from `/api/downloads` on initial load and reconnect.
-2. Add endpoint-specific typed helpers alongside favorites, history, downloads, and library views.
-3. Cover reconnect/restart behavior with browser tests before expanding the workflows.
+1. Add dedicated favorites, history, downloads, and local library views.
+2. Add endpoint-specific typed helpers alongside those workflows.
+3. Cover their empty, error, retry, and critical browser paths.
 4. Complete responsive layout and keyboard/focus checks across desktop and mobile viewports.

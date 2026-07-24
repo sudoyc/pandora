@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import type { WebSocketRoute } from '@playwright/test';
 
 const gallery = {
   gid: '123',
@@ -36,6 +37,10 @@ test('loads the feed and opens detail and reader views', async ({ page }) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/homepage' || path === '/api/search') {
       await route.fulfill({ json: [gallery] });
+      return;
+    }
+    if (path === '/api/downloads') {
+      await route.fulfill({ json: [] });
       return;
     }
     if (path === '/api/gallery/123/abcdef0123') {
@@ -84,4 +89,65 @@ test('loads the feed and opens detail and reader views', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Exit' }).click();
   await expect(page.locator('.reader-shell')).toBeHidden();
+});
+
+test('reconciles download progress after a daemon restart', async ({ page }) => {
+  const sockets: WebSocketRoute[] = [];
+  let listRequests = 0;
+  let downloadSnapshot = [{
+    gid: '321',
+    title: 'Restartable Download',
+    total_pages: 4,
+    status: 'downloading',
+    downloaded_pages: 1,
+    downloaded_thumbs: 4,
+    cover_downloaded: true,
+    metadata_saved: true,
+    error: '',
+    created_at: '2026-01-01T00:00:00Z',
+    page_states: { 1: 'completed' },
+    failed_pages: [],
+  }];
+
+  await page.route('http://127.0.0.1:7860/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/homepage') {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (path === '/api/downloads') {
+      listRequests += 1;
+      await route.fulfill({ json: downloadSnapshot });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { detail: 'Fixture route missing' } });
+  });
+  await page.routeWebSocket('ws://127.0.0.1:7860/ws', (socket) => {
+    sockets.push(socket);
+  });
+
+  await page.goto('/');
+
+  const row = page.locator('.download-row').filter({ hasText: 'Restartable Download' });
+  await expect(row).toContainText('downloading');
+  await expect(row.locator('.progress-bar')).toHaveAttribute('style', 'width: 25%;');
+
+  const socketsBeforeRestart = sockets.length;
+  const requestsBeforeRestart = listRequests;
+  downloadSnapshot = [{
+    ...downloadSnapshot[0],
+    status: 'queued',
+    downloaded_pages: 2,
+    page_states: { 1: 'completed', 2: 'completed' },
+  }];
+  await sockets[sockets.length - 1].close({ code: 1012, reason: 'daemon restart' });
+
+  await expect.poll(() => sockets.length).toBeGreaterThan(socketsBeforeRestart);
+  await expect.poll(() => listRequests).toBeGreaterThan(requestsBeforeRestart);
+  await expect(row).toContainText('queued');
+  await expect(row.locator('.progress-bar')).toHaveAttribute('style', 'width: 50%;');
+
+  sockets[sockets.length - 1].send(JSON.stringify({ event: 'download_complete', gid: '321' }));
+  await expect(row).toContainText('completed');
+  await expect(row.locator('.progress-bar')).toHaveAttribute('style', 'width: 100%;');
 });
