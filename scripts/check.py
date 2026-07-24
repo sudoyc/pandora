@@ -23,14 +23,22 @@ CHECKS: tuple[Check, ...] = (
         ("uv", "run", "--frozen", "python", "-m", "scripts.repo_checks"),
     ),
     ("Python tests", ("uv", "run", "--frozen", "python", "-m", "pytest", "-q")),
+    (
+        "Web unit and component tests",
+        ("npm", "--prefix", "pandora-web", "run", "test:unit"),
+    ),
+    (
+        "Web browser tests",
+        ("npm", "--prefix", "pandora-web", "run", "test:browser"),
+    ),
     ("Web lint", ("npm", "--prefix", "pandora-web", "run", "lint")),
     ("Web build", ("npm", "--prefix", "pandora-web", "run", "build")),
     ("Git whitespace", ("git", "diff", "--check")),
 )
 CHECK_GROUPS: dict[str, tuple[Check, ...]] = {
-    "repository": (CHECKS[0], CHECKS[1], CHECKS[3], CHECKS[7]),
+    "repository": (CHECKS[0], CHECKS[1], CHECKS[3], CHECKS[9]),
     "python": (CHECKS[4],),
-    "web": (CHECKS[2], CHECKS[5], CHECKS[6]),
+    "web": (CHECKS[2], CHECKS[5], CHECKS[6], CHECKS[7], CHECKS[8]),
 }
 
 

@@ -223,6 +223,7 @@ button {
 .drawer-overlay {
   position: fixed;
   inset: 0;
+  z-index: 20;
   background: rgba(0, 0, 0, 0.55);
 }
 
@@ -233,6 +234,7 @@ button {
   bottom: 0;
   width: var(--drawer-width);
   max-width: 95vw;
+  z-index: 21;
   overflow-y: auto;
   background: var(--bg-sidebar);
   padding: 20px;

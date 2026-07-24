@@ -14,6 +14,8 @@ Implemented:
 - fullscreen reader backed by `/api/gallery/{gid}/{token}/page/{page}`
 - WebSocket hook for daemon download events using the `event` field
 - recent download progress panel
+- Vitest unit/component coverage for feed, detail, reader, and WebSocket state
+- Playwright browser smoke coverage for the feed-to-reader workflow
 - CSS variable based dark theme
 
 Still intentionally lightweight / next refactor targets:
@@ -21,7 +23,7 @@ Still intentionally lightweight / next refactor targets:
 - `src/App.tsx` still owns layout, sidebar state, search form, search history, gallery selection, and download progress rendering; split it before adding more views.
 - WebSocket progress state is live-event only; reconcile with `/api/downloads` on load/reconnect.
 - Add dedicated pages for favorites, history, downloads, and local library.
-- Add component tests or Playwright smoke checks once the view split lands.
+- Expand browser coverage for reconnect/restart behavior and the remaining views.
 - Generated `dist/` and `node_modules/` are ignored under `pandora-web/.gitignore` and should not be treated as source.
 
 ## Run
@@ -47,12 +49,14 @@ Override in development if needed:
 VITE_PANDORA_DAEMON_URL=http://127.0.0.1:7860 npm run dev
 ```
 
-## Build / lint
+## Test / lint / build
 
 ```bash
 cd pandora-web
-npm run build
+npm run test:unit
+npm run test:browser
 npm run lint
+npm run build
 ```
 
 ## Recommended next refactor

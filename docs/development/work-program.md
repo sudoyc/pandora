@@ -13,8 +13,8 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | None |
-| Next work package | `WEB-01` |
+| Active work package | `WEB-01` |
+| Next work package | None |
 | Last completed work package | `CT-04` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
@@ -57,7 +57,7 @@
 | `CT-02` | Yes | Done | `CT-01` | 主要成功响应都有 JSON Schema 并由真实 serializer fixture 校验 | health/readiness/search/gallery/download/library/tag schema tests |
 | `CT-03` | Yes | Done | `CT-01` | 长任务具有 request/correlation id 和最小诊断字段，日志可关联且不泄密 | REST/CLI/WS 关联测试、日志脱敏测试 |
 | `CT-04` | Yes | Done | `CT-02`, `CT-03` | Agent Pack 关键工作流能在 fixture daemon 端到端执行 | bootstrap/search/gallery/download/library/PDF 成功和失败 E2E |
-| `WEB-01` | Yes | Ready | `CT-02` | 建立 Web unit/component/browser 测试基线，覆盖已有 feed/detail/reader/WS reducer | 可重复 test script、现有行为基线测试、lint/build |
+| `WEB-01` | Yes | In Progress | `CT-02` | 建立 Web unit/component/browser 测试基线，覆盖已有 feed/detail/reader/WS reducer | 可重复 test script、现有行为基线测试、lint/build |
 | `WEB-02` | Yes | Queued | `WEB-01` | 拆分 `App.tsx` 职责，形成 typed API/error 层和稳定 view state | 组件/hook tests；无契约复制；lint/build |
 | `WEB-03` | Yes | Queued | `WEB-02`, `DL-04` | 初始加载、WS 重连、daemon 重启后下载状态从 REST 对账恢复 | disconnect/reconnect/restart browser tests |
 | `WEB-04` | Yes | Queued | `WEB-02`, `CT-02` | favorites、history、downloads、library 页面与本地阅读形成完整流程 | 各页空/错/重试/component tests 和关键 E2E |
@@ -127,7 +127,7 @@
 | `REL-01` | 2026-07-25 | `69c91fc` | `uv run --frozen python -m pytest tests/tools/test_release.py tests/tools/test_repo_checks.py tests/pandora_daemon/test_routes_config.py -q`（36 passed）；`uv run --frozen python -m pytest -q`（654 passed）；`uv run --frozen python scripts/release.py candidate --tag v0.2.0 --out-dir TEMP_DIR`（sdist→wheel、内容/版本校验、临时 Python 3.12 安装和 CLI smoke passed）；独立重建 `cmp` passed，wheel SHA-256 `2d2a92c8f5e2185175ea2ccfbc2864dfa35ccf51de11394fd28a4a3d796cda8c`，sdist SHA-256 `fb980d1c53a5ce2c43a22f9424de7f8dda26d7191a8334f3bf7952466c6a4006`；`uv run --frozen python scripts/check.py`（654 passed，全部阶段 passed）；GitHub Actions `30105806033` 三个 job 全部 success | `pyproject.toml` 为版本源，lock/changelog/tag 规则进入 CI；sdist 从基线 10693 项收敛到 64 项且排除 Web 生成物、冻结 TUI、测试/归档和本地敏感状态；实际 tag/release 仍由 `REL-02` 人工门控制 |
 | `CT-02` | 2026-07-25 | `5654218` | `uv run --frozen python -m pytest tests/pandora_daemon/test_success_response_schemas.py tests/pandora_daemon/test_routes_readiness.py tests/pandora_daemon/test_routes_config.py tests/pandora_daemon/test_routes_gallery.py tests/pandora_daemon/test_routes_downloads.py tests/pandora_daemon/test_routes_library.py tests/pandora_daemon/test_routes_tags.py tests/pandora_daemon/test_agent_contracts.py -q`（120 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（518 passed）；`uv run --frozen python -m pytest -q`（661 passed）；`uv run --frozen python -m scripts.repo_checks`（Markdown/schema passed）；`uv run --frozen python scripts/check.py`（661 passed，全部阶段 passed）；GitHub Actions `30106897849` 三个 job 全部 success | 新增 health、gallery detail、download task/list/pages/consistency、library list、tag suggest/status schema；readiness/search 既有 schema 纳入真实 route fixture 校验；Agent Contract、API reference 和 Pandora skill 已同步 |
 | `CT-03` | 2026-07-25 | `73279c3` | `uv run --frozen python -m pytest tests/pandora_daemon/test_diagnostics.py tests/pandora_daemon/test_machine_contract.py tests/pandora_daemon/test_agent_contracts.py tests/pandora_daemon/test_success_response_schemas.py tests/pandora_daemon/test_routes_downloads.py tests/pandora_daemon/test_routes_library.py tests/pandora_daemon/test_download_lifecycle.py tests/pandora_daemon/test_download_state.py tests/pandora_daemon/test_cli.py -q`（190 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（526 passed）；`uv run --frozen python -m pytest -q`（669 passed）；`uv run --frozen python -m scripts.repo_checks`（Markdown/schema passed）；`uv run --frozen python scripts/check.py`（669 passed，全部阶段 passed）；GitHub Actions `30108961803` 三个 job 全部 success | REST header、CLI、下载持久状态、WS 和 PDF hook 使用可关联 ID；旧 v1 task 自动补写；动态路径、token、密码、标题、本地路径和异常文本不进入诊断日志；`cookie.txt` 未读取且未暂存 |
-| `CT-04` | 2026-07-25 | `0168120` | `uv run --frozen python -m pytest tests/pandora_daemon/test_agent_workflows_e2e.py tests/pandora_daemon/test_bootstrap_smoke.py tests/pandora_daemon/test_agent_contracts.py tests/pandora_daemon/test_machine_contract.py -q`（50 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（532 passed）；`uv run --frozen python -m pytest -q`（675 passed）；`uv run --frozen python scripts/check.py`（675 passed，全部阶段 passed） | fixture CLI 经真实 parser、ASGI route、serializer/error handler 和 schema 覆盖 bootstrap、search、gallery、download NDJSON、library 与 PDF 成功/失败；未请求上游、未读取凭据或真实业务状态 |
+| `CT-04` | 2026-07-25 | `0168120` | `uv run --frozen python -m pytest tests/pandora_daemon/test_agent_workflows_e2e.py tests/pandora_daemon/test_bootstrap_smoke.py tests/pandora_daemon/test_agent_contracts.py tests/pandora_daemon/test_machine_contract.py -q`（50 passed）；`uv run --frozen python -m pytest tests/pandora_daemon -q`（532 passed）；`uv run --frozen python -m pytest -q`（675 passed）；`uv run --frozen python scripts/check.py`（675 passed，全部阶段 passed）；GitHub Actions `30110103154` 三个 job 全部 success | fixture CLI 经真实 parser、ASGI route、serializer/error handler 和 schema 覆盖 bootstrap、search、gallery、download NDJSON、library 与 PDF 成功/失败；未请求上游、未读取凭据或真实业务状态 |
 
 ## 7. 阻塞与人工门记录
 

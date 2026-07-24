@@ -26,7 +26,8 @@ export const GalleryDrawer = ({ open, onOpenChange, gid, token }: GalleryDrawerP
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className="drawer-overlay" />
-          <Dialog.Content className="drawer-content">
+          <Dialog.Content className="drawer-content" aria-describedby={undefined}>
+            <Dialog.Title>{detail?.title ?? 'Gallery details'}</Dialog.Title>
             <Tabs.Root defaultValue="info">
               <Tabs.List className="drawer-tabs">
                 <Tabs.Trigger value="info">Info</Tabs.Trigger>
@@ -42,7 +43,6 @@ export const GalleryDrawer = ({ open, onOpenChange, gid, token }: GalleryDrawerP
                     {detail.cover_url && (
                       <img src={imageProxyUrl(detail.cover_url)} alt={detail.title} className="drawer-cover" />
                     )}
-                    <h2>{detail.title}</h2>
                     {detail.title_jpn && <div className="muted">{detail.title_jpn}</div>}
                     <div className="detail-grid">
                       <span>Category</span><strong>{detail.category}</strong>
@@ -77,13 +77,13 @@ export const GalleryDrawer = ({ open, onOpenChange, gid, token }: GalleryDrawerP
                 )) : <div className="muted">No comments loaded.</div>}
               </Tabs.Content>
             </Tabs.Root>
+
+            {readerOpen && detail && (
+              <Reader gid={gid} token={token} pages={detail.pages} onClose={() => setReaderOpen(false)} />
+            )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-
-      {readerOpen && detail && (
-        <Reader gid={gid} token={token} pages={detail.pages} onClose={() => setReaderOpen(false)} />
-      )}
     </>
   );
 };

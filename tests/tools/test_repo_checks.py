@@ -83,6 +83,8 @@ def test_unified_check_plan_covers_required_stages():
         "Web lock and install",
         "Markdown links and Agent schemas",
         "Python tests",
+        "Web unit and component tests",
+        "Web browser tests",
         "Web lint",
         "Web build",
         "Git whitespace",
@@ -92,6 +94,8 @@ def test_unified_check_plan_covers_required_stages():
     assert plan["Web lock and install"] == ("npm", "--prefix", "pandora-web", "ci")
     assert plan["Markdown links and Agent schemas"][-1] == "scripts.repo_checks"
     assert plan["Python tests"][-3:] == ("-m", "pytest", "-q")
+    assert plan["Web unit and component tests"][-2:] == ("run", "test:unit")
+    assert plan["Web browser tests"][-2:] == ("run", "test:browser")
     assert plan["Web lint"][-2:] == ("run", "lint")
     assert plan["Web build"][-2:] == ("run", "build")
     assert plan["Git whitespace"] == ("git", "diff", "--check")
@@ -108,6 +112,8 @@ def test_unified_check_groups_partition_required_stages():
     assert [label for label, _ in CHECK_GROUPS["python"]] == ["Python tests"]
     assert [label for label, _ in CHECK_GROUPS["web"]] == [
         "Web lock and install",
+        "Web unit and component tests",
+        "Web browser tests",
         "Web lint",
         "Web build",
     ]
@@ -115,6 +121,15 @@ def test_unified_check_groups_partition_required_stages():
     grouped_checks = [check for checks in CHECK_GROUPS.values() for check in checks]
     assert len(grouped_checks) == len(CHECKS)
     assert set(grouped_checks) == set(CHECKS)
+
+
+def test_web_test_scripts_and_browser_config_exist():
+    package = json.loads((ROOT / "pandora-web" / "package.json").read_text())
+
+    assert package["scripts"]["test:unit"] == "vitest run"
+    assert package["scripts"]["test:browser"] == "playwright test"
+    assert (ROOT / "pandora-web" / "vitest.config.ts").is_file()
+    assert (ROOT / "pandora-web" / "playwright.config.ts").is_file()
 
 
 def test_unified_check_group_runs_only_selected_stages(monkeypatch):
