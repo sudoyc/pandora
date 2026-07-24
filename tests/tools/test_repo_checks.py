@@ -157,10 +157,10 @@ def test_ci_workflow_runs_fixture_only_unified_groups():
         if "uses" in step
     }
     assert action_references == {
-        "actions/checkout@v7",
-        "actions/setup-node@v7",
-        "actions/setup-python@v7",
-        "astral-sh/setup-uv@v9",
+        "actions/checkout@v7.0.1",
+        "actions/setup-node@v7.0.0",
+        "actions/setup-python@v7.0.0",
+        "astral-sh/setup-uv@v9.0.0",
     }
 
     forbidden_references = (
