@@ -131,22 +131,26 @@ class TestExceptionHandlers:
         assert data["detail"] == "Upstream request failed"
         assert "Unknown exhentai error" not in data["detail"]
 
-    def test_generic_runtime_error_returns_500_no_error_field(self, app):
+    def test_generic_runtime_error_returns_stable_internal_500(self, app):
         app.set_exception(RuntimeError("Something broke"))
         resp = app.get()
         assert resp.status_code == 500
         data = resp.json()
-        assert "error" not in data
-        assert data["detail"] == "Internal server error"
+        assert data == {
+            "error": "internal",
+            "detail": "Internal server error",
+        }
         assert "Something broke" not in data["detail"]
 
-    def test_generic_exception_returns_502_no_error_field(self, app):
+    def test_generic_exception_returns_stable_internal_500(self, app):
         app.set_exception(Exception("Connection details leaked"))
         resp = app.get()
-        assert resp.status_code == 502
+        assert resp.status_code == 500
         data = resp.json()
-        assert "error" not in data
-        assert data["detail"] == "Bad gateway"
+        assert data == {
+            "error": "internal",
+            "detail": "Internal server error",
+        }
         assert "Connection details leaked" not in data["detail"]
 
     @pytest.mark.parametrize(

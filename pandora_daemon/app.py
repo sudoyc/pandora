@@ -39,7 +39,6 @@ PARSE_ERROR_DETAIL = "Upstream response parse failed"
 NETWORK_ERROR_DETAIL = "Upstream network request failed"
 EXHENTAI_ERROR_DETAIL = "Upstream request failed"
 RUNTIME_ERROR_DETAIL = "Internal server error"
-GENERIC_ERROR_DETAIL = "Bad gateway"
 
 
 def _log_request_error(
@@ -178,12 +177,18 @@ def create_app() -> FastAPI:
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, exc: RuntimeError):
         _log_request_error(request, "runtime", exc, level=logging.ERROR)
-        return JSONResponse(status_code=500, content={"detail": RUNTIME_ERROR_DETAIL})
+        return JSONResponse(
+            status_code=500,
+            content={"error": "internal", "detail": RUNTIME_ERROR_DETAIL},
+        )
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
         _log_request_error(request, "unhandled", exc, level=logging.ERROR)
-        return JSONResponse(status_code=502, content={"detail": GENERIC_ERROR_DETAIL})
+        return JSONResponse(
+            status_code=500,
+            content={"error": "internal", "detail": RUNTIME_ERROR_DETAIL},
+        )
 
     app.include_router(router)
     return app

@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pandora_daemon import MACHINE_CONTRACT_VERSION
 from pandora_daemon.config import save_config
 from pandora_daemon.dependencies import get_state
 from pandora_daemon.state import AppState
@@ -79,6 +80,7 @@ async def get_health(state: AppState = Depends(get_state)):
     return {
         "ok": True,
         "version": _pandora_version(),
+        "contract_version": MACHINE_CONTRACT_VERSION,
         "service": "pandora-daemon",
         "auth_configured": bool(config.credentials.igneous and config.credentials.ipb_member_id),
         "capabilities": {

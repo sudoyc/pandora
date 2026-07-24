@@ -54,6 +54,10 @@ The canonical diagnostic order is `health`, `config`, `readiness`, then
 `status`; add `tags status` for search/tag work. A readiness exit code of 1 is a
 structured not-ready result, not a daemon connection failure.
 
+`health` also advertises the independent machine contract major in
+`contract_version`. Version compatibility, error mappings, CLI exits, and
+deprecation rules are defined in [`contract.md`](contract.md#machine-contract-versioning).
+
 Prefer installed `pandora ...` commands when Pandora is installed as a CLI package. Prefer `uv run python -m pandora_daemon.cli ...` from a checkout.
 
 ## Common Workflows

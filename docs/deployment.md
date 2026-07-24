@@ -114,10 +114,17 @@ Current error codes covered by CLI tests:
 
 - `connect_error`
 - `http_error`
+- `invalid_argument`
 - `invalid_gallery_target`
 - `usage_error`
 - `websocket_error`
 - `websocket_dependency_missing`
+
+`GET /api/health` exposes machine `contract_version: "1"` independently of the
+application version. CLI exits are 0 for success, 1 for recognized negative
+results or runtime failures, 2 for parser usage errors, and 130 for Ctrl-C.
+`refresh_failed` is specific to the `tags refresh` result and is not a generic
+CLI error-envelope code.
 
 ## Systemd User Service
 

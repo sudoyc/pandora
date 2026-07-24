@@ -17,6 +17,7 @@
           "enum": [
             "connect_error",
             "http_error",
+            "invalid_argument",
             "invalid_gallery_target",
             "usage_error",
             "websocket_error",

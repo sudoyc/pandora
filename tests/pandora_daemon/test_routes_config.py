@@ -113,6 +113,7 @@ class TestHealth:
         assert data["ok"] is True
         assert data["service"] == "pandora-daemon"
         assert isinstance(data["version"], str)
+        assert data["contract_version"] == "1"
         assert data["auth_configured"] is True
         assert data["capabilities"] == {
             "browse": True,

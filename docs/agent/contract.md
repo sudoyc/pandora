@@ -13,6 +13,40 @@ Agents may use:
 
 Installed CLI examples may use `pandora ...`; checkout examples use `uv run python -m pandora_daemon.cli ...`.
 
+## Machine Contract Versioning
+
+Pandora's machine contract has its own major version, independent of the
+application package version. `GET /api/health` advertises the active major as
+`contract_version`; the current value is `"1"`. The version covers the public
+REST fields and status mappings, CLI JSON/NDJSON envelopes and exit codes, and
+WebSocket event classification documented here.
+
+### Compatible changes
+
+Within contract v1, a change is compatible when it fixes an implementation to
+match this document or adds an optional field to an object documented as
+extensible. Existing field names, types, meanings, HTTP mappings, CLI exit
+semantics, and terminal WebSocket event classifications remain stable. Clients
+may ignore unknown nonterminal WebSocket events. A closed WebSocket stream
+before the watched download emits a terminal event is a `websocket_error`, not
+successful completion.
+
+### Breaking changes
+
+Removing or renaming a field, changing its type or meaning, changing a stable
+HTTP/error or CLI exit mapping, making an optional field required, or adding new
+terminal event semantics is breaking. A breaking change requires a new machine
+contract major and a parallel migration surface; an application package version
+bump alone does not change the machine contract.
+
+### Deprecation
+
+A deprecation documents its replacement, warns without corrupting machine
+stdout, and remains supported through at least one subsequent minor application
+release. Removal occurs only in a new machine contract major. Consumers should
+branch on stable codes and structured fields, not human-facing `detail` or
+`message` text.
+
 ## Readiness Probes
 
 ```bash
@@ -46,24 +80,31 @@ with exit 0; every not-ready result exits with exit 1. Daemon connection and HTT
 failures still use the standard CLI error envelope. Schema:
 [`schemas/readiness-response.schema.json`](schemas/readiness-response.schema.json).
 
-## Upstream REST Error Classification
+## REST Service Error Classification
 
-Daemon routes use a stable, sanitized envelope for upstream failures:
+Daemon exception handlers use a stable, sanitized envelope for classified
+service failures:
 
 ```json
 {"error":"session","detail":"Upstream session is invalid"}
 ```
 
-Core classifications:
+Stable classifications:
 
 - `auth`: required authentication configuration is absent or rejected.
 - `session`: the configured session is invalid or expired.
 - `upstream`: the upstream service or endpoint returned an unexpected HTTP status.
 - `parse`: the upstream HTML or JSON response could not be parsed.
 - `network`: the upstream transport failed.
+- `gallery_not_found`: the requested gallery is unavailable.
+- `image_limit`: the upstream image limit was reached.
+- `offensive`: the requested gallery is unavailable for policy reasons.
+- `exhentai`: an otherwise unclassified upstream-library failure occurred.
+- `internal`: an unexpected daemon failure occurred.
 
 A successful empty list is not an error category. Consumers must branch on
-`error`, not on the human-readable `detail`. The daemon does not include
+`error`, not on the human-readable `detail`. Unexpected daemon failures use HTTP
+500 with `error: "internal"`. The daemon does not include
 exception text, raw upstream responses, cookies, proxy credentials, or upstream
 status details in this envelope or its request-error logs.
 
@@ -81,12 +122,25 @@ Known error codes:
 
 - `connect_error`
 - `http_error`
+- `invalid_argument`
 - `invalid_gallery_target`
 - `usage_error`
 - `websocket_error`
 - `websocket_dependency_missing`
 
 Schema: [`schemas/cli-error-envelope.schema.json`](schemas/cli-error-envelope.schema.json).
+
+`refresh_failed` is an endpoint-specific result returned by `tags refresh`, not
+a generic CLI error-envelope code. Consumers should still branch on its nested
+code rather than its human-facing message.
+
+Stable process exit semantics:
+
+- exit 0: the command or watched download completed successfully.
+- exit 1: a recognized negative result, service/transport failure, invalid
+  command argument, or failed/incomplete WebSocket watch.
+- exit 2: CLI parser usage error.
+- exit 130: the operation was interrupted with Ctrl-C.
 
 ## Search Response Shape
 
@@ -155,6 +209,10 @@ Terminal watcher exit semantics:
 - `download_cancelled`: exit 1.
 - `download_paused`: exit 1.
 - `download_auth_failed`: exit 1.
+
+Unknown nonterminal events may be ignored. If the stream closes before one of
+the terminal events above, the CLI emits `websocket_error` and exits 1. Adding a
+new terminal classification requires a new machine contract major.
 
 Schema: [`schemas/download-event.schema.json`](schemas/download-event.schema.json).
 

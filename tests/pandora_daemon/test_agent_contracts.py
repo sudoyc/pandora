@@ -338,6 +338,7 @@ def test_health_contract_shape_is_minimal_and_safe():
     data = {
         "ok": True,
         "version": "0.2.0",
+        "contract_version": "1",
         "service": "pandora-daemon",
         "auth_configured": True,
         "capabilities": {
@@ -351,7 +352,10 @@ def test_health_contract_shape_is_minimal_and_safe():
         },
     }
 
-    _assert_keys(data, {"ok", "version", "service", "auth_configured", "capabilities"})
+    _assert_keys(
+        data,
+        {"ok", "version", "contract_version", "service", "auth_configured", "capabilities"},
+    )
     assert "config_path" not in data
     assert "database_path" not in data
     assert "download_path" not in data

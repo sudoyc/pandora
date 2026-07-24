@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pandora.local/schemas/upstream-error.schema.json",
-  "title": "Pandora Upstream REST Error",
+  "title": "Pandora REST Service Error",
   "type": "object",
   "required": ["error", "detail"],
   "additionalProperties": false,
@@ -17,7 +17,8 @@
         "gallery_not_found",
         "image_limit",
         "offensive",
-        "exhentai"
+        "exhentai",
+        "internal"
       ]
     },
     "detail": {"type": "string"}

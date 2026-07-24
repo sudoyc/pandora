@@ -16,6 +16,7 @@
 | ADR-006 | Accepted | 内部 model 与公共 DTO 分离 | 防止 token、本地路径和抓取辅助数据泄露或固化为契约 | 无；新增公共字段仍需显式评审 |
 | ADR-007 | Accepted | 本地优先并默认只绑定 loopback | daemon 持有凭据和本地文件能力，不应默认暴露公网 | 增加认证、TLS、权限模型和远程部署需求 |
 | ADR-008 | Accepted | 历史设计统一归档，不与当前文档并列 | 保留决策上下文，同时避免旧计划被误执行 | 无；归档内容需要恢复时先形成新决策 |
+| ADR-009 | Accepted | REST/CLI/WS 使用独立 major 的机器契约版本 | 应用发布版本不能表达 consumer 兼容性；跨 surface 的字段、错误和退出语义需要同一边界 | 引入正式版本化 RPC，或现有 v1 必须发生破坏性变化 |
 
 ## 决策约束
 
@@ -33,6 +34,14 @@ CLI、Web、Agent wrapper 不导入 `exhentai_api` 执行用户工作流，不�
 
 公开字段遵循最小必要原则。增加字段前先判断它是稳定用户概念还是 daemon 实现细节；
 后者保留在内部 model。所有机器契约变化必须有测试和文档共同落地。
+
+### 机器契约版本
+
+`GET /api/health` 公告独立于应用版本的 `contract_version`。同一 major 内只允许在明确可扩展
+对象增加可选字段；既有字段语义/类型、HTTP 错误映射、CLI 退出码和 WebSocket 终态分类保持
+稳定。破坏性变化必须启用新的 major 和并行迁移入口。弃用项需声明替代方案，不污染机器
+stdout，至少跨越后续一个 minor release，并且只能在新的机器契约 major 中移除。详细规则以
+[Agent Contract](../agent/contract.md#machine-contract-versioning) 为准。
 
 ### 历史实现
 

@@ -71,10 +71,15 @@ Default base URL: `http://127.0.0.1:7860`.
 
 Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`. `igneous` and `ipb_member_id` are the usual minimum; `ipb_pass_hash` is optional and should be left empty when the session does not require it. Public config and CLI machine output never expose raw credential values.
 
-### Upstream error classification
+The application version and machine contract version are independent. Clients
+can read `contract_version: "1"` from `GET /api/health`; compatibility and
+deprecation rules are defined in the
+[`Agent Contract`](agent/contract.md#machine-contract-versioning).
 
-Daemon routes that fail while calling the upstream service return a stable,
-sanitized REST envelope:
+### REST service error classification
+
+Daemon exception handlers return a stable, sanitized REST envelope for
+classified service failures:
 
 ```json
 {"error":"session","detail":"Upstream session is invalid"}
@@ -87,6 +92,8 @@ sanitized REST envelope:
 | 502 | `upstream` | The upstream service or endpoint returned an unexpected HTTP status |
 | 502 | `parse` | An upstream HTML or JSON response could not be parsed |
 | 502 | `network` | The upstream request failed at the transport layer |
+| 500 | `exhentai` | An otherwise unclassified upstream-library failure occurred |
+| 500 | `internal` | An unexpected daemon failure occurred |
 
 These categories are distinct from a successful empty list. The `detail` value
 is fixed human-readable text; exception messages, upstream status details,
@@ -176,7 +183,7 @@ is exposed as `completed` by REST and CLI surfaces.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/health` | Minimal daemon health and capability probe; omits credentials and local paths |
+| GET | `/api/health` | Minimal daemon health and capability probe; includes `contract_version`; omits credentials and local paths |
 | GET | `/api/readiness` | Read-only authenticated homepage/search/popular/home checks with stable, sanitized status values |
 | GET | `/api/config` | Public config; omits credentials and redacts proxy secrets |
 | PUT | `/api/config` | Update a validated subset of public server/download/cache config fields; not an arbitrary dict patch |
@@ -246,7 +253,16 @@ Machine-mode errors:
 {"ok": false, "error": {"code": "http_error", "message": "503 daemon unavailable"}}
 ```
 
-Current tested error codes include `connect_error`, `http_error`, `invalid_gallery_target`, `usage_error`, `websocket_error`, and `websocket_dependency_missing`.
+Current generic error-envelope codes are `connect_error`, `http_error`,
+`invalid_argument`, `invalid_gallery_target`, `usage_error`, `websocket_error`,
+and `websocket_dependency_missing`. The endpoint-specific `refresh_failed` code
+belongs to the `tags refresh` command result rather than that generic schema.
+
+Stable CLI exits are 0 for success, 1 for recognized negative results and
+runtime failures, 2 for parser usage errors, and 130 for Ctrl-C. A download
+WebSocket that closes before a terminal event emits `websocket_error` and exits
+1. See the Agent Contract for the complete compatibility policy and terminal
+event matrix.
 
 `readiness --json` prints the [`readiness response`](agent/schemas/readiness-response.schema.json)
 even when upstream is not ready. It exits with exit 0 only when `ready` is true

@@ -146,6 +146,8 @@ library 条目，forget 只移除非活动 task，两者都不改动 library 文
 - REST 是请求/响应和资源操作接口；WebSocket 只承载实时事件。
 - CLI 是 daemon 客户端，不是第二个业务实现；机器调用优先 JSON/NDJSON。
 - WebSocket discriminator 固定为 `event`，不是 `type`。
+- `GET /api/health` 通过独立的 `contract_version` 公告 REST/CLI/WS 机器契约 major；应用版本
+  升级不隐式改变该契约。
 - 公共 gallery/download/local-state DTO 不返回 daemon-only secret、抓取辅助字段或本地路径。
 - Agent Pack 是 agent 可见契约的权威文档；Hermes skill 只做薄封装。
 - 翻译标签使用显式 `status -> refresh? -> suggest -> agent choose -> search` 流程，

@@ -85,6 +85,7 @@ http://127.0.0.1:7860
 Basic health-style checks for agents:
 
 - `health --json` is a minimal capability probe; it intentionally omits credentials and local filesystem paths.
+- Its `contract_version` field advertises machine contract major `"1"`, independently of the application version.
 - `config --json` returns local-agent-safe runtime config: credentials are omitted and proxy secrets are redacted, but local non-secret paths may appear.
 - `readiness --json` reports authenticated homepage/search/popular/home status without returning upstream content.
 - Credentials may include optional `ipb_pass_hash`; leave it unset when the current session does not require it.
@@ -129,16 +130,23 @@ Current tested error codes:
 
 - `connect_error`
 - `http_error`
+- `invalid_argument`
 - `invalid_gallery_target`
 - `usage_error`
 - `websocket_error`
 - `websocket_dependency_missing`
 
+`refresh_failed` is a `tags refresh` command-result code, not part of the
+generic CLI error-envelope schema. Generic CLI exits are 0 for success, 1 for a
+recognized negative result or runtime failure, 2 for parser usage errors, and
+130 for Ctrl-C. Contract compatibility and deprecation rules live in
+`docs/agent/contract.md`.
+
 Upstream REST failures use the sanitized shape
 `{"error":"session","detail":"Upstream session is invalid"}`. Stable core
 classifications are `auth`, `session`, `upstream`, `parse`, and `network`; branch
-on `error`, not `detail`. Full semantics and the schema live in
-`docs/agent/contract.md`.
+on `error`, not `detail`. Unexpected daemon exceptions use `internal` with HTTP
+500. Full semantics and the schema live in `docs/agent/contract.md`.
 
 Browse/read-only commands:
 
@@ -239,6 +247,9 @@ Terminal download events:
 {"event":"download_paused","gid":"123","reason":"image_limit"}
 {"event":"download_auth_failed","gid":"123","error":"..."}
 ```
+
+Unknown nonterminal events may be ignored. WebSocket closure before a terminal
+event emits `websocket_error` and exits 1.
 
 CLI watcher exit semantics:
 

@@ -152,7 +152,12 @@ _DOWNLOAD_FAILURE_EVENTS = {
 _DOWNLOAD_TERMINAL_EVENTS = _DOWNLOAD_SUCCESS_EVENTS | _DOWNLOAD_FAILURE_EVENTS
 
 
-async def _consume_download_events(messages: Any, gid: str | None = None, ndjson: bool = False) -> int:
+async def _consume_download_events(
+    messages: Any,
+    gid: str | None = None,
+    ndjson: bool = False,
+    json_output: bool = False,
+) -> int:
     async for message in messages:
         event = json.loads(message)
         if gid is not None and str(event.get("gid")) != gid:
@@ -161,7 +166,13 @@ async def _consume_download_events(messages: Any, gid: str | None = None, ndjson
         event_name = event.get("event")
         if event_name in _DOWNLOAD_TERMINAL_EVENTS:
             return 0 if event_name in _DOWNLOAD_SUCCESS_EVENTS else 1
-    return 0
+    message = "WebSocket closed before a terminal event"
+    if ndjson:
+        return _emit_machine_error("websocket_error", message, ndjson=True)
+    if json_output:
+        return _emit_machine_error("websocket_error", message)
+    Console().print(f"[red]{message}[/red]")
+    return 1
 
 
 async def _watch_download_events(
@@ -175,7 +186,12 @@ async def _watch_download_events(
         import websockets
 
         async with websockets.connect(ws_url) as ws:
-            return await _consume_download_events(ws, gid=gid, ndjson=ndjson)
+            return await _consume_download_events(
+                ws,
+                gid=gid,
+                ndjson=ndjson,
+                json_output=json_output,
+            )
     except KeyboardInterrupt:
         return 130
     except ImportError:
@@ -231,7 +247,12 @@ async def _run_download_run(client: httpx.AsyncClient, daemon_url: str, args: ar
                     ndjson=ndjson,
                 )
 
-            return await _consume_download_events(ws, gid=gid, ndjson=ndjson)
+            return await _consume_download_events(
+                ws,
+                gid=gid,
+                ndjson=ndjson,
+                json_output=json_output,
+            )
     except KeyboardInterrupt:
         return 130
     except ImportError:
