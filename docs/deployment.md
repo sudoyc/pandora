@@ -55,6 +55,18 @@ Override when needed:
 uv run python -m pandora_daemon.cli health --json --daemon-url http://127.0.0.1:7860
 ```
 
+## Download State Recovery
+
+The daemon exclusively owns `~/.config/pandora/downloads.json`. Its current
+internal format is a version 1 envelope with `schema_version` and `tasks`.
+
+- Existing unversioned task mappings migrate to version 1 with an atomic temp-file replace.
+- Truncated JSON, invalid envelopes, and invalid task entries are preserved as `downloads.json.corrupt`, then `.corrupt.1`, and so on. The active file is rebuilt with every task that parsed successfully.
+- An explicit unsupported schema version aborts daemon startup before download workers start and leaves the file unchanged. Run a compatible Pandora version instead of editing or downgrading the file by hand.
+
+Use `download report --json` for task/library consistency. Agents and wrappers
+must not read or modify the state file or its recovery backups directly.
+
 ## Readiness Checks
 
 Use these before running agent workflows:

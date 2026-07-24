@@ -81,7 +81,7 @@ daemon，`exhentai_api` 也不得反向依赖配置、数据库或 UI。
 |---|---|---|---|
 | 凭据与运行配置 | `~/.config/pandora/config.toml` | daemon | 仅返回去凭据、去代理内容的公开配置 |
 | SQLite 数据 | `~/.config/pandora/pandora.db` | daemon | 专用 REST/CLI 接口 |
-| 下载队列快照 | `~/.config/pandora/downloads.json` | daemon | 公开 download DTO，不含 token/本地路径 |
+| 下载队列快照 | `~/.config/pandora/downloads.json` | daemon | 内部 v1 envelope；仅经公开 download DTO 暴露，不含 token/本地路径 |
 | 图片缓存 | `~/.cache/pandora/images` | daemon | 受限图片/页面接口 |
 | 标签数据库缓存 | `~/.cache/pandora/tags` | daemon | status/refresh/suggest 接口 |
 | 离线画廊 | `download.path`，默认 `~/Downloads/pandora` | daemon | library API 和 PDF export |
@@ -124,6 +124,11 @@ submit -> reject active duplicate -> fetch detail -> persist task -> queue worke
 页面文件和状态文件使用临时文件加 rename。终态包括 `completed`、
 `completed_with_errors`、`failed`、`paused` 和 `cancelled`；Agent watcher 的退出语义见
 [Agent Contract](../agent/contract.md)。
+
+`downloads.json` 当前使用 `schema_version: 1` 和 `tasks` envelope。既有无版本 task
+映射会在加载后以临时文件加 replace 原子迁移；截断、无效 envelope 或坏 task 会先把原始
+文件保留为唯一的 `.corrupt[.N]` 备份，再用可解析 task 重建当前格式。显式未知版本不会被
+降级覆盖，daemon 会在启动 worker 前报错。
 
 只读一致性报告以 daemon 已载入的 task 注册表为状态事实源，对照 `download.path` 下的
 metadata 和页面文件；它不重新实现 library 索引、不返回本地路径，也不执行修复。

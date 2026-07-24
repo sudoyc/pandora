@@ -259,6 +259,8 @@ Preserve these invariants when changing `pandora_daemon/download.py`:
 - Concurrent duplicate submits for the same active `gid` must be rejected.
 - A queued task becomes `downloading` before actual gallery work begins.
 - State writes should be atomic (`.tmp` + replace), not partial direct writes.
+- `downloads.json` uses a version 1 envelope with `schema_version` and `tasks`; the deployed unversioned mapping is the legacy migration input.
+- Corrupt state is retained as a unique `.corrupt[.N]` backup before valid tasks are rewritten; explicit unknown versions must remain untouched and abort startup.
 - Persisted `page_states` JSON keys must load back as integer page numbers.
 - Existing page files on disk count as completed during resume/retry.
 - `completed_with_errors`, `paused`, `failed`, and `cancelled` are terminal from an agent watcher perspective.
@@ -271,7 +273,7 @@ Before committing daemon/CLI/agent changes:
 ```bash
 uv run python -m pytest tests/pandora_daemon/test_cli.py -q
 uv run python -m pytest tests/pandora_daemon/test_routes_config.py tests/pandora_daemon/test_agent_contracts.py -q
-uv run python -m pytest tests/pandora_daemon/test_download.py tests/pandora_daemon/test_download_concurrency.py -q
+uv run python -m pytest tests/pandora_daemon/test_download.py tests/pandora_daemon/test_download_state.py tests/pandora_daemon/test_download_concurrency.py -q
 uv run python -m pytest -q
 git diff --check
 ```

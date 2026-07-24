@@ -13,6 +13,8 @@ Only `pandora-daemon` owns durable state:
 - Runtime config.
 
 Agents and wrappers may hold ephemeral in-memory command results for the current task only. They must not persist a parallel database, cache, download queue, session jar, bookmark list, or library index.
+They must not read or edit `downloads.json` or its recovery backups; use daemon
+status/report and recovery commands instead.
 
 ## Credential Rules
 

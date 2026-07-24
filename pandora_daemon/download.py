@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -19,6 +20,9 @@ from exhentai_api.exceptions import (
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
 from pandora_daemon.cache import _ext_from_url
+
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_filename(name: str) -> str:
@@ -35,6 +39,17 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 _TERMINAL_ARTIFACT_STATUSES = {"completed", "completed_with_errors"}
 _PAGE_FILE_RE = re.compile(r"^(\d{4,})\.[^.]+$")
+DOWNLOAD_STATE_SCHEMA_VERSION = 1
+
+
+class UnsupportedDownloadStateVersion(RuntimeError):
+    """Raised when a state file was written by an unsupported schema version."""
+
+    def __init__(self, version: object) -> None:
+        super().__init__(
+            f"Unsupported download state schema version {version}; "
+            f"expected {DOWNLOAD_STATE_SCHEMA_VERSION}"
+        )
 
 
 def _read_library_metadata(gallery_dir: Path) -> tuple[str, dict | None]:
@@ -673,10 +688,31 @@ class DownloadManager:
 
     def _save_state(self) -> None:
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
-        data = {gid: task.to_dict() for gid, task in self._tasks.items()}
+        data = {
+            "schema_version": DOWNLOAD_STATE_SCHEMA_VERSION,
+            "tasks": {gid: task.to_dict() for gid, task in self._tasks.items()},
+        }
         tmp_path = self._state_file.with_suffix(self._state_file.suffix + ".tmp")
         tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         tmp_path.replace(self._state_file)
+
+    def _corrupt_state_backup_path(self) -> Path:
+        base = self._state_file.with_name(f"{self._state_file.name}.corrupt")
+        candidate = base
+        index = 1
+        while candidate.exists():
+            candidate = base.with_name(f"{base.name}.{index}")
+            index += 1
+        return candidate
+
+    def _recover_corrupt_state(self) -> None:
+        backup_path = self._corrupt_state_backup_path()
+        self._state_file.replace(backup_path)
+        self._save_state()
+        logger.warning(
+            "Recovered corrupt download state; backup=%s",
+            backup_path.name,
+        )
 
     def _load_state(self) -> None:
         if not self._state_file.exists():
@@ -684,15 +720,56 @@ class DownloadManager:
         try:
             raw = self._state_file.read_text(encoding="utf-8")
             data = json.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, UnicodeError):
+            self._tasks.clear()
+            self._recover_corrupt_state()
             return
-        for gid, task_dict in data.items():
+
+        if not isinstance(data, dict):
+            self._tasks.clear()
+            self._recover_corrupt_state()
+            return
+
+        legacy_format = "schema_version" not in data
+        if legacy_format:
+            task_data = data
+        else:
+            version = data.get("schema_version")
+            if type(version) is not int:
+                self._tasks.clear()
+                self._recover_corrupt_state()
+                return
+            if version != DOWNLOAD_STATE_SCHEMA_VERSION:
+                raise UnsupportedDownloadStateVersion(version)
+            task_data = data.get("tasks")
+            if not isinstance(task_data, dict):
+                self._tasks.clear()
+                self._recover_corrupt_state()
+                return
+
+        loaded_tasks = {}
+        corrupt_entry = False
+        for gid, task_dict in task_data.items():
             try:
-                if isinstance(task_dict.get("page_states"), dict):
-                    task_dict["page_states"] = {
-                        int(page): state for page, state in task_dict["page_states"].items()
-                    }
-                task = DownloadTask(**task_dict)
-                self._tasks[gid] = task
+                if not isinstance(task_dict, dict):
+                    raise ValueError("Download task must be an object")
+                normalized = dict(task_dict)
+                page_states = normalized.get("page_states", {})
+                if not isinstance(page_states, dict):
+                    raise ValueError("Download task page_states must be an object")
+                normalized["page_states"] = {
+                    int(page): state for page, state in page_states.items()
+                }
+                task = DownloadTask(**normalized)
+                if task.gid != gid:
+                    raise ValueError("Download task gid does not match its state key")
+                loaded_tasks[gid] = task
             except Exception:
-                continue
+                corrupt_entry = True
+
+        self._tasks.clear()
+        self._tasks.update(loaded_tasks)
+        if corrupt_entry:
+            self._recover_corrupt_state()
+        elif legacy_format:
+            self._save_state()

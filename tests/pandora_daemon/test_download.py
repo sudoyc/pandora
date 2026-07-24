@@ -216,7 +216,8 @@ async def test_submit_saves_state(mock_api, mock_ws, mock_image_service, downloa
 
     assert state_file.exists()
     data = json.loads(state_file.read_text())
-    assert "123" in data
+    assert data["schema_version"] == 1
+    assert "123" in data["tasks"]
 
 
 # ---------------------------------------------------------------------------
@@ -337,9 +338,9 @@ async def test_save_and_load_state(mock_api, mock_ws, mock_image_service, downlo
     manager._save_state()
 
     data = json.loads(state_file.read_text())
-    assert "123" in data
-    assert data["123"]["gid"] == "123"
-    assert data["123"]["title"] == "Test Gallery"
+    assert data["schema_version"] == 1
+    assert data["tasks"]["123"]["gid"] == "123"
+    assert data["tasks"]["123"]["title"] == "Test Gallery"
 
 
 @pytest.mark.asyncio
@@ -393,7 +394,9 @@ async def test_save_state_writes_atomically(mock_api, mock_ws, mock_image_servic
 
     assert state_file.exists()
     assert not state_file.with_suffix(state_file.suffix + ".tmp").exists()
-    assert json.loads(state_file.read_text())["123"]["gid"] == "123"
+    data = json.loads(state_file.read_text())
+    assert data["schema_version"] == 1
+    assert data["tasks"]["123"]["gid"] == "123"
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +424,8 @@ async def test_shutdown_saves_state(mock_api, mock_ws, mock_image_service, downl
 
     assert state_file.exists()
     data = json.loads(state_file.read_text())
-    assert "123" in data
+    assert data["schema_version"] == 1
+    assert "123" in data["tasks"]
 
 
 # ---------------------------------------------------------------------------
