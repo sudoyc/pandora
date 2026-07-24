@@ -13,13 +13,13 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `WEB-04` |
+| Active work package | `WEB-05` |
 | Next work package | None |
-| Last completed work package | `WEB-03` |
+| Last completed work package | `WEB-04` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 676 passed（2026-07-25；本地统一检查，implementation `365fdc8`） |
-| Last Web evidence | 13 unit/component + 2 Chromium browser passed；lint/build passed（2026-07-25；本地统一检查，implementation `365fdc8`） |
+| Last full Python evidence | 676 passed（2026-07-25；本地统一检查，implementation `3a1a508`） |
+| Last Web evidence | 23 unit/component + 3 Chromium browser passed；lint/build passed（2026-07-25；本地统一检查，implementation `3a1a508`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -60,8 +60,8 @@
 | `WEB-01` | Yes | Done | `CT-02` | 建立 Web unit/component/browser 测试基线，覆盖已有 feed/detail/reader/WS reducer | 可重复 test script、现有行为基线测试、lint/build |
 | `WEB-02` | Yes | Done | `WEB-01` | 拆分 `App.tsx` 职责，形成 typed API/error 层和稳定 view state | 组件/hook tests；无契约复制；lint/build |
 | `WEB-03` | Yes | Done | `WEB-02`, `DL-04` | 初始加载、WS 重连、daemon 重启后下载状态从 REST 对账恢复 | disconnect/reconnect/restart browser tests |
-| `WEB-04` | Yes | In Progress | `WEB-02`, `CT-02` | favorites、history、downloads、library 页面与本地阅读形成完整流程 | 各页空/错/重试/component tests 和关键 E2E |
-| `WEB-05` | Yes | Queued | `WEB-03`, `WEB-04` | 桌面/移动端无重叠，键盘和对话框焦点可用 | 多视口截图检查、键盘/焦点 browser tests、lint/build |
+| `WEB-04` | Yes | Done | `WEB-02`, `CT-02` | favorites、history、downloads、library 页面与本地阅读形成完整流程 | 各页空/错/重试/component tests 和关键 E2E |
+| `WEB-05` | Yes | In Progress | `WEB-03`, `WEB-04` | 桌面/移动端无重叠，键盘和对话框焦点可用 | 多视口截图检查、键盘/焦点 browser tests、lint/build |
 | `DIST-01` | Yes | Queued | `REL-01`, `CT-04`, `WEB-05` | 用 ADR 选择一种维护成本可控的分发方式并构建 artifact | ADR、可重复 build、artifact 内容/版本检查 |
 | `DIST-02` | Yes | Queued | `DIST-01` | 隔离环境完成安装、启动、health/readiness、升级和回滚 | clean-environment scripted smoke 和失败恢复记录 |
 | `REL-02` | Yes | Gated | `DIST-02` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
@@ -131,6 +131,7 @@
 | `WEB-01` | 2026-07-25 | `84d9cae` | `uv run --frozen python -m pytest tests/tools/test_repo_checks.py -q`（11 passed）；`npm run test:unit`（4 files、5 tests passed）；`npm run test:browser`（1 Chromium smoke passed）；`npm run lint`、`npm run build`（passed）；`uv run --frozen python scripts/check.py`（676 passed，全部阶段 passed）；`npm audit --omit=dev`（0 vulnerabilities）；Playwright 1280x800 fixture 截图检查（reader 全视口、drawer/sidebar 层级正确、console 0 errors）；GitHub Actions `30111555658` 三个 job 全部 success | Vitest/Testing Library/jsdom 和系统浏览器 Playwright 基线覆盖 feed、search、detail、reader、WS reducer；统一 Web 检查已接入 unit/browser/lint/build；修复 reader 在 modal 外不可点击及 sidebar 覆盖问题 |
 | `WEB-02` | 2026-07-25 | `aec111d` | `npm run test:unit`（6 files、11 tests passed）；`npm run test:browser`（1 Chromium smoke passed，覆盖 feed→search/history→Browse→detail→reader）；`npm run lint`、`npm run build`（passed）；`uv run --frozen python scripts/check.py`（676 passed，全部阶段 passed）；Playwright 1280x800 fixture 截图检查（搜索/历史布局正常、reader 全视口、console 0 errors）；GitHub Actions `30112311546` 三个 job 全部 success | `App.tsx` 收敛为 43 行组合层；sidebar、search/header、feed、download panel 分离；判别联合消除 mode/query 无效组合；通用 `ApiError/apiGet` 保持 daemon 契约单一来源 |
 | `WEB-03` | 2026-07-25 | `365fdc8` | `npm run test:unit`（6 files、13 tests passed）；`npm run test:browser`（2 Chromium tests passed，覆盖初始 REST 快照、WS 事件、500ms 重连和 daemon restart 对账）；`npm run lint`、`npm run build`（passed）；`uv run --frozen python scripts/check.py`（676 passed，全部阶段 passed）；`npm audit --omit=dev`（0 vulnerabilities）；Playwright 1280x800 fixture 截图检查（下载面板/进度条布局正常、console/page errors 0）；GitHub Actions `30113164369` 的 Repository contracts、Python 3.12、Web 三个 job 全部 success | REST 快照为权威状态，WS 事件在快照请求期间重放；重连采用 500ms 起、上限 5s 的指数退避；旧 daemon 状态可被新快照替换 |
+| `WEB-04` | 2026-07-25 | `3a1a508` | `npm run test:unit`（7 files、23 tests passed，覆盖 workspace loading/empty/error/retry、favorites 分类、downloads live state 和本地 reader）；`npm run test:browser`（3 Chromium tests passed，覆盖 feed→reader、daemon restart 和四页面导航→本地阅读）；`npm run lint`、`npm run build`（passed）；`uv run --frozen python scripts/check.py`（676 passed，全部阶段 passed）；`npm audit --omit=dev`（0 vulnerabilities）；Playwright 1280x800 与 390x844 fixture 截图检查（无横向溢出或导航/内容重叠、console/page errors 0）；GitHub Actions `30114679940` 三个 job 全部 success | favorites/history/downloads/library 只消费 daemon REST；Library 直接使用本地文件端点；共享状态壳明确区分 loading、成功空列表、失败和 retry |
 
 ## 7. 阻塞与人工门记录
 
