@@ -1,36 +1,38 @@
 # 开发路线图
 
 状态：Active
-基线：`0.2.0` / `7b15c82`
-最近核对：2026-07-23
+基线：`0.2.0` / `8e824ec`（`DIST-02` checkpoint）
+最近核对：2026-07-25
 
-本路线图只维护尚未完成的工作。每个阶段以可验证结果结束，不按文件数量或主观完成度
-结项。阶段完成后记录验证结果，并把一次性实施计划移入 `docs/archive/`。
+本路线图维护阶段方向、依赖和完成标准。每个阶段以可验证结果结束，不按文件数量或主观
+完成度结项。动态工作包状态、命令证据和检查点只维护在
+[长期开发工作计划](development/work-program.md)，避免形成第二份执行事实源。
 
-跨轮次的具体工作包、依赖和完成证据维护在
-[长期开发工作计划](development/work-program.md)；无人值守执行必须遵守
+跨轮次无人值守执行必须遵守
 [长期开发约束](development/unattended-development.md)。
 
-## 当前基线
+## 当前进度
 
-- Python 全量测试：521 个通过（112 个 `exhentai_api`，409 个 daemon/CLI）。
-- Web lint 和 production build 通过，但没有组件或浏览器自动化测试。
-- daemon、公开 health/config/status、标签库和本地 Web 服务可启动。
-- 2026-07-23 本地只读实网探针中，browse/search/popular 返回空结果，用户 home 请求因
-  上游 `home.php` 返回 404 而成为 502；这说明“配置凭据”尚不能代表“会话可用”。
-- 本地曾出现下载状态仍存在但 library 为空的情况，缺少正式对账和修复入口。
-- 仓库没有 CI、release tag 或自动文档检查。
+- `UP-01` 至 `DIST-02` 已按工作计划记录的直接证据完成；最近一次统一检查为 685 个 Python
+  测试、25 个 Web unit/component 测试和 5 个 Chromium browser 测试全部通过。
+- readiness、下载对账/恢复、版本化机器契约、Web 日常工作流、主分支 CI、可重复 release
+  candidate 和纯 Python wheel 分发均已建立。
+- 隔离环境已验证旧版安装、daemon 启动、health/config/readiness/status、候选升级、计划回滚
+  和候选失败后的自动恢复。
+- 尚未创建正式 tag/release；Required `REL-02` 等待人工发布门，`CLOSE-01` 依赖该项保持
+  `Queued`。Optional `WRAP-01` 不影响核心完成判定。
+- 2026-07-23 后未重新执行真实账号探针；当前回归和分发证据来自脱敏 fixture 与隔离状态。
 
 ## 阶段总览
 
 | 优先级 | 阶段 | 状态 | 前置条件 |
 |---|---|---|---|
-| P0 | 上游会话与端点可用性 | Next | 无 |
-| P1 | 下载状态与 library 一致性 | Queued | P0 的错误分类稳定 |
-| P1 | CI 与发布基线 | Queued | 无，可与状态工作并行 |
-| P2 | Agent/CLI 契约版本化 | Later | P0/P1 通过 |
-| P2 | Web 可维护性与完整工作流 | Later | daemon 契约稳定 |
-| P3 | 分发与薄 wrapper | Gated | 契约稳定至少一个发布周期 |
+| P0 | 上游会话与端点可用性 | Done | 无 |
+| P1 | 下载状态与 library 一致性 | Done | P0 的错误分类稳定 |
+| P1 | CI 与发布基线 | Gated | CI/candidate 已完成；实际发布由 `REL-02` 人工门控制 |
+| P2 | Agent/CLI 契约版本化 | Done | P0/P1 通过 |
+| P2 | Web 可维护性与完整工作流 | Done | daemon 契约稳定 |
+| P3 | 分发与薄 wrapper | Done | 默认 wheel 分发已完成；wrapper 为 Optional 且保持 Gated |
 
 ## 优先级
 
@@ -148,8 +150,8 @@ queue/library 状态。
 
 ## 维护方式
 
-- 每次只允许一个阶段标记为 In Progress，并在实施计划中列出 owner 和验证命令。
+- 阶段优先级或完成标准变化时更新本文件；动态状态只在 work program 中维护。
 - 长期运行时只允许一个工作包为 In Progress，并在 work program 中记录检查点和直接证据。
 - 新需求先归入 P0-P3；无法说明用户结果和完成标准的条目不进入路线图。
-- 完成项从本文件移除，在提交、changelog 或归档实施计划中保留证据。
+- 阶段目标和完成标准保留在本文件；完成命令、提交和 CI 证据不在这里重复维护。
 - 架构方向变化先更新 [架构决策](architecture/decisions.md)，再调整路线图。
