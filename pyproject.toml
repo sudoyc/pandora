@@ -30,6 +30,8 @@ packages = ["exhentai_api", "pandora_daemon"]
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.25.1",
+    "markdown-it-py>=4.0.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
 ]

@@ -163,13 +163,19 @@ See [`docs/deployment.md`](docs/deployment.md) for daemon startup, readiness che
 
 ## Development
 
-```bash
-# Python tests
-uv run pytest tests/ -v
+From a clean checkout with `uv`, Node.js, and npm installed, run the complete
+local gate with one command:
 
-# Web frontend, when changed
-cd pandora-web && npm run lint && npm run build
+```bash
+uv run --frozen python scripts/check.py
 ```
+
+The checker verifies `uv.lock`, installs the exact Web lockfile with `npm ci`,
+checks tracked Markdown links and Agent JSON Schemas, runs all Python tests,
+runs Web lint and build, and finishes with `git diff --check`. Each stage prints
+its own `[CHECK]`, `[PASS]`, or `[FAIL]` label so a failure identifies the
+specific gate. Use the narrower command printed for a stage when iterating on a
+failure.
 
 ## API Reference
 
