@@ -38,6 +38,24 @@ and its recorded SHA-256 checksum for upgrades and rollback.
 Source-checkout commands using `uv run` remain development conveniences. They
 are not a second supported runtime distribution.
 
+Before replacing an installed version, run the isolated upgrade and rollback
+smoke from a source checkout with both verified wheels:
+
+```bash
+uv run --frozen python scripts/distribution_smoke.py \
+  --previous-wheel "$PREVIOUS_WHEEL" \
+  --candidate-wheel "$CANDIDATE_WHEEL"
+```
+
+This command uses temporary no-credential state and a loopback daemon. It does
+not contact authenticated upstream endpoints or modify the deployed config,
+database, cache, or downloads. Exit 0 confirms previous install, candidate
+upgrade, and planned rollback probes. On candidate failure, exit 1 with
+`automatic_rollback_recovered: true` confirms that the previous wheel was
+automatically reinstalled and probed. See the
+[release process runbook](development/release-process.md#upgrade-and-rollback-smoke)
+for the exact probe and state boundaries.
+
 For contract checks from a development checkout, the equivalent diagnostic
 sequence is:
 

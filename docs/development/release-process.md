@@ -77,6 +77,37 @@ To verify artifacts that were copied from a candidate run without rebuilding:
 uv run --frozen python scripts/release.py verify --dist-dir "$RC_DIR"
 ```
 
+## Upgrade and Rollback Smoke
+
+Keep the previous verified wheel alongside the candidate, then exercise the
+complete lifecycle from the source checkout:
+
+```bash
+uv run --frozen python scripts/distribution_smoke.py \
+  --previous-wheel "$PREVIOUS_WHEEL" \
+  --candidate-wheel "$CANDIDATE_WHEEL"
+```
+
+The candidate version must be strictly newer. The script creates a temporary
+Python 3.12 venv, HOME, config, cache, download directory, database, and
+loopback port. An empty local tag fixture prevents an upstream tag fetch. It
+installs and probes the previous wheel, upgrades and probes the candidate, then
+reinstalls and probes the previous wheel as a planned rollback. Each probe runs
+`health`, `config`, `readiness`, and `status`; the fixture deliberately has no
+credentials, so the expected readiness result is `not_configured` with CLI exit
+1.
+
+Success exits 0 with a JSON lifecycle report. If candidate installation or
+validation fails, the script automatically reinstalls and probes the previous
+wheel before exiting 1. In that failure report,
+`automatic_rollback_recovered: true` means recovery passed; `false` means the
+rollback also failed. Reports omit subprocess logs, config contents, and
+temporary paths.
+
+This smoke proves the empty isolated-state lifecycle. It does not prove that an
+older release can read state migrated by a newer release; keep compatible state
+backups and follow the rollback rules below for a deployed instance.
+
 ## Manual Release Gate
 
 `REL-02` may proceed only after `DIST-02` has completed installation, startup,
