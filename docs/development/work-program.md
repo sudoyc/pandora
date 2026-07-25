@@ -13,10 +13,10 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `REL-02` |
-| Next work package | `CLOSE-01`（Queued） |
+| Active work package | `BUG-20260725-03` |
+| Next work package | `REL-02`（Blocked） |
 | Last completed work package | `BUG-20260725-02` |
-| Blockers | None；`REL-02` 人工门已于 2026-07-25 放行 |
+| Blockers | None；`REL-02` 待 `BUG-20260725-03` 完成后恢复 |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
 | Last full Python evidence | 685 passed（2026-07-25；本地统一检查，implementation `19e23b2`） |
 | Last Web evidence | 25 unit/component + 5 Chromium browser passed；full audit/lint/build passed（2026-07-25；本地统一检查，implementation `19e23b2`） |
@@ -66,7 +66,8 @@
 | `DIST-02` | Yes | Done | `DIST-01` | 隔离环境完成安装、启动、health/readiness、升级和回滚 | clean-environment scripted smoke 和失败恢复记录 |
 | `BUG-20260725-01` | Yes | Done | `DIST-02` | 现役 roadmap/architecture 不再把已完成能力描述为未完成 | 陈旧声明扫描、Markdown links/schema、统一检查 |
 | `BUG-20260725-02` | Yes | Done | `WEB-05`, `CI-02` | 清除有修复版本的 Web 开发工具链依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查 |
-| `REL-02` | Yes | In Progress | `DIST-02` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
+| `BUG-20260725-03` | Yes | In Progress | `BUG-20260725-02` | 清除发布门 CI 新报告的 `brace-expansion` 高危开发依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查、主分支 CI |
+| `REL-02` | Yes | Blocked | `DIST-02`, `BUG-20260725-03` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
 | `WRAP-01` | No | Gated | `CT-04`, `DIST-02` | 有真实需求时创建只包装 CLI/REST/WS 的薄 consumer | 需求证据、同一 contract suite、无第二状态层 |
 | `CLOSE-01` | Yes | Queued | 除自身外全部 Required | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
 
