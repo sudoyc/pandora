@@ -1,6 +1,6 @@
 # 开发路线图
 
-状态：Final Audit
+状态：Complete
 基线：`0.2.0` / `v0.2.0`（`5f9cf3b`）
 最近核对：2026-07-25
 
@@ -13,15 +13,15 @@
 
 ## 当前进度
 
-- `UP-01` 至 `REL-02` 已按工作计划记录的直接证据完成；最近一次分组检查为 685 个 Python
+- `UP-01` 至 `CLOSE-01` 已按工作计划记录的直接证据完成；最终统一检查为 685 个 Python
   测试、25 个 Web unit/component 测试和 5 个 Chromium browser 测试全部通过。
 - readiness、下载对账/恢复、版本化机器契约、Web 日常工作流、主分支 CI、可重复 release
   candidate 和纯 Python wheel 分发均已建立。
 - 隔离环境已验证旧版安装、daemon 启动、health/config/readiness/status、候选升级、计划回滚
   和候选失败后的自动恢复。
 - 注释 tag `v0.2.0` 和非草稿 GitHub Release 已发布；上传后的 wheel/sdist checksum、内容、
-  安装、升级和回滚均已复核。`CLOSE-01` 正在执行最终审计；Optional `WRAP-01` 不影响核心
-  完成判定。
+  安装、升级和回滚均已复核。`CLOSE-01` 最终审计已完成；Optional `WRAP-01` 不影响核心
+  完成判定。最终证据见 [完成报告](development/completion-report.md)。
 - 2026-07-23 后未重新执行真实账号探针；当前回归和分发证据来自脱敏 fixture 与隔离状态。
 
 ## 阶段总览

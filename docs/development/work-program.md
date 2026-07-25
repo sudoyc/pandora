@@ -1,6 +1,6 @@
 # Pandora 长期开发工作计划
 
-状态：In Progress
+状态：Complete
 范围：当前路线图全部 Required 工作包
 最近核对：2026-07-25
 
@@ -12,14 +12,14 @@
 
 | 字段 | 当前值 |
 |---|---|
-| Program | In Progress |
-| Active work package | `CLOSE-01` |
+| Program | Complete |
+| Active work package | None |
 | Next work package | None |
-| Last completed work package | `BUG-20260725-04` |
+| Last completed work package | `CLOSE-01` |
 | Blockers | None |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
-| Last full Python evidence | 685 passed（2026-07-25；本地分组检查，implementation `6f20bde`） |
-| Last Web evidence | 25 unit/component + 5 Chromium browser passed；full audit/lint/build passed（2026-07-25；本地分组检查，implementation `6f20bde`） |
+| Last full Python evidence | 685 passed（2026-07-25；最终本地统一检查，audit baseline `0c375cf`） |
+| Last Web evidence | 25 unit/component + 5 Chromium browser passed；full audit/lint/build passed（2026-07-25；audit baseline `0c375cf`） |
 
 维护规则：开始工作时只把一个工作包改为 `In Progress`；完成时填写实际证据和 commit，并更新
 下一项。详细过程保留在提交历史或阶段完成报告，不在本文件堆积逐命令日志。
@@ -70,7 +70,7 @@
 | `REL-02` | Yes | Done | `DIST-02`, `BUG-20260725-03` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
 | `BUG-20260725-04` | Yes | Done | `CI-02`, `BUG-20260725-03` | Web 安装与强制审计不重复请求 registry，保留单一可定位审计门槛 | 失败回归、repository/Web 分组、统一检查、主分支 CI |
 | `WRAP-01` | No | Gated | `CT-04`, `DIST-02` | 有真实需求时创建只包装 CLI/REST/WS 的薄 consumer | 需求证据、同一 contract suite、无第二状态层 |
-| `CLOSE-01` | Yes | In Progress | 除自身外全部 Required，`BUG-20260725-04` | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
+| `CLOSE-01` | Yes | Done | 除自身外全部 Required，`BUG-20260725-04` | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
 
 ## 4. 阶段验收补充
 
@@ -144,6 +144,7 @@
 | `BUG-20260725-03` | 2026-07-25 | `f26423e` | GitHub Actions `30139757447` 复现 `brace-expansion` 链路 5 high；升级至 ESLint `10.8.0`、`@eslint/js` `10.0.1`、`brace-expansion` `5.0.8` 后完整 `npm audit` 为 0；fresh `npm ci`（285 packages）；Web unit/component（25 passed）、Chromium browser（5 passed）、lint/build 均 passed；repository 分组全部 passed；Python（685 passed） | 仅升级兼容性已由 peer 声明和 lint/tests 验证的开发工具链；无运行时依赖增删，`REL-02` 恢复执行 |
 | `REL-02` | 2026-07-25 | `5f9cf3b` (`v0.2.0`) | GitHub Actions `30139962199` 三个 job 全部 success；两次 candidate 构建逐字节一致；wheel SHA-256 `75d875608589d4e99a5234745fa1db55553282294b810626484e0ad30712c485`，sdist SHA-256 `b00ec342e6db2337833bb95830be33e33f500dc4f5e0a4a3c18a79a3ba5ee66a`；远端注释 tag peel 至 `5f9cf3b`；GitHub Release `v0.2.0` 非草稿/非预发布；两项资产回下载 `cmp`、checksum 和 verifier 均 passed；下载 wheel 的 `0.1.0` → `0.2.0` → `0.1.0` smoke 通过 | 操作者明确放行后发布；Release ID `359632082`；保留已验证 `0.1.0` wheel 作为回滚点；未读取真实凭据或执行上游请求 |
 | `BUG-20260725-04` | 2026-07-25 | `6f20bde` | 最终统一检查在 `npm ci` 已报告 0 vulnerabilities 后，第二次 registry audit 请求以 `ETIMEDOUT` 失败；回归断言先以 1 failed/10 passed 复现；安装命令加入 `--audit=false` 后 11 passed；Web 分组 fresh `npm ci`（285 packages）、独立 audit（0 vulnerabilities）、25 unit/component、5 Chromium、lint/build 全部 passed；repository 分组和 Python（685 passed）均通过 | 仍保留唯一强制 `Web dependency audit` 阶段及失败标签，只移除安装命令的隐式重复网络请求；`CLOSE-01` 恢复执行 |
+| `CLOSE-01` | 2026-07-25 | `a4e37c0`, `a93d65e` | `uv run --frozen python scripts/check.py` 全部阶段 passed：完整 audit 0 vulnerabilities、Python 685、Web unit/component 25、Chromium 5、lint/build、locks、release metadata、Markdown/schema 和 whitespace；Agent/CLI/REST/WS fixture E2E 50 passed；现役发布状态漂移、TODO/FIXME/HACK、skip/xfail、公开未结 issue 均为 0；Required 除自身外全部 Done；GitHub Actions `30140355706` 三个 job 全部 success | [完成报告](completion-report.md)记录 `v0.2.0` 远端资产、回滚、分阶段证据和遗留分类；Optional `WRAP-01` 保持 Gated；真实账号探针未重跑且不属于本次验收 |
 
 ## 7. 阻塞与人工门记录
 
