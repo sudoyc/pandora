@@ -92,7 +92,9 @@ def test_unified_check_plan_covers_required_stages():
     }
     assert plan["Python lock"] == ("uv", "lock", "--check")
     assert plan["Release metadata"][-2:] == ("scripts/release.py", "check")
-    assert plan["Web lock and install"] == ("npm", "--prefix", "pandora-web", "ci")
+    assert plan["Web lock and install"] == (
+        "npm", "--prefix", "pandora-web", "ci", "--audit=false",
+    )
     assert plan["Web dependency audit"] == (
         "npm", "--prefix", "pandora-web", "audit", "--audit-level=low",
     )

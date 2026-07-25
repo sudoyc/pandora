@@ -13,10 +13,10 @@
 | 字段 | 当前值 |
 |---|---|
 | Program | In Progress |
-| Active work package | `CLOSE-01` |
-| Next work package | None |
+| Active work package | `BUG-20260725-04` |
+| Next work package | `CLOSE-01`（Blocked） |
 | Last completed work package | `REL-02` |
-| Blockers | None |
+| Blockers | None；`CLOSE-01` 待 `BUG-20260725-04` 完成后恢复 |
 | Source baseline | `fdca102`; 2026-07-23 文档与运行盘点 |
 | Last full Python evidence | 685 passed（2026-07-25；本地分组检查，implementation `f26423e`） |
 | Last Web evidence | 25 unit/component + 5 Chromium browser passed；full audit/lint/build passed（2026-07-25；本地分组检查，implementation `f26423e`） |
@@ -68,8 +68,9 @@
 | `BUG-20260725-02` | Yes | Done | `WEB-05`, `CI-02` | 清除有修复版本的 Web 开发工具链依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查 |
 | `BUG-20260725-03` | Yes | Done | `BUG-20260725-02` | 清除发布门 CI 新报告的 `brace-expansion` 高危开发依赖告警 | 完整 npm audit、unit/browser/lint/build、统一检查、主分支 CI |
 | `REL-02` | Yes | Done | `DIST-02`, `BUG-20260725-03` | 经人工放行后创建内部 tag/release，版本、tag 和 artifact 完全一致 | 远端 tag/release、artifact 校验和、安装 smoke、回滚点 |
+| `BUG-20260725-04` | Yes | In Progress | `CI-02`, `BUG-20260725-03` | Web 安装与强制审计不重复请求 registry，保留单一可定位审计门槛 | 失败回归、repository/Web 分组、统一检查、主分支 CI |
 | `WRAP-01` | No | Gated | `CT-04`, `DIST-02` | 有真实需求时创建只包装 CLI/REST/WS 的薄 consumer | 需求证据、同一 contract suite、无第二状态层 |
-| `CLOSE-01` | Yes | In Progress | 除自身外全部 Required | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
+| `CLOSE-01` | Yes | Blocked | 除自身外全部 Required，`BUG-20260725-04` | 逐条审计路线图、文档、测试、构建、分发和遗留项 | 最终 HEAD 全门槛通过、完成报告、干净且已同步的 Git 状态 |
 
 ## 4. 阶段验收补充
 

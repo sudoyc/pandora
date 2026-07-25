@@ -17,7 +17,10 @@ CHECKS: tuple[Check, ...] = (
         "Release metadata",
         ("uv", "run", "--frozen", "python", "scripts/release.py", "check"),
     ),
-    ("Web lock and install", ("npm", "--prefix", "pandora-web", "ci")),
+    (
+        "Web lock and install",
+        ("npm", "--prefix", "pandora-web", "ci", "--audit=false"),
+    ),
     (
         "Web dependency audit",
         ("npm", "--prefix", "pandora-web", "audit", "--audit-level=low"),
