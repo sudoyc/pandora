@@ -189,6 +189,7 @@ TUI 已冻结，不纳入默认功能开发验证。
 - Web 仍是可选 consumer；下载对账、核心 workspace、桌面/移动布局和对话框键盘焦点已有
   fixture 与浏览器覆盖。
 - 主分支 CI、内部 release candidate 和默认 wheel 分发已建立；隔离环境的安装、启动、探测、
-  升级、计划回滚和候选失败恢复 smoke 已完成，正式 tag/release 仍受人工门控制。
+  升级、计划回滚和候选失败恢复 smoke 已完成；`v0.2.0` tag/release 及其 wheel/sdist 已发布并
+  通过回下载 checksum、内容和生命周期验证。
 
 这些事项的处理顺序和验收标准见 [开发路线图](../roadmap.md)。

@@ -1,7 +1,7 @@
 # 开发路线图
 
-状态：Active
-基线：`0.2.0` / `8e824ec`（`DIST-02` checkpoint）
+状态：Final Audit
+基线：`0.2.0` / `v0.2.0`（`5f9cf3b`）
 最近核对：2026-07-25
 
 本路线图维护阶段方向、依赖和完成标准。每个阶段以可验证结果结束，不按文件数量或主观
@@ -13,14 +13,15 @@
 
 ## 当前进度
 
-- `UP-01` 至 `DIST-02` 已按工作计划记录的直接证据完成；最近一次统一检查为 685 个 Python
+- `UP-01` 至 `REL-02` 已按工作计划记录的直接证据完成；最近一次分组检查为 685 个 Python
   测试、25 个 Web unit/component 测试和 5 个 Chromium browser 测试全部通过。
 - readiness、下载对账/恢复、版本化机器契约、Web 日常工作流、主分支 CI、可重复 release
   candidate 和纯 Python wheel 分发均已建立。
 - 隔离环境已验证旧版安装、daemon 启动、health/config/readiness/status、候选升级、计划回滚
   和候选失败后的自动恢复。
-- 尚未创建正式 tag/release；Required `REL-02` 等待人工发布门，`CLOSE-01` 依赖该项保持
-  `Queued`。Optional `WRAP-01` 不影响核心完成判定。
+- 注释 tag `v0.2.0` 和非草稿 GitHub Release 已发布；上传后的 wheel/sdist checksum、内容、
+  安装、升级和回滚均已复核。`CLOSE-01` 正在执行最终审计；Optional `WRAP-01` 不影响核心
+  完成判定。
 - 2026-07-23 后未重新执行真实账号探针；当前回归和分发证据来自脱敏 fixture 与隔离状态。
 
 ## 阶段总览
@@ -29,7 +30,7 @@
 |---|---|---|---|
 | P0 | 上游会话与端点可用性 | Done | 无 |
 | P1 | 下载状态与 library 一致性 | Done | P0 的错误分类稳定 |
-| P1 | CI 与发布基线 | Gated | CI/candidate 已完成；实际发布由 `REL-02` 人工门控制 |
+| P1 | CI 与发布基线 | Done | CI/candidate 与 `v0.2.0` tag/release 均已完成 |
 | P2 | Agent/CLI 契约版本化 | Done | P0/P1 通过 |
 | P2 | Web 可维护性与完整工作流 | Done | daemon 契约稳定 |
 | P3 | 分发与薄 wrapper | Done | 默认 wheel 分发已完成；wrapper 为 Optional 且保持 Gated |
