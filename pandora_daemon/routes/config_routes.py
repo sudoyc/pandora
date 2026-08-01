@@ -76,13 +76,12 @@ async def get_config(state: AppState = Depends(get_state)):
 
 @router.get("/api/health")
 async def get_health(state: AppState = Depends(get_state)):
-    config = state.config
     return {
         "ok": True,
         "version": _pandora_version(),
         "contract_version": MACHINE_CONTRACT_VERSION,
         "service": "pandora-daemon",
-        "auth_configured": bool(config.credentials.igneous and config.credentials.ipb_member_id),
+        "auth_configured": state.provider.auth_configured,
         "capabilities": {
             "browse": True,
             "gallery_detail": True,

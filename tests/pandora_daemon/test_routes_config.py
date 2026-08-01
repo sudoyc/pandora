@@ -9,17 +9,20 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from pandora_daemon.config import CredentialsConfig, PandoraConfig
+from pandora_daemon.config import PandoraConfig, ProviderConfig
 from pandora_daemon.routes.config_routes import _pandora_version, router
 from pandora_daemon.state import AppState
 
 
-def _make_app(config=None, config_path=None):
+def _make_app(config=None, config_path=None, *, auth_configured: bool = False):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
     state.config = config or PandoraConfig()
     state.config_path = config_path or Path("/tmp/config.toml")
+    provider = MagicMock()
+    provider.auth_configured = auth_configured
+    state.provider = provider
     state.ws = MagicMock()
     app.state.pandora = state
     return app, state
@@ -34,14 +37,27 @@ class TestGetConfig:
 
         assert resp.status_code == 200
 
-    def test_get_config_credentials_not_in_response(self):
-        app, _ = _make_app()
+    def test_get_config_includes_provider_id_without_credentials(self):
+        config = PandoraConfig(
+            provider=ProviderConfig(
+                id="fixture-provider",
+                credentials={
+                    "access_token": "secret-token",
+                    "refresh_token": "secret-refresh-token",
+                },
+            ),
+        )
+        app, _ = _make_app(config=config)
         client = TestClient(app)
 
         resp = client.get("/api/config")
 
         data = resp.json()
+        assert data["provider"] == {"id": "fixture-provider"}
         assert "credentials" not in data
+        assert "credentials" not in data["provider"]
+        assert "secret-token" not in resp.text
+        assert "secret-refresh-token" not in resp.text
 
     def test_get_config_server_port_is_7860(self):
         app, _ = _make_app()
@@ -107,11 +123,21 @@ class TestHealth:
 
     def test_health_returns_safe_public_shape(self, tmp_path):
         config = PandoraConfig(
-            credentials=CredentialsConfig(igneous="secret-igneous", ipb_member_id="secret-member"),
+            provider=ProviderConfig(
+                id="fixture-provider",
+                credentials={
+                    "access_token": "secret-token",
+                    "refresh_token": "secret-refresh-token",
+                },
+            ),
         )
         config.download.path = "~/Downloads/pandora"
         config.cache.image_dir = "~/.cache/pandora/images"
-        app, _ = _make_app(config=config, config_path=tmp_path / "config.toml")
+        app, _ = _make_app(
+            config=config,
+            config_path=tmp_path / "config.toml",
+            auth_configured=True,
+        )
         client = TestClient(app)
 
         resp = client.get("/api/health")
@@ -136,17 +162,24 @@ class TestHealth:
         assert "database_path" not in data
         assert "download_path" not in data
         assert "cache_path" not in data
-        assert "secret-igneous" not in resp.text
-        assert "secret-member" not in resp.text
+        assert "secret-token" not in resp.text
+        assert "secret-refresh-token" not in resp.text
 
-    def test_health_reports_auth_not_configured(self):
-        app, _ = _make_app()
+    def test_health_reports_auth_not_configured_for_unconfigured_provider(self):
+        config = PandoraConfig(
+            provider=ProviderConfig(
+                id="fixture-provider",
+                credentials={"access_token": "present-but-disabled"},
+            ),
+        )
+        app, _ = _make_app(config=config, auth_configured=False)
         client = TestClient(app)
 
         resp = client.get("/api/health")
 
         assert resp.status_code == 200
         assert resp.json()["auth_configured"] is False
+        assert "present-but-disabled" not in resp.text
 
 
 class TestUpdateConfig:
@@ -221,7 +254,7 @@ class TestUpdateConfig:
         client = TestClient(app)
 
         with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
-            resp = client.put("/api/config", json={"credentials": {"igneous": "secret"}})
+            resp = client.put("/api/config", json={"credentials": {"access_token": "secret"}})
 
         assert resp.status_code == 422
         mock_save.assert_not_called()
@@ -237,10 +270,16 @@ class TestUpdateConfig:
         assert resp.status_code == 422
         mock_save.assert_not_called()
 
-    def test_update_config_response_omits_credentials(self, tmp_path):
+    def test_update_config_response_includes_provider_id_without_credentials(self, tmp_path):
         config_path = tmp_path / "config.toml"
         config = PandoraConfig(
-            credentials=CredentialsConfig(igneous="secret-igneous", ipb_member_id="secret-member"),
+            provider=ProviderConfig(
+                id="fixture-provider",
+                credentials={
+                    "access_token": "secret-token",
+                    "refresh_token": "secret-refresh-token",
+                },
+            ),
         )
         app, _ = _make_app(config=config, config_path=config_path)
         client = TestClient(app)
@@ -249,9 +288,11 @@ class TestUpdateConfig:
             resp = client.put("/api/config", json={"server": {"port": 8080}})
 
         data = resp.json()
+        assert data["provider"] == {"id": "fixture-provider"}
         assert "credentials" not in data
-        assert "secret-igneous" not in resp.text
-        assert "secret-member" not in resp.text
+        assert "credentials" not in data["provider"]
+        assert "secret-token" not in resp.text
+        assert "secret-refresh-token" not in resp.text
 
     def test_update_config_rejects_null_section(self, tmp_path):
         config_path = tmp_path / "config.toml"

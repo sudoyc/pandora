@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from dataclasses import asdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -37,7 +36,9 @@ from pandora_daemon.providers import (
     default_provider_registry,
 )
 
+
 logger = logging.getLogger(__name__)
+
 
 AUTH_ERROR_DETAIL = "Authentication failed"
 SESSION_ERROR_DETAIL = "Upstream session is invalid"
@@ -92,7 +93,7 @@ async def _cache_eviction_loop(cache: CacheManager, interval: int) -> None:
 
 async def _build_state(
     provider_registry: ProviderRegistry | None = None,
-    provider_id: str = "exhentai",
+    provider_id: str | None = None,
 ) -> AppState:
     """Construct all components and return AppState."""
     config_path = Path("~/.config/pandora/config.toml").expanduser()
@@ -100,13 +101,29 @@ async def _build_state(
     db_path = config_path.parent / "pandora.db"
     db = PandoraDB(db_path)
     await db.initialize()
+    registry = (
+        provider_registry
+        if provider_registry is not None
+        else default_provider_registry()
+    )
+    candidates = (provider_id, config.provider.id, registry.default_provider_id)
+    selected_provider_id = next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate is not None and candidate.strip()
+        ),
+        None,
+    )
+    if selected_provider_id is None:
+        raise ValueError("No provider id configured")
     provider_context = ProviderContext(
-        credentials=asdict(config.credentials),
+        credentials=dict(config.provider.credentials),
         proxy=config.network.proxy,
         timeout=config.network.timeout,
     )
-    registry = provider_registry or default_provider_registry()
-    provider = registry.create(provider_id, provider_context)
+    provider = registry.create(selected_provider_id, provider_context)
+    config.provider.id = provider.provider_id
     cache = CacheManager(config.cache)
     image_service = ImageService(provider=provider, cache=cache, config=config.cache)
     ws = WebSocketManager()

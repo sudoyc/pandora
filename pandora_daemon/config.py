@@ -16,13 +16,11 @@ DEFAULT_CONFIG_PATH = Path("~/.config/pandora/config.toml")
 
 
 @dataclass
-class CredentialsConfig:
-    """ExHentai session credentials."""
+class ProviderConfig:
+    """Provider selection and credential values."""
 
-    igneous: str = ""
-    ipb_member_id: str = ""
-    ipb_pass_hash: str = ""
-
+    id: str = ""
+    credentials: dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class ServerConfig:
@@ -67,7 +65,7 @@ class NetworkConfig:
 class PandoraConfig:
     """Top-level pandora daemon configuration."""
 
-    credentials: CredentialsConfig = field(default_factory=CredentialsConfig)
+    provider: ProviderConfig = field(default_factory=ProviderConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     download: DownloadConfig = field(default_factory=DownloadConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
@@ -75,8 +73,8 @@ class PandoraConfig:
 
     def __post_init__(self) -> None:
         # Allow callers to pass None for sub-configs; replace with defaults.
-        if self.credentials is None:
-            self.credentials = CredentialsConfig()
+        if self.provider is None:
+            self.provider = ProviderConfig()
         if self.server is None:
             self.server = ServerConfig()
         if self.download is None:
@@ -87,8 +85,11 @@ class PandoraConfig:
             self.network = NetworkConfig()
 
     def to_public_dict(self) -> dict[str, Any]:
-        """Return config as a dict with credentials and proxy secrets stripped out."""
+        """Return config with credentials and proxy secrets stripped out."""
         return {
+            "provider": {
+                "id": self.provider.id,
+            },
             "server": {
                 "host": self.server.host,
                 "port": self.server.port,
@@ -116,14 +117,16 @@ class PandoraConfig:
 
     def _to_dict(self) -> dict[str, Any]:
         """Return full config as a dict (including credentials)."""
-        return {
-            "credentials": {
-                "igneous": self.credentials.igneous,
-                "ipb_member_id": self.credentials.ipb_member_id,
-                "ipb_pass_hash": self.credentials.ipb_pass_hash,
-            },
-            **self.to_public_dict(),
+        data = self.to_public_dict()
+        data["provider"] = {
+            "id": self.provider.id,
+            "credentials": self.provider.credentials,
         }
+        data["network"] = {
+            "proxy": self.network.proxy,
+            "timeout": self.network.timeout,
+        }
+        return data
 
 
 def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
@@ -142,11 +145,28 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
     with open(path, "rb") as f:
         data = tomllib.load(f)
 
-    cred_data = data.get("credentials", {})
-    credentials = CredentialsConfig(
-        igneous=cred_data.get("igneous", ""),
-        ipb_member_id=cred_data.get("ipb_member_id", ""),
-        ipb_pass_hash=cred_data.get("ipb_pass_hash", ""),
+    provider_data = data.get("provider", {})
+    if not isinstance(provider_data, dict):
+        provider_data = {}
+
+    provider_id = provider_data.get("id", "")
+    if not isinstance(provider_id, str):
+        provider_id = ""
+
+    credentials_data = (
+        provider_data.get("credentials")
+        if "credentials" in provider_data
+        else data.get("credentials", {})
+    )
+    if not isinstance(credentials_data, dict):
+        credentials_data = {}
+    provider = ProviderConfig(
+        id=provider_id,
+        credentials={
+            key: value
+            for key, value in credentials_data.items()
+            if isinstance(key, str) and isinstance(value, str)
+        },
     )
 
     srv_data = data.get("server", {})
@@ -183,7 +203,7 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PandoraConfig:
     )
 
     return PandoraConfig(
-        credentials=credentials,
+        provider=provider,
         server=server,
         download=download,
         cache=cache,

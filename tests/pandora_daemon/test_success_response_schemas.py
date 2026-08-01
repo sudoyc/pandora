@@ -9,9 +9,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
-from exhentai_api.models.comment import GalleryComment
-from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
-from pandora_daemon.config import CredentialsConfig, DownloadConfig, PandoraConfig
+from pandora_daemon.config import DownloadConfig, PandoraConfig, ProviderConfig
+from pandora_daemon.providers.contracts import GalleryComment, GalleryDetail, GallerySummary
 from pandora_daemon.download import DownloadTask
 from pandora_daemon.routes.browse import router as browse_router
 from pandora_daemon.routes.config_routes import router as config_router
@@ -42,7 +41,9 @@ def _state(**values):
 def test_health_route_response_matches_schema():
     app = FastAPI()
     app.include_router(config_router)
-    app.state.pandora = _state(config=PandoraConfig())
+    provider = MagicMock()
+    provider.auth_configured = False
+    app.state.pandora = _state(config=PandoraConfig(), provider=provider)
 
     response = TestClient(app).get("/api/health")
 
@@ -54,8 +55,9 @@ def test_readiness_route_response_matches_schema_without_credentials():
     app = FastAPI()
     app.include_router(readiness_router)
     provider = MagicMock()
+    provider.auth_configured = False
     app.state.pandora = _state(
-        config=PandoraConfig(credentials=CredentialsConfig()),
+        config=PandoraConfig(provider=ProviderConfig()),
         provider=provider,
     )
 
@@ -66,7 +68,7 @@ def test_readiness_route_response_matches_schema_without_credentials():
 
 
 def test_search_route_response_matches_gallery_list_schema():
-    item = GalleryListItem(
+    item = GallerySummary(
         gid="123",
         token="abcdef0123",
         title="Search result",
@@ -79,6 +81,7 @@ def test_search_route_response_matches_gallery_list_schema():
         rated=False,
         thumb_width=250,
         thumb_height=350,
+        url="https://example.test/g/123/abcdef0123/",
     )
     provider = MagicMock()
     provider.search = AsyncMock(return_value=[item])
@@ -106,12 +109,22 @@ def test_gallery_detail_route_response_matches_schema():
         size="10 MB",
         posted="2026-01-01",
         favorite_slot=None,
-        preview_pages=1,
+        url="https://example.test/g/123/abcdef0123/",
+        provider_data=object(),
+        preview_page_count=1,
         rating=4.0,
         rating_count=10,
         favorite_count=2,
         torrent_count=1,
-        comments=[GalleryComment(id=7, user="reader", comment="hello")],
+        comments=(
+            GalleryComment(
+                id=7,
+                user="reader",
+                comment="hello",
+                score=0,
+                time="2026-01-01",
+            ),
+        ),
         comments_has_more=False,
     )
     provider = MagicMock()

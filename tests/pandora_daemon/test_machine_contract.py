@@ -92,6 +92,7 @@ def test_health_advertises_machine_contract_major():
     app.include_router(config_router)
     state = MagicMock(spec=AppState)
     state.config = PandoraConfig()
+    state.provider = MagicMock(auth_configured=False)
     app.state.pandora = state
 
     response = TestClient(app).get("/api/health")

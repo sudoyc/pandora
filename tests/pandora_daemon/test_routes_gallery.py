@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from pandora_daemon.routes.gallery import router
+from pandora_daemon.providers.contracts import GalleryComment, GalleryDetail
 from pandora_daemon.state import AppState
 
 
@@ -15,35 +16,38 @@ from pandora_daemon.state import AppState
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_detail():
-    d = MagicMock()
-    d.gid = "123"
-    d.token = "abc"
-    d.title = "Test"
-    d.title_jpn = "テスト"
-    d.category = "Manga"
-    d.uploader = "user"
-    d.cover_url = "https://ex.com/cover.jpg"
-    d.tags = {"parody": ["fate"]}
-    d.pages = 10
-    d.size = "50 MB"
-    d.posted = "2026-01-01"
-    d.favorite_slot = None
-    d.preview_pages = 1
-    d.rating = 4.5
-    d.rating_count = 100
-    d.favorite_count = 50
-    d.torrent_count = 2
-    d.torrent_url = ""
-    d.archive_url = ""
-    d.parent_url = None
-    d.newer_versions = []
-    d.comments = []
-    d.comments_has_more = False
-    d.api_uid = "uid1"
-    d.api_key = "key1"
-    d.url = "https://exhentai.org/g/123/abc/"
-    return d
+def _make_detail(*, pages: int = 10) -> GalleryDetail:
+    return GalleryDetail(
+        gid="123",
+        token="abc",
+        title="Test",
+        title_jpn="テスト",
+        category="Manga",
+        uploader="user",
+        cover_url="https://example.test/cover.jpg",
+        tags={"parody": ["fate"]},
+        pages=pages,
+        size="50 MB",
+        posted="2026-01-01",
+        favorite_slot=None,
+        url="https://example.test/g/123/abc/",
+        provider_data=object(),
+        preview_page_count=1,
+        rating=4.5,
+        rating_count=100,
+        favorite_count=50,
+        torrent_count=2,
+        comments=(
+            GalleryComment(
+                id=7,
+                user="reader",
+                comment="Great gallery!",
+                score=2,
+                time="2026-01-01",
+            ),
+        ),
+        comments_has_more=False,
+    )
 
 
 def _make_app(mock_provider, mock_cache=None, mock_image_service=None):
@@ -74,8 +78,8 @@ def _make_cache_miss():
 # ---------------------------------------------------------------------------
 
 class TestGalleryDetail:
-    def test_gallery_detail(self):
-        """Fetch gallery detail, verify 200 and serialized data."""
+    def test_gallery_detail_serializes_exact_v1_shape(self):
+        """Fetch gallery detail and preserve the exact v1 response shape."""
         mock_provider = MagicMock()
         detail = _make_detail()
         mock_provider.get_gallery_details = AsyncMock(return_value=detail)
@@ -88,24 +92,47 @@ class TestGalleryDetail:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["gid"] == "123"
-        assert data["title"] == "Test"
-        assert data["title_jpn"] == "テスト"
-        assert data["category"] == "Manga"
-        assert data["uploader"] == "user"
-        assert data["pages"] == 10
-        assert data["rating"] == 4.5
-        assert data["rating_count"] == 100
-        assert "token" not in data
-        assert "thumb_urls" not in data
-        assert "api_uid" not in data
-        assert "api_key" not in data
-        assert data["url"] == "https://exhentai.org/g/123/abc/"
+        assert data == {
+            "gid": "123",
+            "title": "Test",
+            "title_jpn": "テスト",
+            "category": "Manga",
+            "uploader": "user",
+            "cover_url": "https://example.test/cover.jpg",
+            "tags": {"parody": ["fate"]},
+            "pages": 10,
+            "size": "50 MB",
+            "posted": "2026-01-01",
+            "favorite_slot": None,
+            "preview_pages": 1,
+            "rating": 4.5,
+            "rating_count": 100,
+            "favorite_count": 50,
+            "torrent_count": 2,
+            "comments": [
+                {
+                    "id": 7,
+                    "user": "reader",
+                    "comment": "Great gallery!",
+                    "score": 2,
+                    "time": "2026-01-01",
+                    "is_uploader": False,
+                    "vote_up_able": False,
+                    "vote_down_able": False,
+                    "vote_up_ed": False,
+                    "vote_down_ed": False,
+                    "editable": False,
+                    "last_edited": "",
+                }
+            ],
+            "comments_has_more": False,
+            "url": "https://example.test/g/123/abc/",
+        }
         mock_provider.get_gallery_details.assert_called_once_with("123", "abc")
         mock_cache.put_gallery.assert_called_once_with(detail)
 
     def test_gallery_detail_uses_cache(self):
-        """When cache hits, API should NOT be called."""
+        """When cache hits, the provider should not be called."""
         mock_provider = MagicMock()
         mock_provider.get_gallery_details = AsyncMock()
         detail = _make_detail()
@@ -121,48 +148,16 @@ class TestGalleryDetail:
         assert response.status_code == 200
         data = response.json()
         assert data["gid"] == "123"
-        # API must NOT have been called because cache returned a hit
+        # The provider must not be called because cache returned a hit.
         mock_provider.get_gallery_details.assert_not_called()
         mock_cache.get_gallery.assert_called_once_with("123", "abc")
 
-    def test_gallery_detail_does_not_expose_internal_fields(self):
-        mock_provider = AsyncMock()
-        detail = _make_detail()
-        mock_cache = MagicMock()
-        mock_cache.get_gallery.return_value = detail
-        app = _make_app(mock_provider, mock_cache=mock_cache)
-        client = TestClient(app)
 
-        resp = client.get("/api/gallery/123/abc")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "token" not in data
-        assert "thumb_urls" not in data
-        assert "api_uid" not in data
-        assert "api_key" not in data
-
-    def test_gallery_detail_does_not_expose_api_identity(self):
-        mock_provider = MagicMock()
-        detail = _make_detail()
-        mock_provider.get_gallery_details = AsyncMock(return_value=detail)
-        mock_cache = _make_cache_miss()
-
-        app = _make_app(mock_provider, mock_cache)
-        client = TestClient(app)
-
-        response = client.get("/api/gallery/123/abc")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "token" not in data
-        assert "thumb_urls" not in data
-        assert "api_uid" not in data
-        assert "api_key" not in data
 
 
 class TestCommentGallery:
     def test_comment_gallery(self):
-        """Post a comment, verify api.comment_gallery called correctly."""
+        """Post a comment and verify the provider call."""
         mock_provider = MagicMock()
         mock_provider.comment_gallery = AsyncMock(return_value={"status": "ok"})
 
@@ -202,7 +197,7 @@ class TestCommentGallery:
 
 class TestRateGallery:
     def test_rate_gallery(self):
-        """Post a rating, verify result. Cache provides api_uid/api_key."""
+        """Post a rating with the normalized gallery detail."""
         mock_provider = MagicMock()
         mock_provider.rate_gallery = AsyncMock(return_value={"rating_avg": 4.5})
         detail = _make_detail()
@@ -221,10 +216,10 @@ class TestRateGallery:
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        mock_provider.rate_gallery.assert_called_once_with("uid1", "key1", 123, "abc", 8)
+        mock_provider.rate_gallery.assert_awaited_once_with(detail, 8)
 
     def test_rate_gallery_fetches_detail_on_cache_miss(self):
-        """When cache misses, detail is fetched for api_uid/api_key."""
+        """When cache misses, fetch a normalized gallery detail."""
         mock_provider = MagicMock()
         detail = _make_detail()
         mock_provider.get_gallery_details = AsyncMock(return_value=detail)
@@ -242,7 +237,7 @@ class TestRateGallery:
 
         assert response.status_code == 200
         mock_provider.get_gallery_details.assert_called_once_with("123", "abc")
-        mock_provider.rate_gallery.assert_called_once_with("uid1", "key1", 123, "abc", 6)
+        mock_provider.rate_gallery.assert_awaited_once_with(detail, 6)
 
 
 class TestTorrents:
@@ -330,7 +325,7 @@ class TestArchive:
 
 class TestVoteComment:
     def test_vote_comment(self):
-        """Vote on a comment, verify api.vote_comment called correctly."""
+        """Vote on a comment with the normalized gallery detail."""
         mock_provider = MagicMock()
         mock_provider.vote_comment = AsyncMock(return_value={"comment_score": 5})
         detail = _make_detail()
@@ -349,7 +344,7 @@ class TestVoteComment:
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        mock_provider.vote_comment.assert_called_once_with("uid1", "key1", 123, "abc", 1, 1)
+        mock_provider.vote_comment.assert_awaited_once_with(detail, 1, 1)
 
 
 class TestPageImage:
@@ -535,8 +530,7 @@ class TestPrefetch:
 
     def test_prefetch_fetches_detail_on_cache_miss(self):
         mock_provider = MagicMock()
-        detail = _make_detail()
-        detail.pages = 20
+        detail = _make_detail(pages=20)
         mock_provider.get_gallery_details = AsyncMock(return_value=detail)
         mock_cache = _make_cache_miss()
         mock_image_service = MagicMock()

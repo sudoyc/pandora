@@ -56,12 +56,11 @@ def _session_status(checks: dict[str, str]) -> str:
 
 @router.get("/api/readiness")
 async def get_readiness(state: AppState = Depends(get_state)):
-    credentials = state.config.credentials
-    auth_configured = bool(credentials.igneous and credentials.ipb_member_id)
+    auth_configured = state.provider.auth_configured
     if not auth_configured:
         return {
             "ready": False,
-            "auth_configured": False,
+            "auth_configured": auth_configured,
             "session": "not_configured",
             "checks": {
                 "homepage": "not_checked",
@@ -83,7 +82,7 @@ async def get_readiness(state: AppState = Depends(get_state)):
     checks = dict(zip(probes, statuses, strict=True))
     return {
         "ready": all(status == "ok" for status in checks.values()),
-        "auth_configured": True,
+        "auth_configured": auth_configured,
         "session": _session_status(checks),
         "checks": checks,
     }

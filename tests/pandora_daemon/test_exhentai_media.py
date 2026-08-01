@@ -5,13 +5,12 @@ import asyncio
 from collections import namedtuple
 from io import BytesIO
 import socket
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import httpx
 import pytest
 from PIL import Image
-from exhentai_api.models.gallery import ThumbSprite
+from exhentai_api.models.gallery import GalleryDetail as ExHentaiGalleryDetail, ThumbSprite
 
 from pandora_daemon.providers.exhentai.media import ExHentaiMedia
 
@@ -74,19 +73,26 @@ def _public_image_client(response_or_side_effect) -> MagicMock:
     return client
 
 
-def _detail(**overrides):
+def _detail(**overrides) -> ExHentaiGalleryDetail:
     values = {
         "gid": "123",
         "token": "token",
+        "title": "Fixture Gallery",
+        "title_jpn": None,
+        "category": "Manga",
+        "uploader": "fixture-uploader",
+        "cover_url": "https://exhentai.org/cover.jpg",
+        "tags": {},
         "pages": 1,
-        "url": "https://exhentai.org/g/123/token/",
+        "size": "1 MB",
+        "posted": "2026-08-02 00:00",
+        "favorite_slot": None,
         "viewer_urls": ["https://exhentai.org/s/first/123-1"],
         "thumb_urls": [],
         "thumb_sprites": [],
     }
     values.update(overrides)
-    return SimpleNamespace(**values)
-
+    return ExHentaiGalleryDetail(**values)
 
 @pytest.mark.asyncio
 async def test_fetch_image_uses_its_own_cookie_free_transport(public_dns, gallery_client) -> None:

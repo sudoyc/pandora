@@ -18,6 +18,7 @@ async def test_fixture_daemon_bootstrap_cli_smoke(monkeypatch, capsys, tmp_path)
     state.config = PandoraConfig()
     state.config_path = tmp_path / "config.toml"
     provider = MagicMock()
+    provider.auth_configured = False
     provider.get_homepage = AsyncMock()
     provider.search = AsyncMock()
     provider.get_popular = AsyncMock()

@@ -5,7 +5,7 @@ import asyncio
 import ipaddress
 import socket
 from io import BytesIO
-from typing import Any
+from exhentai_api.models.gallery import GalleryDetail as ExHentaiGalleryDetail
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -141,7 +141,7 @@ def _validate_image_response(response: httpx.Response) -> bytes:
     return data
 
 
-def _preview_page_size(detail: Any) -> int:
+def _preview_page_size(detail: ExHentaiGalleryDetail) -> int:
     """Use the smallest populated asset collection as the current preview width."""
     lengths = [
         len(values)
@@ -155,7 +155,7 @@ def _preview_page_size(detail: Any) -> int:
     return min(lengths, default=20)
 
 
-def _has_thumbnail(detail: Any, page_index: int) -> bool:
+def _has_thumbnail(detail: ExHentaiGalleryDetail, page_index: int) -> bool:
     sprites = getattr(detail, "thumb_sprites", ())
     if page_index < len(sprites):
         sprite = sprites[page_index]
@@ -225,7 +225,7 @@ class ExHentaiMedia:
 
         raise RuntimeError("Image fetch failed")
 
-    async def get_page_image(self, detail: Any, page: int) -> bytes:
+    async def get_page_image(self, detail: ExHentaiGalleryDetail, page: int) -> bytes:
         """Resolve a gallery viewer page and fetch its full-size image."""
         page_index = page - 1
         if page_index < 0 or page_index >= detail.pages:
@@ -242,7 +242,7 @@ class ExHentaiMedia:
             raise RuntimeError(f"Could not resolve image URL for page {page}")
         return await self.fetch_image(image_url)
 
-    async def get_thumbnail(self, detail: Any, page: int) -> bytes:
+    async def get_thumbnail(self, detail: ExHentaiGalleryDetail, page: int) -> bytes:
         """Fetch and crop a thumbnail sprite, or return a direct thumbnail."""
         page_index = page - 1
         if page_index < 0 or page_index >= detail.pages:
@@ -281,7 +281,7 @@ class ExHentaiMedia:
 
     async def _load_preview_page(
         self,
-        detail: Any,
+        detail: ExHentaiGalleryDetail,
         target_page_index: int,
         *,
         asset: str = "viewer",

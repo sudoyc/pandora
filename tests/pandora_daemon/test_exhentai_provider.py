@@ -14,10 +14,16 @@ from exhentai_api.exceptions import (
     SessionError,
     UpstreamError,
 )
-from exhentai_api.models.gallery import GalleryListItem
+from exhentai_api.models.comment import GalleryComment as ExHentaiGalleryComment
+from exhentai_api.models.gallery import (
+    GalleryDetail as ExHentaiGalleryDetail,
+    GalleryListItem,
+)
 from exhentai_api.models.search import SearchParams
 from exhentai_api.models.toplist import TopListItem
 from pandora_daemon.providers.contracts import (
+    GalleryComment,
+    GalleryDetail,
     GallerySearchQuery,
     GallerySummary,
     ProviderContext,
@@ -68,6 +74,50 @@ def _summary(item: GalleryListItem) -> GallerySummary:
         thumb_width=item.thumb_width,
         thumb_height=item.thumb_height,
         url=item.url,
+    )
+
+def _gallery_comment() -> ExHentaiGalleryComment:
+    return ExHentaiGalleryComment(
+        id=17,
+        score=-2,
+        user="fixture-reader",
+        comment="<p>Fixture comment</p>",
+        time="2026-08-02 00:01",
+        is_uploader=True,
+        vote_up_able=True,
+        vote_down_able=True,
+        vote_up_ed=True,
+        vote_down_ed=False,
+        editable=True,
+        last_edited="2026-08-02 00:02",
+    )
+
+
+def _gallery_detail() -> ExHentaiGalleryDetail:
+    return ExHentaiGalleryDetail(
+        gid="123456",
+        token="abcdef0123",
+        title="Fixture Gallery",
+        title_jpn="フィクスチャー",
+        category="Manga",
+        uploader="fixture-uploader",
+        cover_url="https://thumb.test/cover.jpg",
+        tags={"artist": ["fixture-artist"], "language": ["English"]},
+        pages=42,
+        size="42 MB",
+        posted="2026-08-02 00:00",
+        favorite_slot=7,
+        preview_pages=3,
+        viewer_urls=["https://exhentai.org/s/fixture/123456-1"],
+        thumb_urls=["https://ehgt.org/fixture-thumb.jpg"],
+        rating=4.75,
+        rating_count=19,
+        favorite_count=8,
+        torrent_count=2,
+        comments=[_gallery_comment()],
+        comments_has_more=True,
+        api_uid="fixture-api-uid",
+        api_key="fixture-api-key",
     )
 
 
@@ -142,6 +192,87 @@ async def test_watched_forwards_page_and_cursor_and_normalizes_gallery_summaries
     assert result == [_summary(item)]
     api.get_watched.assert_awaited_once_with(page=4, next_gid="7654321")
 
+@pytest.mark.asyncio
+async def test_gallery_details_map_to_generic_fields_and_keep_raw_state_opaque() -> None:
+    raw_detail = _gallery_detail()
+    api = AsyncMock(spec=ExhentaiAPI)
+    api.get_gallery_details.return_value = raw_detail
+
+    result = await ExHentaiProvider(api).get_gallery_details(raw_detail.gid, raw_detail.token)
+
+    expected_comment = GalleryComment(
+        id=17,
+        user="fixture-reader",
+        comment="<p>Fixture comment</p>",
+        score=-2,
+        time="2026-08-02 00:01",
+        is_uploader=True,
+        vote_up_able=True,
+        vote_down_able=True,
+        vote_up_ed=True,
+        vote_down_ed=False,
+        editable=True,
+        last_edited="2026-08-02 00:02",
+    )
+    assert type(result) is GalleryDetail
+    assert result == GalleryDetail(
+        gid="123456",
+        token="abcdef0123",
+        title="Fixture Gallery",
+        title_jpn="フィクスチャー",
+        category="Manga",
+        uploader="fixture-uploader",
+        cover_url="https://thumb.test/cover.jpg",
+        tags={"artist": ["fixture-artist"], "language": ["English"]},
+        pages=42,
+        size="42 MB",
+        posted="2026-08-02 00:00",
+        favorite_slot=7,
+        url=raw_detail.url,
+        provider_data=None,
+        preview_page_count=3,
+        rating=4.75,
+        rating_count=19,
+        favorite_count=8,
+        torrent_count=2,
+        comments=(expected_comment,),
+        comments_has_more=True,
+    )
+    assert result.provider_data is raw_detail
+    for raw_name in ("api_uid", "api_key", "viewer_urls", "thumb_urls", "thumb_sprites"):
+        assert not hasattr(result, raw_name)
+    assert "fixture-api-uid" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_generic_interactions_translate_to_raw_exhentai_arguments() -> None:
+    raw_detail = _gallery_detail()
+    api = AsyncMock(spec=ExhentaiAPI)
+    api.get_gallery_details.return_value = raw_detail
+    api.rate_gallery.return_value = "rated"
+    api.vote_comment.return_value = "voted"
+    provider = ExHentaiProvider(api)
+    detail = await provider.get_gallery_details(raw_detail.gid, raw_detail.token)
+
+    assert await provider.rate_gallery(detail, 9) == "rated"
+    assert await provider.vote_comment(detail, 17, -1) == "voted"
+
+    api.rate_gallery.assert_awaited_once_with(
+        raw_detail.api_uid,
+        raw_detail.api_key,
+        123456,
+        raw_detail.token,
+        9,
+    )
+    api.vote_comment.assert_awaited_once_with(
+        raw_detail.api_uid,
+        raw_detail.api_key,
+        123456,
+        raw_detail.token,
+        17,
+        -1,
+    )
+
 
 @pytest.mark.asyncio
 async def test_toplist_normalizes_gallery_links_and_drops_unparseable_items() -> None:
@@ -194,19 +325,21 @@ async def test_owned_provider_closes_media_and_client_once() -> None:
 @pytest.mark.asyncio
 async def test_media_methods_delegate_through_the_error_boundary() -> None:
     api = AsyncMock(spec=ExhentaiAPI)
+    raw_detail = _gallery_detail()
+    api.get_gallery_details.return_value = raw_detail
     media = MagicMock()
     media.fetch_image = AsyncMock(return_value=b"source")
     media.get_page_image = AsyncMock(return_value=b"page")
     media.get_thumbnail = AsyncMock(return_value=b"thumbnail")
     provider = ExHentaiProvider(api, media=media)
-    detail = object()
+    detail = await provider.get_gallery_details(raw_detail.gid, raw_detail.token)
 
     assert await provider.fetch_image("https://ehgt.org/source.jpg") == b"source"
     assert await provider.get_page_image(detail, 2) == b"page"
     assert await provider.get_thumbnail(detail, 2) == b"thumbnail"
     media.fetch_image.assert_awaited_once_with("https://ehgt.org/source.jpg")
-    media.get_page_image.assert_awaited_once_with(detail, 2)
-    media.get_thumbnail.assert_awaited_once_with(detail, 2)
+    media.get_page_image.assert_awaited_once_with(raw_detail, 2)
+    media.get_thumbnail.assert_awaited_once_with(raw_detail, 2)
 
     source = NetworkError("connection reset")
     media.get_page_image.side_effect = source
@@ -251,6 +384,58 @@ def test_factory_forwards_credentials_and_network_context() -> None:
     )
     api_type.assert_called_once_with(client=client)
     assert provider.client is client
+    assert provider.auth_configured is True
+
+@pytest.mark.parametrize(
+    ("credentials", "expected_auth_configured"),
+    [
+        pytest.param(
+            {
+                "igneous": "igneous-cookie",
+                "ipb_member_id": "member-cookie",
+                "ipb_pass_hash": "pass-hash-cookie",
+            },
+            True,
+            id="complete-session-credentials",
+        ),
+        pytest.param(
+            {"ipb_member_id": "member-cookie", "ipb_pass_hash": "pass-hash-cookie"},
+            False,
+            id="missing-igneous-cookie",
+        ),
+        pytest.param(
+            {"igneous": "igneous-cookie", "ipb_pass_hash": "pass-hash-cookie"},
+            False,
+            id="missing-member-cookie",
+        ),
+        pytest.param(
+            {"igneous": "igneous-cookie", "ipb_member_id": "member-cookie"},
+            False,
+            id="missing-pass-hash-cookie",
+        ),
+    ],
+)
+def test_factory_auth_state_uses_required_session_credentials(
+    credentials: dict[str, str],
+    expected_auth_configured: bool,
+) -> None:
+    context = ProviderContext(credentials=credentials, proxy="", timeout=30)
+    client = MagicMock()
+    api = AsyncMock(spec=ExhentaiAPI)
+
+    with (
+        patch(
+            "pandora_daemon.providers.exhentai.adapter.ExhentaiClient",
+            return_value=client,
+        ),
+        patch(
+            "pandora_daemon.providers.exhentai.adapter.ExhentaiAPI",
+            return_value=api,
+        ),
+    ):
+        provider = create_provider(context)
+
+    assert provider.auth_configured is expected_auth_configured
 
 
 @pytest.mark.asyncio

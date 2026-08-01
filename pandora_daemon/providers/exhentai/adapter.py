@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar, cast
 
 from exhentai_api.api import ExhentaiAPI
 from exhentai_api.client import ExhentaiClient
@@ -17,10 +17,16 @@ from exhentai_api.exceptions import (
     SessionError,
     UpstreamError,
 )
-from exhentai_api.models.gallery import GalleryListItem
+from exhentai_api.models.comment import GalleryComment as ExHentaiGalleryComment
+from exhentai_api.models.gallery import (
+    GalleryDetail as ExHentaiGalleryDetail,
+    GalleryListItem,
+)
 from exhentai_api.models.search import SearchParams
 from pandora_daemon.providers.exhentai.media import ExHentaiMedia
 from pandora_daemon.providers.contracts import (
+    GalleryComment,
+    GalleryDetail,
     GallerySearchQuery,
     GallerySummary,
     ProviderContext,
@@ -61,6 +67,51 @@ def _summary(item: GalleryListItem) -> GallerySummary:
         url=item.url,
     )
 
+def _comment(comment: ExHentaiGalleryComment) -> GalleryComment:
+    return GalleryComment(
+        id=comment.id,
+        user=comment.user,
+        comment=comment.comment,
+        score=comment.score,
+        time=comment.time,
+        is_uploader=comment.is_uploader,
+        vote_up_able=comment.vote_up_able,
+        vote_down_able=comment.vote_down_able,
+        vote_up_ed=comment.vote_up_ed,
+        vote_down_ed=comment.vote_down_ed,
+        editable=comment.editable,
+        last_edited=comment.last_edited,
+    )
+
+
+def _detail(detail: ExHentaiGalleryDetail) -> GalleryDetail:
+    return GalleryDetail(
+        gid=str(detail.gid),
+        token=str(detail.token),
+        title=detail.title,
+        title_jpn=detail.title_jpn,
+        category=detail.category,
+        uploader=detail.uploader,
+        cover_url=detail.cover_url,
+        tags={name: list(values) for name, values in detail.tags.items()},
+        pages=detail.pages,
+        size=detail.size,
+        posted=detail.posted,
+        favorite_slot=detail.favorite_slot,
+        url=detail.url,
+        provider_data=detail,
+        preview_page_count=detail.preview_pages,
+        rating=detail.rating,
+        rating_count=detail.rating_count,
+        favorite_count=detail.favorite_count,
+        torrent_count=detail.torrent_count,
+        comments=tuple(_comment(comment) for comment in detail.comments),
+        comments_has_more=detail.comments_has_more,
+    )
+
+
+def _raw_detail(detail: GalleryDetail) -> ExHentaiGalleryDetail:
+    return cast(ExHentaiGalleryDetail, detail.provider_data)
 
 def _search_params(query: GallerySearchQuery) -> SearchParams:
     params = SearchParams(
@@ -106,10 +157,12 @@ class ExHentaiProvider:
         *,
         owns_client: bool = False,
         media: ExHentaiMedia | None = None,
+        auth_configured: bool = False,
     ) -> None:
         self._api = api
         self._media = media
         self._owns_client = owns_client
+        self.auth_configured = auth_configured
         self._closed = False
 
     async def _call_api(
@@ -217,8 +270,9 @@ class ExHentaiProvider:
         items = await self._call_api(self._api.get_watched, page=page, next_gid=next_gid)
         return [_summary(item) for item in items]
 
-    async def get_gallery_details(self, gid: str, token: str) -> Any:
-        return await self._call_api(self._api.get_gallery_details, gid, token)
+    async def get_gallery_details(self, gid: str, token: str) -> GalleryDetail:
+        detail = await self._call_api(self._api.get_gallery_details, gid, token)
+        return _detail(detail)
 
     async def get_image_url(
         self, gid: str, imgkey: str, page: int, nl: str | None = None
@@ -231,11 +285,19 @@ class ExHentaiProvider:
     async def fetch_image(self, source: str) -> bytes:
         return await self._call_api(self._get_media().fetch_image, source)
 
-    async def get_page_image(self, detail: object, page: int) -> bytes:
-        return await self._call_api(self._get_media().get_page_image, detail, page)
+    async def get_page_image(self, detail: GalleryDetail, page: int) -> bytes:
+        return await self._call_api(
+            self._get_media().get_page_image,
+            _raw_detail(detail),
+            page,
+        )
 
-    async def get_thumbnail(self, detail: object, page: int) -> bytes:
-        return await self._call_api(self._get_media().get_thumbnail, detail, page)
+    async def get_thumbnail(self, detail: GalleryDetail, page: int) -> bytes:
+        return await self._call_api(
+            self._get_media().get_thumbnail,
+            _raw_detail(detail),
+            page,
+        )
 
     async def get_favorites(self, **kwargs: Any) -> Any:
         return await self._call_api(self._api.get_favorites, **kwargs)
@@ -257,11 +319,33 @@ class ExHentaiProvider:
             edit_id=edit_id,
         )
 
-    async def vote_comment(self, *args: Any, **kwargs: Any) -> Any:
-        return await self._call_api(self._api.vote_comment, *args, **kwargs)
+    async def vote_comment(
+        self,
+        detail: GalleryDetail,
+        comment_id: int,
+        vote: int,
+    ) -> object:
+        raw_detail = _raw_detail(detail)
+        return await self._call_api(
+            self._api.vote_comment,
+            raw_detail.api_uid,
+            raw_detail.api_key,
+            int(detail.gid),
+            detail.token,
+            comment_id,
+            vote,
+        )
 
-    async def rate_gallery(self, *args: Any, **kwargs: Any) -> Any:
-        return await self._call_api(self._api.rate_gallery, *args, **kwargs)
+    async def rate_gallery(self, detail: GalleryDetail, rating: int) -> object:
+        raw_detail = _raw_detail(detail)
+        return await self._call_api(
+            self._api.rate_gallery,
+            raw_detail.api_uid,
+            raw_detail.api_key,
+            int(detail.gid),
+            detail.token,
+            rating,
+        )
 
     async def get_torrent_list(self, gid: str, token: str) -> Any:
         return await self._call_api(self._api.get_torrent_list, gid, token)
@@ -296,11 +380,19 @@ class ExHentaiProvider:
 
 
 def create_provider(context: ProviderContext) -> ExHentaiProvider:
+    credentials = context.credentials
+    igneous = credentials.get("igneous", "")
+    ipb_member_id = credentials.get("ipb_member_id", "")
+    ipb_pass_hash = credentials.get("ipb_pass_hash", "")
     client = ExhentaiClient(
-        igneous=context.credentials.get("igneous", ""),
-        ipb_member_id=context.credentials.get("ipb_member_id", ""),
-        ipb_pass_hash=context.credentials.get("ipb_pass_hash", ""),
+        igneous=igneous,
+        ipb_member_id=ipb_member_id,
+        ipb_pass_hash=ipb_pass_hash,
         proxy=context.proxy,
         timeout=context.timeout,
     )
-    return ExHentaiProvider(ExhentaiAPI(client=client), owns_client=True)
+    return ExHentaiProvider(
+        ExhentaiAPI(client=client),
+        owns_client=True,
+        auth_configured=bool(igneous and ipb_member_id and ipb_pass_hash),
+    )

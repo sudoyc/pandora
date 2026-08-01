@@ -1,128 +1,146 @@
 """Tests for _build_state and lifespan in app.py."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
 from pandora_daemon.app import _build_state
-from pandora_daemon.config import CredentialsConfig, NetworkConfig, PandoraConfig
+from pandora_daemon.config import NetworkConfig, PandoraConfig, ProviderConfig
 from pandora_daemon.providers import ProviderContext, ProviderRegistry
+
+
+@contextmanager
+def _build_dependencies(config: PandoraConfig):
+    with (
+        patch("pandora_daemon.app.load_config", return_value=config),
+        patch("pandora_daemon.app.PandoraDB") as database_class,
+        patch("pandora_daemon.app.CacheManager") as cache_class,
+        patch("pandora_daemon.app.ImageService") as image_service_class,
+        patch("pandora_daemon.app.WebSocketManager") as websocket_class,
+        patch("pandora_daemon.app.TagDatabase") as tag_database_class,
+        patch("pandora_daemon.app.DownloadManager") as download_manager_class,
+    ):
+        database = MagicMock()
+        database.initialize = AsyncMock()
+        database_class.return_value = database
+
+        tag_database = MagicMock()
+        tag_database.download_and_load = AsyncMock()
+        tag_database_class.return_value = tag_database
+
+        yield SimpleNamespace(
+            database=database,
+            cache_class=cache_class,
+            image_service_class=image_service_class,
+            websocket_class=websocket_class,
+            tag_database=tag_database,
+            download_manager_class=download_manager_class,
+        )
 
 
 class TestBuildState:
     @pytest.mark.asyncio
-    async def test_returns_appstate(self):
-        """_build_state returns a properly constructed AppState."""
+    async def test_explicit_provider_override_forwards_context_and_wires_provider(self):
+        config = PandoraConfig(
+            provider=ProviderConfig(
+                id="configured",
+                credentials={"session": "test-session", "extra": "value"},
+            ),
+            network=NetworkConfig(
+                proxy="socks5://127.0.0.1:1080",
+                timeout=60,
+            ),
+        )
         provider = MagicMock()
-        provider_registry = MagicMock(spec=ProviderRegistry)
-        provider_registry.create.return_value = provider
+        provider.provider_id = "selected"
+        explicit_factory = MagicMock(return_value=provider)
+        configured_factory = MagicMock()
+        fallback_factory = MagicMock()
+        registry = ProviderRegistry(
+            {
+                "explicit": explicit_factory,
+                "configured": configured_factory,
+                "fallback": fallback_factory,
+            },
+            default_provider_id="fallback",
+        )
 
-        with (
-            patch("pandora_daemon.app.load_config") as mock_load,
-            patch("pandora_daemon.app.PandoraDB") as mock_db_cls,
-            patch("pandora_daemon.app.CacheManager") as mock_cache_cls,
-            patch("pandora_daemon.app.ImageService") as mock_img_cls,
-            patch("pandora_daemon.app.WebSocketManager") as mock_ws_cls,
-            patch("pandora_daemon.app.TagDatabase") as mock_tag_cls,
-            patch("pandora_daemon.app.DownloadManager") as mock_dl_cls,
-        ):
-            mock_config = PandoraConfig()
-            mock_load.return_value = mock_config
-
-            mock_db = MagicMock()
-            mock_db.initialize = AsyncMock()
-            mock_db_cls.return_value = mock_db
-
-            mock_tag = MagicMock()
-            mock_tag.download_and_load = AsyncMock()
-            mock_tag_cls.return_value = mock_tag
-
-            state = await _build_state(provider_registry=provider_registry)
-
-            from pandora_daemon.state import AppState
-
-            assert isinstance(state, AppState)
-            assert state.config is mock_config
-            assert state.provider is provider
-            provider_registry.create.assert_called_once_with(
-                "exhentai",
-                ProviderContext(
-                    credentials={
-                        "igneous": "",
-                        "ipb_member_id": "",
-                        "ipb_pass_hash": "",
-                    },
-                    proxy="",
-                    timeout=30,
-                ),
+        with _build_dependencies(config) as dependencies:
+            state = await _build_state(
+                provider_registry=registry,
+                provider_id=" explicit ",
             )
-            mock_db.initialize.assert_awaited_once()
-            mock_tag.download_and_load.assert_awaited_once()
-            mock_img_cls.assert_called_once_with(
-                provider=provider,
-                cache=mock_cache_cls.return_value,
-                config=mock_config.cache,
-            )
-            mock_dl_cls.assert_called_once_with(
-                provider=provider,
-                config=mock_config.download,
-                ws=mock_ws_cls.return_value,
-                image_service=mock_img_cls.return_value,
-                state_file=ANY,
-            )
+
+        from pandora_daemon.state import AppState
+
+        assert isinstance(state, AppState)
+        assert state.config is config
+        assert state.provider is provider
+        assert config.provider.id == "selected"
+        explicit_factory.assert_called_once()
+        configured_factory.assert_not_called()
+        fallback_factory.assert_not_called()
+        context = explicit_factory.call_args.args[0]
+        assert context == ProviderContext(
+            credentials={"session": "test-session", "extra": "value"},
+            proxy="socks5://127.0.0.1:1080",
+            timeout=60,
+        )
+        assert context.credentials is not config.provider.credentials
+        dependencies.database.initialize.assert_awaited_once()
+        dependencies.tag_database.download_and_load.assert_awaited_once()
+        dependencies.image_service_class.assert_called_once_with(
+            provider=provider,
+            cache=dependencies.cache_class.return_value,
+            config=config.cache,
+        )
+        dependencies.download_manager_class.assert_called_once_with(
+            provider=provider,
+            config=config.download,
+            ws=dependencies.websocket_class.return_value,
+            image_service=dependencies.image_service_class.return_value,
+            state_file=ANY,
+        )
 
     @pytest.mark.asyncio
-    async def test_build_state_passes_provider_context(self):
-        """_build_state creates the configured provider with a neutral context."""
+    async def test_configured_provider_is_selected_without_an_override(self):
+        config = PandoraConfig(provider=ProviderConfig(id="configured"))
         provider = MagicMock()
-        provider_registry = MagicMock(spec=ProviderRegistry)
-        provider_registry.create.return_value = provider
+        provider.provider_id = "configured"
+        configured_factory = MagicMock(return_value=provider)
+        fallback_factory = MagicMock()
+        registry = ProviderRegistry(
+            {"configured": configured_factory, "fallback": fallback_factory},
+            default_provider_id="fallback",
+        )
 
-        with (
-            patch("pandora_daemon.app.load_config") as mock_load,
-            patch("pandora_daemon.app.PandoraDB") as mock_db_cls,
-            patch("pandora_daemon.app.CacheManager"),
-            patch("pandora_daemon.app.ImageService"),
-            patch("pandora_daemon.app.WebSocketManager"),
-            patch("pandora_daemon.app.TagDatabase") as mock_tag_cls,
-            patch("pandora_daemon.app.DownloadManager"),
-        ):
-            mock_config = PandoraConfig(
-                credentials=CredentialsConfig(
-                    igneous="test",
-                    ipb_member_id="test",
-                    ipb_pass_hash="synthetic_hash",
-                ),
-                network=NetworkConfig(
-                    proxy="socks5://127.0.0.1:1080",
-                    timeout=60,
-                ),
-            )
-            mock_load.return_value = mock_config
+        with _build_dependencies(config):
+            state = await _build_state(provider_registry=registry)
 
-            mock_db = MagicMock()
-            mock_db.initialize = AsyncMock()
-            mock_db_cls.return_value = mock_db
+        assert state.provider is provider
+        configured_factory.assert_called_once()
+        fallback_factory.assert_not_called()
 
-            mock_tag = MagicMock()
-            mock_tag.download_and_load = AsyncMock()
-            mock_tag_cls.return_value = mock_tag
+    @pytest.mark.asyncio
+    async def test_registry_default_is_selected_when_config_has_no_provider_id(self):
+        config = PandoraConfig(provider=ProviderConfig())
+        provider = MagicMock()
+        provider.provider_id = "fallback"
+        fallback_factory = MagicMock(return_value=provider)
+        registry = ProviderRegistry(
+            {"fallback": fallback_factory},
+            default_provider_id=" FALLBACK ",
+        )
 
-            await _build_state(provider_registry=provider_registry)
+        with _build_dependencies(config):
+            state = await _build_state(provider_registry=registry)
 
-            provider_registry.create.assert_called_once_with(
-                "exhentai",
-                ProviderContext(
-                    credentials={
-                        "igneous": "test",
-                        "ipb_member_id": "test",
-                        "ipb_pass_hash": "synthetic_hash",
-                    },
-                    proxy="socks5://127.0.0.1:1080",
-                    timeout=60,
-                ),
-            )
+        assert state.provider is provider
+        assert config.provider.id == "fallback"
+        fallback_factory.assert_called_once()
 
 
 class TestLifespan:

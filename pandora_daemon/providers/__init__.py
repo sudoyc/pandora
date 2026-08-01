@@ -1,6 +1,8 @@
 """Provider contracts and built-in registry for Pandora."""
 
 from pandora_daemon.providers.contracts import (
+    GalleryComment,
+    GalleryDetail,
     GalleryProvider,
     GallerySearchQuery,
     GallerySummary,
@@ -17,9 +19,15 @@ from pandora_daemon.providers.errors import (
     ProviderSessionError,
     ProviderUpstreamError,
 )
-from pandora_daemon.providers.registry import ProviderRegistry, default_provider_registry
+from pandora_daemon.providers.registry import (
+    ProviderFactory,
+    ProviderRegistry,
+    default_provider_registry,
+)
 
 __all__ = [
+    "GalleryComment",
+    "GalleryDetail",
     "GalleryProvider",
     "GallerySearchQuery",
     "GallerySummary",
@@ -33,6 +41,7 @@ __all__ = [
     "ProviderQuotaError",
     "ProviderSessionError",
     "ProviderUpstreamError",
+    "ProviderFactory",
     "ProviderRegistry",
     "default_provider_registry",
 ]

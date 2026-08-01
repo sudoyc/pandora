@@ -14,9 +14,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jsonschema import validate
 
-from exhentai_api.models.comment import GalleryComment
-from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
-from pandora_daemon.config import DownloadConfig, PandoraConfig
+from pandora_daemon.config import DownloadConfig, PandoraConfig, ProviderConfig
+from pandora_daemon.providers.contracts import GalleryComment, GalleryDetail, GallerySummary
 from pandora_daemon import cli
 from pandora_daemon.cli import _machine_error
 from pandora_daemon.download import DownloadManager, DownloadTask
@@ -33,7 +32,7 @@ def _assert_keys(data: dict, keys: set[str]) -> None:
 
 
 def test_gallery_list_item_contract_shape():
-    item = GalleryListItem(
+    item = GallerySummary(
         gid="123",
         token="abcdef0123",
         title="List Item",
@@ -46,6 +45,7 @@ def test_gallery_list_item_contract_shape():
         rated=False,
         thumb_width=250,
         thumb_height=350,
+        url="https://example.test/g/123/abcdef0123/",
     )
 
     data = _gallery_item_to_dict(item)
@@ -88,51 +88,61 @@ def test_gallery_detail_contract_shape():
         size="10 MB",
         posted="2026-01-01",
         favorite_slot=None,
-        preview_pages=1,
-        thumb_urls=["https://example.test/t1.jpg"],
+        url="https://example.test/g/123/abcdef0123/",
+        provider_data=object(),
+        preview_page_count=1,
         rating=4.0,
         rating_count=10,
         favorite_count=2,
         torrent_count=1,
-        comments=[GalleryComment(id=7, user="reader", comment="hello")],
+        comments=(
+            GalleryComment(
+                id=7,
+                user="reader",
+                comment="hello",
+                score=0,
+                time="2026-01-01",
+            ),
+        ),
         comments_has_more=False,
-        api_uid="uid",
-        api_key="key",
     )
-
     data = _detail_to_dict(detail)
-
-    _assert_keys(
-        data,
-        {
-            "gid",
-            "title",
-            "title_jpn",
-            "category",
-            "uploader",
-            "cover_url",
-            "tags",
-            "pages",
-            "size",
-            "posted",
-            "favorite_slot",
-            "preview_pages",
-            "rating",
-            "rating_count",
-            "favorite_count",
-            "torrent_count",
-            "comments",
-            "comments_has_more",
-            "url",
-        },
-    )
-    assert "token" not in data
-    assert "thumb_urls" not in data
-    assert "api_uid" not in data
-    assert "api_key" not in data
-    assert isinstance(data["tags"], dict)
-    assert isinstance(data["comments"], list)
-    assert data["comments"][0]["id"] == 7
+    assert set(data) == {
+        "gid",
+        "title",
+        "title_jpn",
+        "category",
+        "uploader",
+        "cover_url",
+        "tags",
+        "pages",
+        "size",
+        "posted",
+        "favorite_slot",
+        "preview_pages",
+        "rating",
+        "rating_count",
+        "favorite_count",
+        "torrent_count",
+        "comments",
+        "comments_has_more",
+        "url",
+    }
+    assert data["preview_pages"] == 1
+    assert set(data["comments"][0]) == {
+        "id",
+        "user",
+        "comment",
+        "score",
+        "time",
+        "is_uploader",
+        "vote_up_able",
+        "vote_down_able",
+        "vote_up_ed",
+        "vote_down_ed",
+        "editable",
+        "last_edited",
+    }
 
 
 def test_download_task_contract_shape():
@@ -323,16 +333,18 @@ def test_tag_suggestion_contract_shape():
 
 
 def test_public_config_contract_shape_and_redaction():
-    config = PandoraConfig()
+    config = PandoraConfig(
+        provider=ProviderConfig(id="fixture", credentials={"session": "sensitive"})
+    )
     config.network.proxy = "http://user:pass@proxy.example:8080"
 
     data = config.to_public_dict()
 
-    _assert_keys(data, {"server", "download", "cache", "network"})
+    assert set(data) == {"provider", "server", "download", "cache", "network"}
+    assert data["provider"] == {"id": "fixture"}
     _assert_keys(data["network"], {"proxy_configured", "timeout"})
     assert data["network"]["proxy_configured"] is True
     assert "proxy" not in data["network"]
-    assert "credentials" not in data
 
 
 def test_health_contract_shape_is_minimal_and_safe():

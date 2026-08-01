@@ -12,12 +12,12 @@ import pytest
 from jsonschema import validate
 from PIL import Image
 
-from exhentai_api.api import ExhentaiAPI
-from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
+from exhentai_api.models.gallery import GalleryListItem
 from pandora_daemon import cli
 from pandora_daemon.app import create_app
-from pandora_daemon.config import CredentialsConfig, DownloadConfig, PandoraConfig
+from pandora_daemon.config import DownloadConfig, PandoraConfig, ProviderConfig
 from pandora_daemon.download import DownloadTask
+from pandora_daemon.providers import GalleryComment, GalleryDetail
 from pandora_daemon.providers.errors import (
     ProviderGalleryNotFoundError,
     ProviderSessionError,
@@ -144,12 +144,22 @@ def _gallery_detail() -> GalleryDetail:
         size="1 MB",
         posted="2026-01-01",
         favorite_slot=None,
-        preview_pages=1,
+        url="https://example.test/g/123/abcdef0123",
+        provider_data=object(),
+        preview_page_count=1,
         rating=4.0,
         rating_count=2,
         favorite_count=1,
         torrent_count=0,
-        comments=[],
+        comments=[
+            GalleryComment(
+                id=1,
+                user="fixture-user",
+                comment="Fixture comment",
+                score=1,
+                time="2026-01-01",
+            ),
+        ],
         comments_has_more=False,
     )
 
@@ -158,13 +168,14 @@ def _gallery_detail() -> GalleryDetail:
 def workflow_daemon(monkeypatch, tmp_path):
     download_root = tmp_path / "downloads"
     config = PandoraConfig(
-        credentials=CredentialsConfig(
-            igneous="fixture-igneous",
-            ipb_member_id="123",
+        provider=ProviderConfig(
+            id="fixture-provider",
+            credentials={"opaque": "fixture-secret"},
         ),
         download=DownloadConfig(path=str(download_root)),
     )
-    provider = MagicMock(spec=ExhentaiAPI)
+    provider = MagicMock()
+    provider.auth_configured = True
     provider.get_homepage = AsyncMock(return_value=[])
     provider.search = AsyncMock(return_value=[])
     provider.get_popular = AsyncMock(return_value=[])
@@ -246,7 +257,10 @@ async def test_bootstrap_workflow_reaches_ready_fixture_daemon(
         "status": 0,
     }
     assert results["health"][1]["contract_version"] == "1"
+    assert results["health"][1]["auth_configured"] is True
+    assert results["config"][1]["provider"] == {"id": "fixture-provider"}
     assert "credentials" not in results["config"][1]
+    assert "fixture-secret" not in json.dumps(results["config"][1])
     assert results["readiness"][1]["ready"] is True
     assert results["status"][1] == {"tasks": []}
     _validate("health-response.schema.json", results["health"][1])

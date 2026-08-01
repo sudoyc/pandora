@@ -7,27 +7,45 @@ from pandora_daemon.providers.contracts import GalleryProvider, ProviderContext
 
 
 ProviderFactory = Callable[[ProviderContext], GalleryProvider]
-_PROVIDERS: dict[str, str] = {
-    "exhentai": "pandora_daemon.providers.exhentai.adapter:create_provider",
+
+DEFAULT_PROVIDER_ID = "exhentai"
+PROVIDER_REGISTRY: dict[str, str] = {
+    DEFAULT_PROVIDER_ID: "pandora_daemon.providers.exhentai.adapter:create_provider",
 }
+
+
+def _normalize_provider_id(provider_id: str) -> str:
+    normalized_id = provider_id.strip().lower()
+    if not normalized_id:
+        raise ValueError("provider_id must not be empty")
+    return normalized_id
 
 
 class ProviderRegistry:
     """Explicit provider-to-factory mapping; no plugin discovery or state."""
 
-    def __init__(self, factories: Mapping[str, ProviderFactory] | None = None) -> None:
-        self._factories = dict(factories or {})
+    def __init__(
+        self,
+        factories: Mapping[str, ProviderFactory] | None = None,
+        default_provider_id: str | None = None,
+    ) -> None:
+        self._factories: dict[str, ProviderFactory] = {}
+        for provider_id, factory in (factories or {}).items():
+            self.register(provider_id, factory)
+        self._default_provider_id = (
+            _normalize_provider_id(default_provider_id)
+            if default_provider_id is not None
+            else None
+        )
 
     def register(self, provider_id: str, factory: ProviderFactory) -> None:
-        normalized_id = provider_id.strip().lower()
-        if not normalized_id:
-            raise ValueError("provider_id must not be empty")
+        normalized_id = _normalize_provider_id(provider_id)
         if normalized_id in self._factories:
             raise ValueError(f"Provider already registered: {normalized_id}")
         self._factories[normalized_id] = factory
 
     def create(self, provider_id: str, context: ProviderContext) -> GalleryProvider:
-        normalized_id = provider_id.strip().lower()
+        normalized_id = _normalize_provider_id(provider_id)
         try:
             factory = self._factories[normalized_id]
         except KeyError as exc:
@@ -40,6 +58,10 @@ class ProviderRegistry:
     @property
     def provider_ids(self) -> tuple[str, ...]:
         return tuple(sorted(self._factories))
+
+    @property
+    def default_provider_id(self) -> str | None:
+        return self._default_provider_id
 
 
 def _load_factory(target: str) -> ProviderFactory:
@@ -59,6 +81,7 @@ def default_provider_registry() -> ProviderRegistry:
     return ProviderRegistry(
         {
             provider_id: _load_factory(target)
-            for provider_id, target in _PROVIDERS.items()
-        }
+            for provider_id, target in PROVIDER_REGISTRY.items()
+        },
+        default_provider_id=DEFAULT_PROVIDER_ID,
     )

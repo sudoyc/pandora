@@ -17,7 +17,7 @@ from pandora_daemon.providers.errors import (
     ProviderSessionError,
     ProviderUpstreamError,
 )
-from pandora_daemon.config import CredentialsConfig, PandoraConfig
+from pandora_daemon.config import PandoraConfig, ProviderConfig
 from pandora_daemon.providers import GallerySearchQuery
 from pandora_daemon.routes import router
 from pandora_daemon.routes.readiness import _run_probe
@@ -28,12 +28,17 @@ SCHEMA_PATH = Path("docs/agent/schemas/readiness-response.schema.json")
 CHECK_NAMES = ("homepage", "search", "popular", "home")
 
 
-def _make_app(credentials: CredentialsConfig | None = None):
+def _make_app(
+    provider_config: ProviderConfig | None = None,
+    *,
+    auth_configured: bool = False,
+):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
-    state.config = PandoraConfig(credentials=credentials or CredentialsConfig())
+    state.config = PandoraConfig(provider=provider_config or ProviderConfig())
     provider = MagicMock()
+    provider.auth_configured = auth_configured
     provider.get_homepage = AsyncMock(return_value=[])
     provider.search = AsyncMock(return_value=[])
     provider.get_popular = AsyncMock(return_value=[])
@@ -59,8 +64,14 @@ async def test_readiness_probe_timeout_is_classified_as_network():
     assert status == "network"
 
 
-def test_readiness_without_credentials_is_deterministic_and_does_not_probe():
-    app, provider = _make_app(CredentialsConfig(igneous="sensitive-partial-cookie"))
+def test_readiness_without_configured_provider_is_deterministic_and_does_not_probe():
+    app, provider = _make_app(
+        ProviderConfig(
+            id="fixture-provider",
+            credentials={"opaque": "sensitive-partial-cookie"},
+        ),
+        auth_configured=False,
+    )
 
     response = TestClient(app).get("/api/readiness")
 
@@ -80,11 +91,16 @@ def test_readiness_without_credentials_is_deterministic_and_does_not_probe():
 
 
 def test_readiness_reports_ready_only_after_all_four_probes_succeed():
-    credentials = CredentialsConfig(
-        igneous="sensitive-igneous",
-        ipb_member_id="sensitive-member",
+    app, provider = _make_app(
+        ProviderConfig(
+            id="fixture-provider",
+            credentials={
+                "opaque_a": "sensitive-credential-a",
+                "opaque_b": "sensitive-credential-b",
+            },
+        ),
+        auth_configured=True,
     )
-    app, provider = _make_app(credentials)
 
     response = TestClient(app).get("/api/readiness")
 
@@ -103,8 +119,8 @@ def test_readiness_reports_ready_only_after_all_four_probes_succeed():
     assert search_query.keyword == "pandora-readiness-probe"
     provider.get_popular.assert_awaited_once_with()
     provider.get_home_detail.assert_awaited_once_with()
-    assert "sensitive-igneous" not in response.text
-    assert "sensitive-member" not in response.text
+    assert "sensitive-credential-a" not in response.text
+    assert "sensitive-credential-b" not in response.text
 
 
 @pytest.mark.parametrize(
@@ -122,8 +138,10 @@ def test_readiness_classifies_failures_without_short_circuiting_or_leaking(
     status,
     session,
 ):
-    credentials = CredentialsConfig(igneous="fixture", ipb_member_id="fixture")
-    app, provider = _make_app(credentials)
+    app, provider = _make_app(
+        ProviderConfig(id="fixture-provider"),
+        auth_configured=True,
+    )
     provider.get_homepage.side_effect = exception
 
     response = TestClient(app).get("/api/readiness")
@@ -149,8 +167,10 @@ def test_readiness_classifies_failures_without_short_circuiting_or_leaking(
 
 
 def test_readiness_reports_unknown_session_when_transport_prevents_all_probes():
-    credentials = CredentialsConfig(igneous="fixture", ipb_member_id="fixture")
-    app, provider = _make_app(credentials)
+    app, provider = _make_app(
+        ProviderConfig(id="fixture-provider"),
+        auth_configured=True,
+    )
     for method in (
         provider.get_homepage,
         provider.search,

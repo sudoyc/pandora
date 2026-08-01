@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from pandora_daemon.dependencies import get_gallery_provider, get_cache, get_image_service, get_db
+from pandora_daemon.providers.contracts import GalleryComment, GalleryDetail
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class PrefetchBody(BaseModel):
 # Serializers
 # ---------------------------------------------------------------------------
 
-def _comment_to_dict(c) -> dict:
+def _comment_to_dict(c: GalleryComment) -> dict[str, object]:
     return {
         "id": c.id,
         "user": c.user,
@@ -61,7 +62,7 @@ def _comment_to_dict(c) -> dict:
     }
 
 
-def _detail_to_dict(d) -> dict:
+def _detail_to_dict(d: GalleryDetail) -> dict[str, object]:
     return {
         "gid": d.gid,
         "title": d.title,
@@ -74,7 +75,7 @@ def _detail_to_dict(d) -> dict:
         "size": d.size,
         "posted": d.posted,
         "favorite_slot": d.favorite_slot,
-        "preview_pages": d.preview_pages,
+        "preview_pages": d.preview_page_count,
         "rating": d.rating,
         "rating_count": d.rating_count,
         "favorite_count": d.favorite_count,
@@ -124,7 +125,7 @@ def _media_type_from_image_bytes(data: bytes) -> str:
 # Cache helper
 # ---------------------------------------------------------------------------
 
-async def _get_detail(gid: str, token: str, provider, cache):
+async def _get_detail(gid: str, token: str, provider, cache) -> GalleryDetail:
     """Return gallery detail from cache or fetch and cache it."""
     cached = cache.get_gallery(gid, token)
     if cached is not None:
@@ -166,9 +167,9 @@ async def rate_gallery(
     provider=Depends(get_gallery_provider),
     cache=Depends(get_cache),
 ):
-    """Rate a gallery. Fetches api_uid/api_key from gallery detail (uses cache)."""
+    """Rate a gallery using its normalized detail."""
     detail = await _get_detail(gid, token, provider, cache)
-    result = await provider.rate_gallery(detail.api_uid, detail.api_key, int(gid), token, body.rating)
+    result = await provider.rate_gallery(detail, body.rating)
     return {"ok": True, "result": result}
 
 
@@ -180,16 +181,9 @@ async def vote_comment(
     provider=Depends(get_gallery_provider),
     cache=Depends(get_cache),
 ):
-    """Vote on a comment. Fetches api_uid/api_key from gallery detail (uses cache)."""
+    """Vote on a comment using its normalized gallery detail."""
     detail = await _get_detail(gid, token, provider, cache)
-    result = await provider.vote_comment(
-        detail.api_uid,
-        detail.api_key,
-        int(gid),
-        token,
-        body.comment_id,
-        body.vote,
-    )
+    result = await provider.vote_comment(detail, body.comment_id, body.vote)
     return {"ok": True, "result": result}
 
 
