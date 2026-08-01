@@ -14,6 +14,7 @@ STATIC_METRIC_KEYS = frozenset(
         "provider_symbol_leaks",
         "concrete_provider_state_fields",
         "provider_factory_calls",
+        "uncontracted_provider_calls",
         "missing_provider_contract",
         "missing_provider_registry",
         "top_level_provider_packages",
@@ -65,6 +66,10 @@ def _write_coupled_repository(root: Path) -> None:
 
             class GalleryProvider(Protocol):
                 async def get_homepage(self) -> list[object]: ...
+        """,
+        "pandora_daemon/routes/gallery.py": """
+            async def gallery(provider):
+                return await provider.get_gallery_details("1", "token")
         """,
         "pandora_daemon/providers/registry.py": """
             from .contracts import GalleryProvider
@@ -121,6 +126,7 @@ def test_static_metrics_detect_coupling_without_missing_neutral_seams(tmp_path: 
         "provider_symbol_leaks",
         "concrete_provider_state_fields",
         "provider_factory_calls",
+        "uncontracted_provider_calls",
         "top_level_provider_packages",
         "packaging_provider_leaks",
         "route_module_naming_violations",
@@ -130,6 +136,36 @@ def test_static_metrics_detect_coupling_without_missing_neutral_seams(tmp_path: 
 
     assert metrics["missing_provider_contract"] == 0
     assert metrics["missing_provider_registry"] == 0
+
+
+def test_uncontracted_provider_calls_compare_routes_with_protocol(tmp_path: Path):
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/providers/contracts.py",
+        """
+        from typing import Protocol
+
+
+        class GalleryProvider(Protocol):
+            async def get_homepage(self) -> list[object]: ...
+        """,
+    )
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/routes/browse.py",
+        """
+        async def homepage(provider):
+            return await provider.get_homepage()
+
+
+        async def archive(alternate_provider):
+            return await alternate_provider.get_archive_list("1", "token")
+        """,
+    )
+
+    metrics = collect_static_metrics(tmp_path)
+
+    assert metrics["uncontracted_provider_calls"] == 1
 
 
 def test_dependency_accessor_without_mapping_is_not_a_registry(tmp_path: Path):

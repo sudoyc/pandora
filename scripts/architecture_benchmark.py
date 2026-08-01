@@ -17,6 +17,7 @@ WEIGHTS: dict[str, int] = {
     "provider_symbol_leaks": 3,
     "concrete_provider_state_fields": 25,
     "provider_factory_calls": 20,
+    "uncontracted_provider_calls": 15,
     "missing_provider_contract": 100,
     "missing_provider_registry": 80,
     "top_level_provider_packages": 30,

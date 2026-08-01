@@ -11,6 +11,7 @@ _STATIC_METRIC_KEYS = (
     "provider_symbol_leaks",
     "concrete_provider_state_fields",
     "provider_factory_calls",
+    "uncontracted_provider_calls",
     "missing_provider_contract",
     "missing_provider_registry",
     "top_level_provider_packages",
@@ -260,6 +261,50 @@ def _collect_python_metrics(root: Path) -> tuple[dict[str, int], bool, bool, int
     return counts, has_provider_contract, has_provider_registry, len(product_path_violations)
 
 
+def _provider_contract_methods(root: Path) -> set[str]:
+    contracts_path = root / "pandora_daemon" / "providers" / "contracts.py"
+    if not contracts_path.is_file():
+        return set()
+    tree = ast.parse(
+        contracts_path.read_text(encoding="utf-8"),
+        filename=str(contracts_path.relative_to(root)),
+    )
+    methods: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = {_normalized(_annotation_text(base)) for base in node.bases}
+        if not any(base.endswith("protocol") for base in bases):
+            continue
+        methods.update(
+            statement.name
+            for statement in node.body
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+        )
+    return methods
+
+
+def _uncontracted_provider_calls(root: Path) -> int:
+    routes_path = root / "pandora_daemon" / "routes"
+    if not routes_path.is_dir():
+        return 0
+    route_calls: set[str] = set()
+    for path in sorted(routes_path.glob("*.py")):
+        tree = ast.parse(
+            path.read_text(encoding="utf-8"),
+            filename=str(path.relative_to(root)),
+        )
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and "provider" in _normalized(node.func.value.id)
+            ):
+                route_calls.add(node.func.attr)
+    return len(route_calls - _provider_contract_methods(root))
+
+
 def _top_level_provider_packages(root: Path) -> int:
     if not root.is_dir():
         return 0
@@ -344,6 +389,7 @@ def collect_static_metrics(root: Path) -> dict[str, int]:
     )
     metrics = {
         **python_counts,
+        "uncontracted_provider_calls": _uncontracted_provider_calls(root),
         "missing_provider_contract": int(not has_contract),
         "missing_provider_registry": int(not has_registry),
         "top_level_provider_packages": _top_level_provider_packages(root),
