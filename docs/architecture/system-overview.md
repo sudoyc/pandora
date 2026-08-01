@@ -2,20 +2,20 @@
 
 状态：现役
 基线版本：`0.2.0`
-最近核对：2026-07-25
+最近核对：2026-08-02
 
 ## 1. 目标
 
 Pandora 是一个本地运行的画廊浏览、检索、下载和离线库服务。当前设计目标是：
 
-- 让上游 HTTP/HTML 变化被隔离在无状态 Python 库中。
-- 让认证、缓存、数据库、下载队列和本地文件只由一个 daemon 管理。
+- 让上游 HTTP/HTML 变化被隔离在可替换、无状态的 `GalleryProvider` adapter 中。
+- 让认证、缓存、数据库、下载队列和本地文件只由一个 daemon 管理，并按 provider 隔离。
 - 为 CLI、Agent Pack 和可选 Web UI 提供稳定、可测试的 REST/WS 契约。
 - 默认绑定 loopback，避免把本地凭据和文件能力暴露为公网服务。
 - 优先保证机器调用、恢复能力和契约稳定，再扩展人类 UI。
 
 当前不追求：恢复 Rust TUI、创建第二套状态层、让 consumer 直接访问上游、
-多站点抽象或无依据地重写 daemon。
+运行时加载第三方插件，或无依据地重写 daemon。
 
 ## 2. 系统上下文
 
@@ -34,25 +34,26 @@ Pandora 是一个本地运行的画廊浏览、检索、下载和离线库服务
                          | FastAPI / SQLite / files |
                          +------------+------------+
                                       |
-                               Python imports
+                         GalleryProvider contract
                                       |
                          +------------v------------+
-                         |       exhentai_api       |
+                         |    provider adapter      |
                          | HTTP / parsing / models  |
                          +------------+------------+
                                       |
                                   upstream HTTP
 ```
 
-依赖只能向下：consumer 调 daemon，daemon 调 `exhentai_api`。consumer 不得绕过
-daemon，`exhentai_api` 也不得反向依赖配置、数据库或 UI。
+依赖只能向下：consumer 调 daemon，daemon 只依赖 provider-neutral 契约，adapter 实现契约并
+调用对应上游。consumer 不得绕过 daemon；adapter 不得反向依赖数据库、路由或 UI。
 
 ## 3. 分层职责
 
 | 层 | 仓库位置 | 拥有的职责 | 明确不拥有 |
 |---|---|---|---|
-| 上游接口库 | `exhentai_api/` | HTTP client、HTML/JSON parser、领域 model、上游异常 | 配置、缓存、数据库、队列、UI |
-| 本地服务 | `pandora_daemon/` | 凭据和 session、REST/WS、SQLite、缓存、下载、本地库、配置 | UI 渲染、agent 决策 |
+| Provider 契约 | `pandora_daemon/providers/contracts.py` | provider-neutral 查询、详情、媒体与错误语义 | 上游字段、凭据格式、持久化 |
+| Provider adapter | `pandora_daemon/providers/<id>/` | 上游 client、parser、model 映射和媒体访问 | 配置、数据库、队列、UI |
+| 本地服务 | `pandora_daemon/` | provider 选择、凭据和 session、REST/WS、SQLite、缓存、下载、本地库、配置 | UI 渲染、agent 决策 |
 | CLI | `pandora_daemon/cli.py` | daemon 的人类和 JSON/NDJSON 客户端 | 直接抓取、持久化副本 |
 | Agent Pack | `docs/agent/` | 机器契约、schema、工作流、故障处理 | 业务状态、第二套控制平面 |
 | Web | `pandora-web/` | 可选的人类浏览界面，只消费 REST/WS | 上游请求、服务端状态 |
@@ -63,6 +64,7 @@ daemon，`exhentai_api` 也不得反向依赖配置、数据库或 UI。
 | 子系统 | 主要模块 | 说明 |
 |---|---|---|
 | 应用生命周期 | `app.py`, `state.py`, `dependencies.py` | 构造共享 `AppState`，按依赖顺序启动和关闭资源 |
+| Provider 组合 | `providers/registry.py`, `workspace.py` | 确定性选择 adapter，并隔离每个 provider 的数据库、下载状态和离线库 |
 | 配置 | `config.py`, `routes/config.py` | TOML 配置、公开字段白名单和校验 |
 | 数据库 | `db.py` | SQLite/WAL；历史、本地收藏、书签、搜索、过滤和标签缓存 |
 | 图片缓存 | `cache.py` | URL 哈希文件缓存、详情 TTL、容量淘汰 |
@@ -87,6 +89,10 @@ daemon，`exhentai_api` 也不得反向依赖配置、数据库或 UI。
 | 离线画廊 | `download.path`，默认 `~/Downloads/pandora` | daemon | library API 和 PDF export |
 | Web 临时视图状态 | 浏览器内存/`localStorage` | Web | 不成为业务事实来源 |
 
+默认 provider 继续使用表中的兼容路径。非默认 provider 使用
+`~/.config/pandora/providers/<provider-id>/pandora.db`、同目录的 `downloads.json`，以及
+`download.path/<provider-id>`；公开配置中的 `download.path` 仍是用户配置的根目录。
+
 consumer 不应直接编辑 daemon 状态文件。需要修复或迁移时，应由 daemon/CLI 提供
 显式操作并保持原子写入。
 
@@ -95,8 +101,9 @@ consumer 不应直接编辑 daemon 状态文件。需要修复或迁移时，应
 ### 启动与探测
 
 ```text
-load config -> initialize SQLite -> create upstream client/cache/tag DB/download manager
-            -> start workers and eviction loop -> expose health/config/readiness/status
+load config -> discover built-in adapters -> select provider -> resolve provider workspace
+            -> initialize SQLite/cache/tag DB/download manager -> start workers and eviction loop
+            -> expose health/config/readiness/status
 ```
 
 `health.auth_configured` 只表示凭据字段已配置，不表示上游会话已验证。`readiness` 通过
@@ -106,12 +113,12 @@ homepage、search、popular 和 home 四个只读检查分别报告 auth/session
 ### 浏览与详情
 
 ```text
-consumer -> daemon route -> cache/database policy -> exhentai_api -> upstream
-         <- public serializer <- parsed domain model <- response
+consumer -> daemon route -> cache/database policy -> GalleryProvider -> adapter -> upstream
+         <- public serializer <- provider-neutral domain model <- adapter mapping <- response
 ```
 
-上游 parser model 可以包含 daemon 内部工作字段，公共 serializer 只返回调用方所需字段。
-访问详情时可由 daemon 记录历史，consumer 不直接写数据库。
+adapter 内部 model 可以包含上游工作字段；进入应用层时必须映射到 provider-neutral model。
+公共 serializer 只返回调用方所需字段。访问详情时可由 daemon 记录历史，consumer 不直接写数据库。
 
 ### 下载与恢复
 
@@ -184,7 +191,7 @@ TUI 已冻结，不纳入默认功能开发验证。
 
 ## 10. 当前约束
 
-- 上游是 HTML 驱动接口，页面或认证行为变化会造成 parser/endpoint 漂移。
+- 内置 provider 使用 HTML 驱动接口，页面或认证行为变化会造成 adapter parser/endpoint 漂移。
 - `health` 保持轻量；上游会话和四项页面能力由显式 `readiness` 探针验证。
 - Web 仍是可选 consumer；下载对账、核心 workspace、桌面/移动布局和对话框键盘焦点已有
   fixture 与浏览器覆盖。

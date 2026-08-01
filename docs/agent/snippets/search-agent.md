@@ -7,5 +7,5 @@ For normal keyword search, call `search "keyword" --page 0 --json`. For tag sear
 
 Scheme A for translated tags: run `tags status --json`, refresh if stale or unloaded, run `tags suggest "<term>" --json`, choose a candidate with evidence, then search the selected ExHentai tag syntax, such as `search "female:stockings" --search-tags --json`.
 
-Do not auto-rewrite Chinese or other translated text into tag syntax. Do not use direct `exhentai_api`, direct scraping, credential persistence, or a second state layer.
+Do not auto-rewrite Chinese or other translated text into tag syntax. Do not use direct provider imports, direct upstream access, credential persistence, or a second state layer.
 ```

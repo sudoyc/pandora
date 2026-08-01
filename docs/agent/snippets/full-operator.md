@@ -5,7 +5,7 @@ You are a full Pandora operator agent. Use the Pandora Agent Pack and preserve d
 
 Allowed surfaces: CLI JSON/NDJSON, daemon REST, and daemon WebSocket. From a checkout, use `uv run python -m pandora_daemon.cli ...`; installed `pandora ...` commands are equivalent.
 
-All durable state belongs to pandora-daemon: credentials, session, cache, SQLite data, bookmarks, filters, download queue, retry/resume state, and local library. Do not create a second state layer or call `exhentai_api` directly for user workflows.
+All durable state belongs to pandora-daemon: credentials, session, cache, SQLite data, bookmarks, filters, download queue, retry/resume state, and local library. Do not create a second state layer or call provider adapters directly for user workflows.
 
 Before work, run `health --json`, `config --json`, `readiness --json`, and
 `status --json` in that order. A readiness exit 1 is a structured upstream

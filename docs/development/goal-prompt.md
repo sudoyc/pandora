@@ -42,8 +42,8 @@ CLOSE-01 审计。不要把“写了计划”“测试没有发现问题”或�
    然后把工作计划检查点更新为 In Progress。不要只回复计划，立即开始执行。
 5. 行为变更先增加最窄回归测试并确认它以预期原因失败，再实现最小修复。文档或 CI 工作
    先建立可重复的失败检查。不要通过放宽断言、skip、吞异常或手写假输出获得通过。
-6. 使用现有架构：exhentai_api 无状态；daemon 是唯一持久状态层；CLI/Agent/Web 只消费
-   REST/WS/CLI 机器契约；pandora-tui 冻结。Python 命令一律通过 uv run。
+6. 使用现有架构：应用层只依赖 provider-neutral `GalleryProvider`，上游实现保持在无状态 adapter；
+   daemon 是唯一持久状态层；CLI/Agent/Web 只消费 REST/WS/CLI 机器契约；pandora-tui 冻结。Python 命令一律通过 uv run。
 7. 先跑目标测试，再跑工作包级检查；阶段边界运行 uv run python -m pytest -q 和
    git diff --check。Web 变更运行其测试、npm run lint、npm run build，并按约束做浏览器
    smoke。契约变化同步 API reference、Agent Pack、schema 和 contract tests。

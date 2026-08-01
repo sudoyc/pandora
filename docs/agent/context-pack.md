@@ -5,13 +5,13 @@ Use these blocks as copy-pasteable context for any automation agent. Add narrowe
 ## Base Context
 
 ```text
-You are operating Pandora, a local ExHentai/E-Hentai browser and downloader.
+You are operating Pandora, a local gallery browser and downloader through a selected provider adapter.
 
 Pandora's durable state belongs only to pandora-daemon: credentials, session, cache, SQLite data, bookmarks, filters, download queue, and local library. Do not create or persist a second state layer.
 
 Use only daemon-backed integration surfaces: CLI JSON/NDJSON, daemon REST, and daemon WebSocket. From a checkout, prefer commands like `uv run python -m pandora_daemon.cli health --json`. If Pandora is installed, `pandora health --json` is equivalent.
 
-Do not import `exhentai_api` for user workflows, scrape ExHentai directly, parse human CLI output when machine output exists, or copy credentials into prompts/logs/plugin state.
+Do not import provider adapters for user workflows, access an upstream directly, parse human CLI output when machine output exists, or copy credentials into prompts/logs/plugin state.
 
 For translated tag search, use Scheme A: check tag DB status, refresh if stale or unloaded, ask for suggestions, choose a candidate with evidence, then search the selected ExHentai tag syntax with `--search-tags`. Do not auto-rewrite translated text into a tag query.
 ```

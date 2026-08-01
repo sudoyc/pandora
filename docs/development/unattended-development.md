@@ -42,9 +42,9 @@ ADR，不能通过普通实现提交静默改变架构。
 
 ### 架构与状态
 
-- `exhentai_api` 保持无状态，只负责上游 HTTP、parser、model 和异常。
-- `pandora-daemon` 是凭据、session、SQLite、缓存、下载队列和本地库的唯一状态所有者。
-- CLI、Agent 和 Web 只使用 daemon REST、WebSocket 或 CLI JSON/NDJSON，不创建第二套状态层。
+- 应用层只依赖 provider-neutral `GalleryProvider`；上游 HTTP、parser、model 和异常只属于无状态 adapter。
+- `pandora-daemon` 负责确定性 provider 选择，并且是凭据、session、SQLite、缓存、下载队列和本地库的唯一状态所有者。
+- CLI、Agent 和 Web 只使用 daemon REST、WebSocket 或 CLI JSON/NDJSON，不导入 adapter 或创建第二套状态层。
 - `pandora-tui/` 已冻结，不做功能、重构、依赖升级或视觉维护。
 - 默认保持 loopback 部署；远程绑定、认证和多用户模式不属于自治扩展范围。
 
@@ -152,7 +152,7 @@ commit 记录实现提交和证据，避免在同一个 commit 中记录自身�
 | 变更 | 最低目标检查 | 包级或阶段检查 |
 |---|---|---|
 | 文档/Prompt | 内部链接、JSON 语法、`git diff --check` | 文档检查器落地后使用统一入口 |
-| `exhentai_api` | 对应 parser/client fixture tests | `uv run python -m pytest tests/exhentai_api -q` |
+| Provider adapter | 对应 parser/client fixture tests | `uv run python -m pytest pandora_daemon/providers/exhentai/upstream/tests -q` |
 | daemon/CLI | 对应 route/service/CLI tests | `uv run python -m pytest tests/pandora_daemon -q` |
 | 下载状态 | download、concurrency、route integration tests | 重启/迁移/损坏 fixture 场景 + Python 全量测试 |
 | Agent 契约 | contract test + 相关 schema 校验 | fixture daemon 端到端工作流 |

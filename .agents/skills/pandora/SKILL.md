@@ -49,7 +49,7 @@ Long-running repository development references:
 Priority for agent work:
 
 1. Prefer daemon REST/CLI workflows with JSON or NDJSON output.
-2. Keep `exhentai_api` stateless.
+2. Keep provider adapter HTTP/parser implementations stateless.
 3. Treat Hermes skills/plugins as thin wrappers around the generic Agent Pack, daemon REST, or CLI JSON/NDJSON.
 4. Keep frontends thin: they call daemon REST + WebSocket only.
 5. Do not bypass the daemon from CLI/Web or any future plugin.
@@ -58,15 +58,17 @@ Priority for agent work:
 ## Architecture Contract
 
 ```text
-exhentai_api (stateless Python library)
+provider adapters (stateless upstream HTTP/parsing)
+        -> GalleryProvider contracts
         -> pandora-daemon (FastAPI + SQLite + cache + downloads)
         -> consumers (Python CLI, Agent Pack, Hermes skill/plugin, optional React web)
 ```
 
 Layer rules:
 
-- `exhentai_api`: HTTP requests, HTML parsing, models. No config, cache, DB, UI, or local state.
-- `pandora-daemon`: credentials, session, cache, SQLite DB, downloads, local library, config.
+- `pandora_daemon/providers/<id>/`: upstream-specific HTTP, parsing, models, and contract mapping. No database, queue, UI, or consumer state.
+- `pandora_daemon/providers/contracts.py`: provider-neutral application models and protocol.
+- `pandora-daemon`: provider selection, credentials, session, cache, SQLite DB, downloads, local library, config.
 - Consumers/agents: render or automate user actions by calling daemon REST/WS/CLI.
 - `pandora-tui/`: archived historical REST/WS consumer reference only.
 - Web/TUI/client-cache work is not the bot-first path; defer it unless explicitly requested.
@@ -74,7 +76,7 @@ Layer rules:
 Future Hermes plugin/toolset boundary:
 
 - Wrap `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints only, following `docs/agent/`.
-- Do not import `exhentai_api` from Hermes code for auth, browse, search, cache, or downloads.
+- Do not import provider adapters or their upstream modules from Hermes code for auth, browse, search, cache, or downloads.
 - Do not create a second stateful layer for credentials, sessions, cache, queue, bookmarks, or library state.
 - Keep ambiguous decisions in the agent. Pandora exposes primitives and stable machine output.
 

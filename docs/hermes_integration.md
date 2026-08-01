@@ -22,7 +22,7 @@ There is no separate in-repo Hermes plugin or toolset package today. If one is a
 - Daemon REST endpoints under `http://127.0.0.1:7860/api/...`.
 - Daemon WebSocket events from `WS /ws`.
 
-Hermes must not call `exhentai_api` directly for user workflows, scrape ExHentai directly, persist credentials, or maintain a second credential/session/cache/download/bookmark/library state layer.
+Hermes must not import provider adapters or their upstream implementations for user workflows, access an upstream directly, persist credentials, or maintain a second credential/session/cache/download/bookmark/library state layer.
 
 ## Hermes Bootstrap
 

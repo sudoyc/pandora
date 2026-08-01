@@ -1,7 +1,7 @@
 # Pandora 文档库
 
 状态：现役
-最近整理：2026-07-23
+最近整理：2026-08-02
 
 本目录把当前设计、稳定契约、操作手册和历史材料分开维护。新成员先读
 [架构入口](architecture/README.md)，再按任务进入对应文档。
@@ -18,9 +18,9 @@
 | 测试分层与可用性验收 | [development/testing.md](development/testing.md) | 测试证据、live 验收或发布门槛变化时 |
 | 版本、构建与回滚 | [development/release-process.md](development/release-process.md) | 版本、artifact、候选发布或回滚规则变化时 |
 | 长期 goal prompt | [development/goal-prompt.md](development/goal-prompt.md) | 启动协议或默认授权变化时 |
-| Python、REST、WebSocket、CLI 接口 | [api_reference.md](api_reference.md) | 公共接口或数据形状变化时 |
+| Provider 契约、REST、WebSocket、CLI 接口 | [api_reference.md](api_reference.md) | 公共接口或数据形状变化时 |
 | 部署与运行 | [deployment.md](deployment.md) | 配置、启动、服务管理或诊断方式变化时 |
-| Python 库用法 | [exhentai_api_usage.md](exhentai_api_usage.md) | `exhentai_api` 公共 API 变化时 |
+| 内置 ExHentai adapter 实现 | [providers/exhentai.md](providers/exhentai.md) | adapter 的 upstream client、parser 或映射变化时 |
 | Agent 机器契约与工作流 | [agent/README.md](agent/README.md) | agent 可见命令、事件、schema 或流程变化时 |
 | Hermes 打包约定 | [hermes_integration.md](hermes_integration.md) | Hermes consumer 形态变化时 |
 | Web 当前能力 | [../pandora-web/README.md](../pandora-web/README.md) | Web 功能或开发方式变化时 |

@@ -1,13 +1,22 @@
 # Pandora API Reference
 
-This document summarizes the Python `exhentai_api` package, the local `pandora-daemon` REST/WebSocket API, and the current CLI surface.
+This document summarizes Pandora's provider contracts, the built-in provider developer surface, the local `pandora-daemon` REST/WebSocket API, and the current CLI surface. REST/CLI/WS contract v1 is the public consumer boundary; adapter implementation imports are internal developer APIs.
 
-## Python package: `exhentai_api`
+## Provider application contract
 
-All methods are async.
+`pandora_daemon.providers.contracts` defines `ProviderContext`, `GallerySearchQuery`,
+`GallerySummary`, `GalleryDetail`, `GalleryComment`, and the `GalleryProvider` protocol.
+Routes, image handling, downloads, and application state depend on these types only.
+Every provider supplies a stable `provider_id`, authentication readiness, browse/search/detail
+operations, page/thumbnail/media access, supported mutations, home diagnostics, and `aclose()`.
+Adapter-owned `GalleryDetail.provider_data` is opaque outside that adapter and is never serialized.
+
+## Built-in provider developer API
+
+The nested upstream implementation is stateless and all methods are async. Application code uses the `GalleryProvider` adapter rather than importing these classes directly.
 
 ```python
-from exhentai_api import ExhentaiAPI, ExhentaiClient
+from pandora_daemon.providers.exhentai.upstream import ExhentaiAPI, ExhentaiClient
 
 client = ExhentaiClient(igneous="...", ipb_member_id="...", ipb_pass_hash="...")
 api = ExhentaiAPI(client=client)
@@ -72,7 +81,7 @@ async with ExhentaiAPI(client=client) as api:
 
 Default base URL: `http://127.0.0.1:7860`.
 
-Daemon credentials live in `~/.config/pandora/config.toml` under `[credentials]`. `igneous` and `ipb_member_id` are the usual minimum; `ipb_pass_hash` is optional and should be left empty when the session does not require it. Public config and CLI machine output never expose raw credential values.
+Daemon provider selection and credentials live in `~/.config/pandora/config.toml` under `[provider]` and `[provider.credentials]`. For the built-in adapter, `igneous` and `ipb_member_id` are the usual minimum; `ipb_pass_hash` is optional and should be left empty when the session does not require it. Legacy top-level `[credentials]` remains readable. Public config and CLI machine output expose the selected provider ID but never raw credential values.
 
 The application version and machine contract version are independent. Clients
 can read `contract_version: "1"` from `GET /api/health`; compatibility and
@@ -332,7 +341,7 @@ and exits with exit 1 for every recognized not-ready result.
 
 Search/tag workflow for agents uses scheme A: Pandora exposes primitive interfaces only and does not rewrite translated user text into tag queries. A bot should call `tags status`, refresh if needed, call `tags suggest`, choose the desired namespace/tag candidate itself, then call `search` with an explicit keyword such as `female:stockings` and `--search-tags`.
 
-Advanced search query parameters accepted by `/api/search` are `category`, `min_rating`, `search_name`, `search_tags`, `search_description`, `search_torrent`, `search_low_power_tags`, `disable_language_filter`, `show_expunged`, `min_pages`, and `max_pages`. `category` is passed as an include bitmask; `SearchParams.to_dict()` converts it to ExHentai's exclude bitmask before the upstream request.
+Advanced search query parameters accepted by `/api/search` are `category`, `min_rating`, `search_name`, `search_tags`, `search_description`, `search_torrent`, `search_low_power_tags`, `disable_language_filter`, `show_expunged`, `min_pages`, and `max_pages`. `category` remains the public v1 include bitmask; the built-in ExHentai adapter converts it to that upstream's exclude bitmask.
 
 Current commands:
 

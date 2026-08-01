@@ -1,52 +1,55 @@
-# Exhentai API 使用说明
+# 内置 ExHentai Provider 实现说明
 
 ## 概述
 
-`exhentai_api` 是一个 Python 异步库，提供对 Exhentai/E-Hentai 的完整数据访问能力。底层依赖 `httpx` (异步 HTTP) 和 `BeautifulSoup4` (HTML 解析)。
+`pandora_daemon.providers.exhentai` 是 Pandora 的内置 provider adapter。其 `upstream/` 子包使用 `httpx` 和 `BeautifulSoup4` 实现无状态 HTTP、HTML parser 与上游 model；consumer 不应直接导入该实现，公共操作入口仍是 daemon REST/WS 与 CLI。
 
 ## 包结构
 
 ```
-exhentai_api/
-├── __init__.py          # 导出: ExhentaiAPI, ExhentaiClient, 17 个模型类
-├── api.py               # ExhentaiAPI: 22 个异步方法
-├── client.py            # ExhentaiClient: cookies, headers, Sad Panda 检测, 重试
-├── constants.py         # BASE_URL, 分类常量
-├── utils.py             # extract_gallery_token
-├── models/
-│   ├── gallery.py       # GalleryListItem, GalleryDetail
-│   ├── image.py         # ImageDetail
-│   ├── search.py        # SearchParams
-│   ├── favorites.py     # FavoriteCategory, FavoritesResponse
-│   ├── toplist.py       # TopListItem
-│   ├── comment.py       # GalleryComment
-│   ├── torrent.py       # TorrentItem
-│   ├── archive.py       # ArchiveOption, ArchiverData
-│   ├── home.py          # HomeDetail
-│   ├── profile.py       # ProfileResult
-│   ├── vote.py          # RateResult, VoteCommentResult
-│   └── tags.py          # Tag, WatchedTag
-└── parsers/
-    ├── gallery.py       # 画廊列表解析 (含评分/页数/缩略图尺寸)
-    ├── gallery_detail.py # 画廊详情解析 (完整元数据+评论)
-    ├── image.py         # 图片查看器 + API 响应解析
-    ├── favorites.py     # 收藏列表解析
-    ├── toplist.py       # TopList 解析
-    ├── comments.py      # 评论解析
-    ├── torrent.py       # 种子列表解析
-    ├── archive.py       # 归档选项解析
-    ├── home.py          # 用户主页解析
-    ├── profile.py       # 用户资料解析
-    └── mytags.py        # 标签管理解析
+pandora_daemon/providers/exhentai/
+├── adapter.py           # GalleryProvider 契约映射
+├── media.py             # provider-specific 图片与缩略图访问
+└── upstream/
+    ├── __init__.py      # 导出 ExhentaiAPI、ExhentaiClient 与上游 model
+    ├── api.py           # ExhentaiAPI: 22 个异步方法
+    ├── client.py        # ExhentaiClient: cookies、headers、Sad Panda 检测与重试
+    ├── constants.py     # BASE_URL、分类常量
+    ├── utils.py         # extract_gallery_token
+    ├── models/
+    │   ├── gallery.py       # GalleryListItem, GalleryDetail
+    │   ├── image.py         # ImageDetail
+    │   ├── search.py        # SearchParams
+    │   ├── favorites.py     # FavoriteCategory, FavoritesResponse
+    │   ├── toplist.py       # TopListItem
+    │   ├── comment.py       # GalleryComment
+    │   ├── torrent.py       # TorrentItem
+    │   ├── archive.py       # ArchiveOption, ArchiverData
+    │   ├── home.py          # HomeDetail
+    │   ├── profile.py       # ProfileResult
+    │   ├── vote.py          # RateResult, VoteCommentResult
+    │   └── tags.py          # Tag, WatchedTag
+    └── parsers/
+        ├── gallery.py       # 画廊列表解析
+        ├── gallery_detail.py # 画廊详情解析
+        ├── image.py         # 图片查看器与 API 响应解析
+        ├── favorites.py     # 收藏列表解析
+        ├── toplist.py       # TopList 解析
+        ├── comments.py      # 评论解析
+        ├── torrent.py       # 种子列表解析
+        ├── archive.py       # 归档选项解析
+        ├── home.py          # 用户主页解析
+        ├── profile.py       # 用户资料解析
+        └── mytags.py        # 标签管理解析
 ```
 
-## 使用示例
+## Adapter 开发示例
 
-### 初始化
+以下导入只用于维护内置 adapter，不是 REST/CLI/WS v1 consumer API。
 
 ```python
 import asyncio
-from exhentai_api import ExhentaiAPI, ExhentaiClient
+from pandora_daemon.providers.exhentai.upstream import ExhentaiAPI, ExhentaiClient
 
 async def main():
     # 带凭证初始化 (访问 ExHentai 必须)
@@ -65,7 +68,7 @@ asyncio.run(main())
 ### 搜索
 
 ```python
-from exhentai_api.models.search import SearchParams
+from pandora_daemon.providers.exhentai.upstream.models.search import SearchParams
 
 params = SearchParams(keyword="fate", min_rating=4, show_expunged=False)
 results = await api.search(params, page=0)

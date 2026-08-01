@@ -1,25 +1,25 @@
 # Pandora Project Context
 
 ## Project Overview
-Pandora is a daemon-first ExHentai/E-Hentai browser and downloader optimized for CLI JSON/NDJSON and generic Agent Pack workflows. It consists of the reusable Python API library (`exhentai_api`), the local FastAPI daemon (`pandora-daemon`), a daemon-backed CLI, the multi-agent docs under `docs/agent/`, a Hermes skill as one packaged consumer, an optional Web frontend, and an archived Rust TUI.
+Pandora is a daemon-first, cross-platform gallery browser and downloader optimized for CLI JSON/NDJSON and generic Agent Pack workflows. Provider-neutral contracts isolate the daemon from upstream-specific adapters; the built-in ExHentai adapter is one implementation. The project also includes a daemon-backed CLI, the multi-agent docs under `docs/agent/`, a Hermes skill as one packaged consumer, an optional Web frontend, and an archived Rust TUI.
 
 *Note: `ARCHITECTURE.md` points to the canonical library under `docs/architecture/`. The Android reference-project research is historical material under `docs/archive/reference/`.*
 
 ### Architecture
-- **exhentai_api (Python)**: The core, stateless abstraction over the ExHentai site.
-- **pandora-daemon (Python/FastAPI)**: The intermediary that handles sessions, caching, database persistence (SQLite), download management, and provides a proxy for images. It runs a REST + WebSocket API on `localhost:7860`. All frontends MUST communicate with ExHentai through this daemon.
+- **Provider layer (Python)**: `GalleryProvider` contracts define application-facing models and behavior; each `pandora_daemon/providers/<id>/` adapter owns stateless upstream HTTP, parsing, and model translation.
+- **pandora-daemon (Python/FastAPI)**: Selects a provider and owns sessions, provider-qualified state, caching, SQLite persistence, downloads, and image proxying. All frontends MUST communicate through its REST/WebSocket contract.
 - **Agent Pack + CLI workflows**: Primary integration surface for agents and scripts. Use `docs/agent/` for reusable context/snippets/schemas, and use CLI `health --json`, `config --json`, `readiness --json`, `status --json`, REST, and WebSocket/NDJSON events for machine operations.
 - **pandora-tui (Rust)**: Archived/frozen. Do not improve or extend it; keep only as historical REST/WS consumer reference.
 - **Web Frontend**: Optional human UI, lower priority than daemon/CLI/Agent Pack contracts.
 
 ### Core Principles
-- **No Direct Access:** Frontends NEVER access ExHentai directly. All traffic is routed through `pandora-daemon`.
-- **Stateless API:** `exhentai_api` is purely functional; state (cookies, cache) is managed by `pandora-daemon`.
+- **No Direct Access:** Frontends NEVER access provider adapters or upstream services directly. All traffic is routed through `pandora-daemon`.
+- **Stateless Adapters:** Upstream HTTP/parser implementations are stateless; credentials, cache, database, queues, and libraries are managed by `pandora-daemon`.
 - **Database Driven:** History, favorites, bookmarks, and tag caching are persisted in an SQLite database managed by the daemon.
 
 ## Current Status
-- **exhentai_api**: Core surface implemented and fixture-tested; upstream compatibility remains ongoing maintenance.
-- **pandora-daemon**: Core service implemented; current reliability work is tracked in `docs/roadmap.md`.
+- **Provider layer**: Provider-neutral contracts, deterministic built-in registration, an isolated ExHentai adapter, and provider-qualified workspaces are implemented and fixture-tested.
+- **pandora-daemon**: Core service implemented with public REST/CLI/WS v1 preserved; current reliability work is tracked in `docs/roadmap.md`.
 - **Agent Pack/CLI contracts**: Generic multi-agent context, workflows, snippets, schemas, and daemon-backed machine commands live under `docs/agent/`; Hermes skill consumes them as one package.
 - **pandora-tui**: Archived/frozen.
 - **Web Frontend**: Optional WIP.
@@ -46,7 +46,7 @@ not-ready result; `connect_error` means the daemon is unreachable.
   - `GET /api/bookmarks`: Reading progress
   - `GET /api/quick-search`: Saved search presets
   - `GET /api/filters`: Filter rules
-- **Python API Details:** See `docs/api_reference.md` and `docs/exhentai_api_usage.md`.
+- **Provider and API Details:** See `docs/api_reference.md` and `docs/providers/exhentai.md`.
 
 ## Important Design Decisions
 - **Images:** All images are cached locally with SHA256 keys by the daemon. Frontends should load images via the daemon proxy to avoid rate limits and utilize local caching.

@@ -12,8 +12,8 @@ Allowed integration surfaces:
 
 Forbidden integration surfaces:
 
-- Direct `exhentai_api` imports for user workflows.
-- Direct ExHentai/E-Hentai scraping from agents or wrappers.
+- Direct provider-adapter or upstream-implementation imports for user workflows.
+- Direct upstream scraping from agents or wrappers.
 - A second credential, session, cache, bookmark, library, filter, or download queue store.
 - Credential persistence in prompts, plugin state, logs, docs, or generated artifacts.
 - Parsing human CLI output when JSON or NDJSON machine output exists.

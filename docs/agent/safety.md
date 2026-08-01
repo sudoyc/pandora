@@ -33,8 +33,8 @@ Allowed:
 
 Forbidden:
 
-- Direct `exhentai_api` imports for user workflows.
-- Direct ExHentai/E-Hentai scraping in agents or wrappers.
+- Direct provider-adapter or upstream-implementation imports for user workflows.
+- Direct upstream scraping in agents or wrappers.
 - Human-output parsing when machine output exists.
 - Stateful plugin/toolset control planes that mirror daemon state.
 

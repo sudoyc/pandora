@@ -31,9 +31,9 @@ uv pip install --python "$PANDORA_HOME/venv/bin/python" \
 ```
 
 The wheel provides both `pandora` and `pandora-daemon`. It contains the daemon,
-CLI, and stateless API library, but not the optional Web client, frozen TUI,
-credentials, cache, database, downloads, or other runtime state. Keep the wheel
-and its recorded SHA-256 checksum for upgrades and rollback.
+CLI, provider-neutral contracts, and built-in provider adapters, but not the optional Web client,
+frozen TUI, credentials, cache, database, downloads, or other runtime state. Keep the wheel and its
+recorded SHA-256 checksum for upgrades and rollback.
 
 Source-checkout commands using `uv run` remain development conveniences. They
 are not a second supported runtime distribution.
@@ -74,18 +74,24 @@ Default config path:
 ~/.config/pandora/config.toml
 ```
 
-Typical minimum credential setup:
+Canonical configuration for the built-in provider:
 
 ```toml
-[credentials]
+[provider]
+id = "exhentai" # Optional while this remains the built-in default.
+
+[provider.credentials]
 igneous = "..."
 ipb_member_id = "..."
 ipb_pass_hash = "..."  # Optional; leave empty if your session does not use it.
 ```
 
+Legacy top-level `[credentials]` remains readable and is rewritten under `[provider.credentials]`
+the next time Pandora saves the config. An empty `provider.id` selects the registry default.
+
 Public/safe config behavior:
 
-- `pandora config --json` omits credentials entirely.
+- `pandora config --json` includes `provider.id` but omits provider credentials entirely.
 - Proxy secrets are redacted; use `network.proxy_configured` instead of expecting the raw proxy URL.
 - Public config still includes local non-secret paths such as download/cache directories; treat it as safe for local agents and scripts, not as output to publish publicly.
 
@@ -118,8 +124,10 @@ Override when needed:
 
 ## Download State Recovery
 
-The daemon exclusively owns `~/.config/pandora/downloads.json`. Its current
-internal format is a version 1 envelope with `schema_version` and `tasks`.
+The daemon exclusively owns the selected provider's download state. The default provider retains
+`~/.config/pandora/downloads.json`; non-default providers use
+`~/.config/pandora/providers/<id>/downloads.json`. The internal format is a version 1 envelope with
+`schema_version` and `tasks`.
 
 - Existing unversioned task mappings migrate to version 1 with an atomic temp-file replace.
 - Truncated JSON, invalid envelopes, and invalid task entries are preserved as `downloads.json.corrupt`, then `.corrupt.1`, and so on. The active file is rebuilt with every task that parsed successfully.

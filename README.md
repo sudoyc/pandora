@@ -41,7 +41,7 @@ The agent boundary is intentionally thin:
 
 - Agents and wrappers consume `pandora` CLI JSON/NDJSON commands or daemon REST/WebSocket endpoints.
 - They must not bypass `pandora-daemon` for auth, cache, download queue, session, bookmark, or library state.
-- They must not call `exhentai_api` directly for user workflows.
+- They must not import provider adapters or their upstream implementation for user workflows.
 - Prefer machine output (`--json`, `--ndjson`) over parsing human text.
 - Keep complex or ambiguous choices in the agent; Pandora exposes primitives.
 
@@ -51,7 +51,7 @@ Scheme A for translated tag search is preserved. Agents run `tags status --json`
 
 ### Built-in ExHentai provider
 
-The built-in adapter uses the stateless `exhentai_api` library for upstream HTTP and parsing. Its 22 API methods, 17 model types, and 11 parsers are fixture-tested against the Android reference project; live upstream compatibility remains an explicit maintenance concern.
+The built-in adapter keeps its stateless HTTP client, parsers, and upstream models under `pandora_daemon.providers.exhentai.upstream`. Its 22 API methods, 17 model types, and 11 parsers are fixture-tested against the Android reference project; live upstream compatibility remains an explicit maintenance concern.
 
 | Category | Methods |
 |----------|---------|
@@ -75,9 +75,9 @@ FastAPI service orchestrating the selected `GalleryProvider` and owning all pers
 - **Download manager** — complete offline gallery clones (metadata + cover + thumbs + pages), resume support, WebSocket progress events
 - **Library API** — browse downloaded galleries, serve local files
 - **Tag suggest/maintenance** — versioned EhTagTranslation database, ETag-aware refresh, substring search with prefix-first ranking
-- **Config** — TOML-based (`~/.config/pandora/config.toml`)
+- **Config** — TOML-based provider selection and credentials (`~/.config/pandora/config.toml`)
 
-30+ REST endpoints, WebSocket real-time events. SQLite persistence (`~/.config/pandora/pandora.db`).
+30+ REST endpoints, WebSocket real-time events. The default provider retains SQLite at `~/.config/pandora/pandora.db`; non-default providers use provider-qualified database, download-state, and library paths.
 
 ### Rust TUI (Archived/Frozen)
 
@@ -161,8 +161,10 @@ the artifact boundary and service setup.
 
 ```bash
 # Edit ~/.config/pandora/config.toml
-# Set your ExHentai session cookies:
-#   [credentials]
+# Select the built-in provider and set its session cookies:
+#   [provider]
+#   id = "exhentai"
+#   [provider.credentials]
 #   igneous = "..."
 #   ipb_member_id = "..."
 #   ipb_pass_hash = "..."  # Optional; leave empty if unused.
@@ -232,7 +234,7 @@ The repeatable internal artifact and rollback procedure is documented in
 
 ## API Reference
 
-Start from the [`docs/` index](docs/README.md). Full daemon REST API and `exhentai_api` method reference live in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/agent/README.md`](docs/agent/README.md). Hermes-specific packaging guidance lives in [`docs/hermes_integration.md`](docs/hermes_integration.md).
+Start from the [`docs/` index](docs/README.md). Provider contracts, the daemon REST API, CLI surface, and built-in adapter developer reference live in [`docs/api_reference.md`](docs/api_reference.md). Deployment and agent/CLI operations are documented in [`docs/deployment.md`](docs/deployment.md) and [`docs/agent/README.md`](docs/agent/README.md). Hermes-specific packaging guidance lives in [`docs/hermes_integration.md`](docs/hermes_integration.md).
 
 ## License
 
