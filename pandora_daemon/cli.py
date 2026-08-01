@@ -25,7 +25,7 @@ _GALLERY_URL_RE = re.compile(r"/g/(\d+)/([0-9a-fA-F]{10})")
 
 
 def parse_gallery_url(url: str) -> tuple[str, str]:
-    """Extract (gid, token) from an ExHentai/E-Hentai gallery URL."""
+    """Extract (gid, token) from a gallery URL."""
     match = _GALLERY_URL_RE.search(url)
     if not match:
         raise ValueError(f"Invalid gallery URL: {url}")
@@ -536,7 +536,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
     parser = PandoraArgumentParser(
         prog="pandora",
-        description="Pandora CLI — ExHentai daemon client",
+        description="Pandora CLI — gallery daemon client",
     )
     subparsers = parser.add_subparsers(dest="command", parser_class=PandoraArgumentParser)
 

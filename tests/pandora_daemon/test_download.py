@@ -98,8 +98,8 @@ def test_download_task_creation():
     assert task.metadata_saved is False
     assert task.error == ""
     assert task.created_at != ""
-    assert task.viewer_urls == []
-    assert task.thumb_urls == []
+    assert task.page_states == {}
+    assert task.failed_pages == []
 
 
 def test_download_task_to_dict():
@@ -116,7 +116,9 @@ def test_download_task_to_dict():
     assert d["downloaded_thumbs"] == 0
     assert d["cover_downloaded"] is False
     assert d["metadata_saved"] is False
-    assert d["thumb_urls"] == []
+    assert "viewer_urls" not in d
+    assert "thumb_urls" not in d
+    assert "thumb_sprites" not in d
 
 
 def test_download_task_to_public_dict_redacts_internal_fields():
@@ -152,10 +154,7 @@ async def test_submit_creates_task(mock_provider, mock_ws, mock_image_service, d
     assert task.token == "abc"
     assert task.title == "Test Gallery"
     assert task.total_pages == 3
-    assert task.viewer_urls == []
-    assert task.thumb_urls == []
     assert task.status == "queued"
-    assert task.thumb_sprites == []
     mock_provider.get_gallery_details.assert_awaited_once_with("123", "abc")
 
 
@@ -337,7 +336,13 @@ async def test_save_and_load_state(mock_provider, mock_ws, mock_image_service, d
 
 
 @pytest.mark.asyncio
-async def test_load_state_preserves_legacy_transport_fields(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+async def test_load_state_discards_legacy_transport_fields_and_rewrites(
+    mock_provider,
+    mock_ws,
+    mock_image_service,
+    download_config,
+    state_file,
+):
     task = DownloadTask(
         gid="456",
         token="def",
@@ -345,21 +350,32 @@ async def test_load_state_preserves_legacy_transport_fields(mock_provider, mock_
         total_pages=5,
         output_dir="/tmp/456",
         status="queued",
+    )
+    persisted_task = task.to_dict()
+    persisted_task.update(
         viewer_urls=["legacy-viewer"],
         thumb_urls=["legacy-thumbnail"],
         thumb_sprites=[{"legacy": True}],
     )
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(json.dumps({"456": task.to_dict()}), encoding="utf-8")
+    state_file.write_text(
+        json.dumps({"schema_version": 1, "tasks": {"456": persisted_task}}),
+        encoding="utf-8",
+    )
 
-    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
+    manager = DownloadManager(
+        mock_provider,
+        download_config,
+        mock_ws,
+        mock_image_service,
+        state_file,
+    )
     manager._load_state()
 
-    assert "456" in manager._tasks
     assert manager._tasks["456"].title == "Persisted Gallery"
-    assert manager._tasks["456"].viewer_urls == ["legacy-viewer"]
-    assert manager._tasks["456"].thumb_urls == ["legacy-thumbnail"]
-    assert manager._tasks["456"].thumb_sprites == [{"legacy": True}]
+    rewritten = json.loads(state_file.read_text(encoding="utf-8"))
+    assert rewritten["tasks"]["456"] == task.to_dict()
+    assert list(state_file.parent.glob("downloads.json.corrupt*")) == []
 
 
 @pytest.mark.asyncio

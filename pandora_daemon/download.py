@@ -53,6 +53,9 @@ def _ext_from_image_bytes(data: bytes) -> str:
 _TERMINAL_ARTIFACT_STATUSES = {"completed", "completed_with_errors"}
 _PAGE_FILE_RE = re.compile(r"^(\d{4,})\.[^.]+$")
 DOWNLOAD_STATE_SCHEMA_VERSION = 1
+_LEGACY_TRANSPORT_STATE_FIELDS = frozenset(
+    {"viewer_urls", "thumb_urls", "thumb_sprites"}
+)
 
 
 class UnsupportedDownloadStateVersion(RuntimeError):
@@ -108,10 +111,6 @@ class DownloadTask:
     created_at: str = ""
     request_id: str = ""
     correlation_id: str = ""
-    # Legacy persisted transport fields retained for state-file compatibility.
-    viewer_urls: list[str] = field(default_factory=list)
-    thumb_urls: list[str] = field(default_factory=list)
-    thumb_sprites: list[dict] = field(default_factory=list)
     page_states: dict[int, str] = field(default_factory=dict)
     failed_pages: list[int] = field(default_factory=list)
 
@@ -955,11 +954,16 @@ class DownloadManager:
         loaded_tasks = {}
         corrupt_entry = False
         diagnostic_migration = False
+        transport_migration = False
         for gid, task_dict in task_data.items():
             try:
                 if not isinstance(task_dict, dict):
                     raise ValueError("Download task must be an object")
                 normalized = dict(task_dict)
+                legacy_fields = _LEGACY_TRANSPORT_STATE_FIELDS.intersection(normalized)
+                for field_name in legacy_fields:
+                    normalized.pop(field_name)
+                transport_migration = transport_migration or bool(legacy_fields)
                 page_states = normalized.get("page_states", {})
                 if not isinstance(page_states, dict):
                     raise ValueError("Download task page_states must be an object")
@@ -982,5 +986,5 @@ class DownloadManager:
         self._tasks.update(loaded_tasks)
         if corrupt_entry:
             self._recover_corrupt_state()
-        elif legacy_format or diagnostic_migration:
+        elif legacy_format or diagnostic_migration or transport_migration:
             self._save_state()

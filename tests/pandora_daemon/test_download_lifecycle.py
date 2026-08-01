@@ -230,9 +230,6 @@ async def test_retry_downloads_repaired_task_without_transport_locators(manager)
     manager._tasks[task.gid] = task
 
     assert await manager.retry_failed(task.gid) is True
-    assert task.viewer_urls == []
-    assert task.thumb_urls == []
-    assert task.thumb_sprites == []
     await manager._download_gallery(task)
 
     assert task.status == "completed"

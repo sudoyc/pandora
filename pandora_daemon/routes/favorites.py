@@ -1,6 +1,6 @@
 """Favorites routes for pandora-daemon.
 
-Provides endpoints for listing, adding, and modifying favorites on ExHentai.
+Provides endpoints for listing, adding, and modifying gallery favorites.
 """
 from __future__ import annotations
 

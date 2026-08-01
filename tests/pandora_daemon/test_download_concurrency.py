@@ -510,9 +510,6 @@ class TestDownloadGallery:
         (pages_dir / "0001.jpg").write_bytes(b"ok")
         (pages_dir / "0002.jpg").write_bytes(b"ok")
 
-        assert task.viewer_urls == []
-        assert task.thumb_urls == []
-        assert task.thumb_sprites == []
         await mgr._download_gallery(task)
 
         assert task.status == "completed"
