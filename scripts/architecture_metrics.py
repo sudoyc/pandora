@@ -79,11 +79,12 @@ _PROVIDER_HOST_MARKERS = (
     "exhentai.org",
     "hath.network",
 )
-_REGISTRY_FUNCTIONS = {
-    "build_provider",
-    "create_provider",
-    "get_gallery_provider",
-    "register_provider",
+_REGISTRY_MAPPING_NAMES = {
+    "factories",
+    "providerfactories",
+    "providerregistry",
+    "providers",
+    "registry",
 }
 
 
@@ -146,6 +147,35 @@ def _call_name(node: ast.expr) -> str:
 
 def _annotation_text(node: ast.expr | None) -> str:
     return ast.unparse(node) if node is not None else ""
+
+
+def _is_provider_registry_mapping(
+    node: ast.Assign | ast.AnnAssign,
+    relative_path: Path,
+) -> bool:
+    path_parts = set(relative_path.parts)
+    if not ({"provider", "providers"} & path_parts) and "registry" not in relative_path.stem:
+        return False
+
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    target_names = {
+        _normalized(target.id)
+        for target in targets
+        if isinstance(target, ast.Name)
+    }
+    if not target_names & _REGISTRY_MAPPING_NAMES:
+        return False
+
+    annotation = node.annotation if isinstance(node, ast.AnnAssign) else None
+    annotation_name = _normalized(_annotation_text(annotation))
+    value = node.value
+    call_name = _normalized(_call_name(value.func)) if isinstance(value, ast.Call) else ""
+    return (
+        isinstance(value, ast.Dict)
+        or "dict" in annotation_name
+        or "mapping" in annotation_name
+        or call_name in {"defaultdict", "dict", "mappingproxytype"}
+    )
 
 
 def _is_api_client_escape(node: ast.Attribute) -> bool:
@@ -214,8 +244,6 @@ def _collect_python_metrics(root: Path) -> tuple[dict[str, int], bool, bool, int
                     base.endswith("protocol") or base.endswith("abc") for base in bases
                 ):
                     has_provider_contract = True
-                if node.name == "ProviderRegistry":
-                    has_provider_registry = True
                 if node.name == "AppState":
                     for statement in node.body:
                         if isinstance(statement, ast.AnnAssign) and _contains_provider_name(
@@ -223,18 +251,11 @@ def _collect_python_metrics(root: Path) -> tuple[dict[str, int], bool, bool, int
                         ):
                             counts["concrete_provider_state_fields"] += 1
 
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name in _REGISTRY_FUNCTIONS:
-                    has_provider_registry = True
 
-            if isinstance(node, (ast.Assign, ast.AnnAssign)) and "provider" in relative_path.parts:
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                for target in targets:
-                    if isinstance(target, ast.Name) and target.id.lower() in {
-                        "registry",
-                        "provider_registry",
-                    }:
-                        has_provider_registry = True
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and _is_provider_registry_mapping(
+                node, relative_path
+            ):
+                has_provider_registry = True
 
     return counts, has_provider_contract, has_provider_registry, len(product_path_violations)
 

@@ -132,6 +132,33 @@ def test_static_metrics_detect_coupling_without_missing_neutral_seams(tmp_path: 
     assert metrics["missing_provider_registry"] == 0
 
 
+def test_dependency_accessor_without_mapping_is_not_a_registry(tmp_path: Path):
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/providers/contracts.py",
+        """
+        from typing import Protocol
+
+
+        class GalleryProvider(Protocol):
+            async def get_homepage(self) -> list[object]: ...
+        """,
+    )
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/dependencies.py",
+        """
+        def get_gallery_provider():
+            return object()
+        """,
+    )
+
+    metrics = collect_static_metrics(tmp_path)
+
+    assert metrics["missing_provider_contract"] == 0
+    assert metrics["missing_provider_registry"] == 1
+
+
 def test_provider_swap_workload_passes_every_required_endpoint():
     metrics = run_provider_swap_workload()
 
