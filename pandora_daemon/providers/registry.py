@@ -13,10 +13,22 @@ ProviderFactory = Callable[[ProviderContext], GalleryProvider]
 _BUILTIN_PROVIDER_PACKAGE = "pandora_daemon.providers"
 
 
-def _normalize_provider_id(provider_id: str) -> str:
+def normalize_provider_id(provider_id: str) -> str:
+    """Return a canonical provider ID safe for registry and workspace use."""
     normalized_id = provider_id.strip().lower()
     if not normalized_id:
-        raise ValueError("provider_id must not be empty")
+        raise ValueError(
+            "provider_id must not be empty; expected a safe path component"
+        )
+    if normalized_id in {".", ".."} or any(
+        separator in normalized_id for separator in ("/", "\\")
+    ):
+        raise ValueError("provider_id must be a safe path component")
+    if any(
+        not (character.isalnum() or character in "._-")
+        for character in normalized_id
+    ):
+        raise ValueError("provider_id must be a safe path component")
     return normalized_id
 
 
@@ -33,19 +45,26 @@ class ProviderRegistry:
         for provider_id, factory in (factories or {}).items():
             self.register(provider_id, factory)
         self._default_provider_id = (
-            _normalize_provider_id(default_provider_id)
+            normalize_provider_id(default_provider_id)
             if default_provider_id is not None
             else None
         )
+        if (
+            self._default_provider_id is not None
+            and self._default_provider_id not in self._factories
+        ):
+            raise ValueError(
+                f"Default provider is not registered: {self._default_provider_id}"
+            )
 
     def register(self, provider_id: str, factory: ProviderFactory) -> None:
-        normalized_id = _normalize_provider_id(provider_id)
+        normalized_id = normalize_provider_id(provider_id)
         if normalized_id in self._factories:
             raise ValueError(f"Provider already registered: {normalized_id}")
         self._factories[normalized_id] = factory
 
     def create(self, provider_id: str, context: ProviderContext) -> GalleryProvider:
-        normalized_id = _normalize_provider_id(provider_id)
+        normalized_id = normalize_provider_id(provider_id)
         try:
             factory = self._factories[normalized_id]
         except KeyError as exc:
@@ -53,7 +72,19 @@ class ProviderRegistry:
             raise ValueError(
                 f"Unknown provider {normalized_id!r}; available providers: {available}"
             ) from exc
-        return factory(context)
+        provider = factory(context)
+        try:
+            actual_id = normalize_provider_id(provider.provider_id)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Provider factory for {normalized_id!r} returned an invalid provider_id"
+            ) from exc
+        if actual_id != normalized_id:
+            raise ValueError(
+                "Provider factory identity mismatch: "
+                f"registered {normalized_id!r}, returned {actual_id!r}"
+            )
+        return provider
 
     @property
     def provider_ids(self) -> tuple[str, ...]:
@@ -88,7 +119,7 @@ def _builtin_provider_targets() -> dict[str, str]:
         factory_target = getattr(package, "FACTORY_TARGET", None)
         if provider_id is None or factory_target is None:
             continue
-        normalized_id = _normalize_provider_id(provider_id)
+        normalized_id = normalize_provider_id(provider_id)
         if normalized_id in targets:
             raise ValueError(f"Provider already registered: {normalized_id}")
         targets[normalized_id] = factory_target

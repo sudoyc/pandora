@@ -29,6 +29,7 @@ def test_provider_ids_and_default_are_normalized() -> None:
 def test_register_and_create_normalize_ids_and_forward_context() -> None:
     context = _context()
     provider = MagicMock()
+    provider.provider_id = "fixture"
     factory = MagicMock(return_value=provider)
     registry = ProviderRegistry()
     registry.register(" Fixture ", factory)
@@ -45,9 +46,12 @@ def test_register_rejects_normalized_duplicate_ids() -> None:
 
 
 @pytest.mark.parametrize("operation", ("register", "create", "default"))
-@pytest.mark.parametrize("provider_id", ("", " \t "))
-def test_registry_rejects_empty_ids(operation: str, provider_id: str) -> None:
-    with pytest.raises(ValueError, match="provider_id must not be empty"):
+@pytest.mark.parametrize(
+    "provider_id",
+    ("", " \t ", ".", "..", "../escape", "nested/provider", r"nested\provider", "bad id"),
+)
+def test_registry_rejects_unsafe_ids(operation: str, provider_id: str) -> None:
+    with pytest.raises(ValueError, match="safe path component"):
         if operation == "register":
             ProviderRegistry().register(provider_id, MagicMock())
         elif operation == "create":
@@ -69,9 +73,35 @@ def test_create_rejects_unknown_ids_and_lists_sorted_available_ids() -> None:
         registry.create("missing", _context())
 
 
+def test_create_rejects_factory_identity_mismatch() -> None:
+    provider = MagicMock()
+    provider.provider_id = "unexpected"
+    registry = ProviderRegistry({"expected": MagicMock(return_value=provider)})
+
+    with pytest.raises(
+        ValueError,
+        match="identity mismatch: registered 'expected', returned 'unexpected'",
+    ):
+        registry.create("expected", _context())
+
+
+def test_create_rejects_factory_without_a_valid_provider_id() -> None:
+    provider = MagicMock(spec=[])
+    registry = ProviderRegistry({"fixture": MagicMock(return_value=provider)})
+
+    with pytest.raises(ValueError, match="returned an invalid provider_id"):
+        registry.create("fixture", _context())
+
+
+def test_default_provider_must_be_registered() -> None:
+    with pytest.raises(ValueError, match="Default provider is not registered: missing"):
+        ProviderRegistry({"fixture": MagicMock()}, default_provider_id="missing")
+
+
 def test_default_registry_discovers_builtin_package_and_loads_factory(monkeypatch) -> None:
     context = _context()
     provider = MagicMock()
+    provider.provider_id = "fixture"
     factory = MagicMock(return_value=provider)
     builtin = SimpleNamespace(
         PROVIDER_ID="fixture",

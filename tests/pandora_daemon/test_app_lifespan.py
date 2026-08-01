@@ -57,7 +57,7 @@ class TestBuildState:
             ),
         )
         provider = MagicMock()
-        provider.provider_id = "selected"
+        provider.provider_id = "explicit"
         explicit_factory = MagicMock(return_value=provider)
         configured_factory = MagicMock()
         fallback_factory = MagicMock()
@@ -81,7 +81,7 @@ class TestBuildState:
         assert isinstance(state, AppState)
         assert state.config is config
         assert state.provider is provider
-        assert config.provider.id == "selected"
+        assert config.provider.id == "explicit"
         explicit_factory.assert_called_once()
         configured_factory.assert_not_called()
         fallback_factory.assert_not_called()
@@ -99,15 +99,15 @@ class TestBuildState:
             cache=dependencies.cache_class.return_value,
             config=config.cache,
         )
-        selected_dir = Path("~/.config/pandora/providers/selected").expanduser()
-        dependencies.database_class.assert_called_once_with(selected_dir / "pandora.db")
+        provider_dir = Path("~/.config/pandora/providers/explicit").expanduser()
+        dependencies.database_class.assert_called_once_with(provider_dir / "pandora.db")
         dependencies.download_manager_class.assert_called_once_with(
             provider=provider,
             config=config.download,
             ws=dependencies.websocket_class.return_value,
             image_service=dependencies.image_service_class.return_value,
-            state_file=selected_dir / "downloads.json",
-            download_path=Path(config.download.path).expanduser() / "selected",
+            state_file=provider_dir / "downloads.json",
+            download_path=Path(config.download.path).expanduser() / "explicit",
         )
 
     @pytest.mark.asyncio
