@@ -3,6 +3,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from exhentai_api.api import ExhentaiAPI
+from exhentai_api.exceptions import (
+    AuthenticationError,
+    ExhentaiError,
+    GalleryNotFoundError,
+    GalleryOffensiveError,
+    ImageLimitError,
+    NetworkError,
+    ParseError,
+    SessionError,
+    UpstreamError,
+)
 from exhentai_api.models.gallery import GalleryListItem
 from exhentai_api.models.search import SearchParams
 from exhentai_api.models.toplist import TopListItem
@@ -10,6 +21,17 @@ from pandora_daemon.providers.contracts import (
     GallerySearchQuery,
     GallerySummary,
     ProviderContext,
+)
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
+    ProviderSessionError,
+    ProviderUpstreamError,
 )
 from pandora_daemon.providers.exhentai.adapter import ExHentaiProvider, create_provider
 
@@ -199,3 +221,98 @@ def test_factory_forwards_credentials_and_network_context() -> None:
     )
     api_type.assert_called_once_with(client=client)
     assert provider.client is client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source", "expected_type"),
+    [
+        pytest.param(
+            SessionError("expired session"),
+            ProviderSessionError,
+            id="session-before-authentication",
+        ),
+        pytest.param(
+            AuthenticationError("authentication rejected"),
+            ProviderAuthenticationError,
+            id="authentication",
+        ),
+        pytest.param(
+            UpstreamError("upstream unavailable"),
+            ProviderUpstreamError,
+            id="upstream",
+        ),
+        pytest.param(
+            ImageLimitError("image quota exhausted"),
+            ProviderQuotaError,
+            id="image-limit",
+        ),
+        pytest.param(
+            GalleryNotFoundError("gallery unavailable"),
+            ProviderGalleryNotFoundError,
+            id="gallery-not-found",
+        ),
+        pytest.param(
+            GalleryOffensiveError("content blocked"),
+            ProviderContentBlockedError,
+            id="content-blocked",
+        ),
+        pytest.param(ParseError("invalid markup"), ProviderParseError, id="parse"),
+        pytest.param(NetworkError("connection reset"), ProviderNetworkError, id="network"),
+        pytest.param(ExhentaiError("unknown failure"), ProviderError, id="generic"),
+    ],
+)
+async def test_call_api_translates_every_exhentai_error(
+    source: ExhentaiError,
+    expected_type: type[ProviderError],
+) -> None:
+    provider = ExHentaiProvider(AsyncMock(spec=ExhentaiAPI))
+    operation = AsyncMock(side_effect=source)
+
+    with pytest.raises(expected_type) as raised:
+        await provider._call_api(operation)
+
+    assert type(raised.value) is expected_type
+    assert str(raised.value) == str(source)
+    assert raised.value.public_code == "exhentai"
+    assert raised.value.__cause__ is source
+
+
+@pytest.mark.asyncio
+async def test_call_api_preserves_upstream_status_code() -> None:
+    source = UpstreamError("upstream unavailable", status_code=503)
+    provider = ExHentaiProvider(AsyncMock(spec=ExhentaiAPI))
+    operation = AsyncMock(side_effect=source)
+
+    with pytest.raises(ProviderUpstreamError) as raised:
+        await provider._call_api(operation)
+
+    assert raised.value.status_code == 503
+    assert raised.value.public_code == "exhentai"
+    assert raised.value.__cause__ is source
+
+
+@pytest.mark.asyncio
+async def test_call_api_leaves_non_exhentai_errors_unchanged() -> None:
+    source = RuntimeError("unrelated failure")
+    provider = ExHentaiProvider(AsyncMock(spec=ExhentaiAPI))
+    operation = AsyncMock(side_effect=source)
+
+    with pytest.raises(RuntimeError) as raised:
+        await provider._call_api(operation)
+
+    assert raised.value is source
+    assert raised.value.__cause__ is None
+
+
+@pytest.mark.asyncio
+async def test_homepage_translates_exhentai_failure_at_adapter_boundary() -> None:
+    source = NetworkError("connection reset")
+    api = AsyncMock(spec=ExhentaiAPI)
+    api.get_homepage.side_effect = source
+
+    with pytest.raises(ProviderNetworkError) as raised:
+        await ExHentaiProvider(api).get_homepage(next_gid="7654321")
+
+    assert raised.value.__cause__ is source
+    api.get_homepage.assert_awaited_once_with(next_gid="7654321")

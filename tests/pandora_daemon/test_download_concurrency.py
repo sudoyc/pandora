@@ -5,9 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from exhentai_api.exceptions import (
-    AuthenticationError, ImageLimitError, GalleryNotFoundError,
-    NetworkError, ParseError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderQuotaError,
 )
 from pandora_daemon.download import DownloadTask, _atomic_write
 
@@ -287,7 +289,7 @@ class TestRetryBehavior:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                raise NetworkError("timeout")
+                raise ProviderNetworkError("timeout")
             return "<html></html>"
 
         mock_api.client.get_html = AsyncMock(side_effect=get_html_side_effect)
@@ -311,7 +313,7 @@ class TestRetryBehavior:
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=NetworkError("timeout"))
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderNetworkError("timeout"))
         await mgr._download_pages(task)
 
         assert task.page_states[1] == "failed"
@@ -369,8 +371,8 @@ class TestFatalExceptions:
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=AuthenticationError("Sad Panda"))
-        with pytest.raises(AuthenticationError):
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderAuthenticationError("Sad Panda"))
+        with pytest.raises(ProviderAuthenticationError):
             await mgr._download_pages(task)
 
     @pytest.mark.asyncio
@@ -384,8 +386,8 @@ class TestFatalExceptions:
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=ImageLimitError("509"))
-        with pytest.raises(ImageLimitError):
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderQuotaError("509"))
+        with pytest.raises(ProviderQuotaError):
             await mgr._download_pages(task)
 
     @pytest.mark.asyncio
@@ -399,8 +401,8 @@ class TestFatalExceptions:
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=GalleryNotFoundError("removed"))
-        with pytest.raises(GalleryNotFoundError):
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderGalleryNotFoundError("removed"))
+        with pytest.raises(ProviderGalleryNotFoundError):
             await mgr._download_pages(task)
 
 
@@ -457,7 +459,7 @@ class TestDownloadGallery:
             thumb_urls=[],
         )
 
-        mock_api.client.get_html = AsyncMock(side_effect=NetworkError("fail"))
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderNetworkError("fail"))
         await mgr._download_gallery(task)
 
         assert task.status == "completed_with_errors"
@@ -474,7 +476,7 @@ class TestDownloadGallery:
             thumb_urls=[],
         )
 
-        mock_api.client.get_html = AsyncMock(side_effect=AuthenticationError("Sad Panda"))
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderAuthenticationError("Sad Panda"))
         await mgr._download_gallery(task)
 
         assert task.status == "failed"
@@ -492,7 +494,7 @@ class TestDownloadGallery:
             thumb_urls=[],
         )
 
-        mock_api.client.get_html = AsyncMock(side_effect=ImageLimitError("509"))
+        mock_api.client.get_html = AsyncMock(side_effect=ProviderQuotaError("509"))
         await mgr._download_gallery(task)
 
         assert task.status == "paused"

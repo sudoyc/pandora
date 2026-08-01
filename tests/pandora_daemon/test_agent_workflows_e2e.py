@@ -13,12 +13,15 @@ from jsonschema import validate
 from PIL import Image
 
 from exhentai_api.api import ExhentaiAPI
-from exhentai_api.exceptions import GalleryNotFoundError, SessionError
 from exhentai_api.models.gallery import GalleryDetail, GalleryListItem
 from pandora_daemon import cli
 from pandora_daemon.app import create_app
 from pandora_daemon.config import CredentialsConfig, DownloadConfig, PandoraConfig
 from pandora_daemon.download import DownloadTask
+from pandora_daemon.providers.errors import (
+    ProviderGalleryNotFoundError,
+    ProviderSessionError,
+)
 from pandora_daemon.state import AppState
 
 
@@ -268,7 +271,7 @@ async def test_search_workflow_covers_success_and_sanitized_failure(
     _validate("search-response.schema.json", payload)
 
     workflow_daemon.provider.search = AsyncMock(
-        side_effect=SessionError("SEARCH_RESPONSE_SECRET")
+        side_effect=ProviderSessionError("SEARCH_RESPONSE_SECRET")
     )
     exit_code, failure = await _run_json(capsys, "search", "fixture")
 
@@ -300,7 +303,7 @@ async def test_gallery_workflow_covers_success_and_sanitized_failure(
     _validate("gallery-detail-response.schema.json", payload)
 
     workflow_daemon.provider.get_gallery_details = AsyncMock(
-        side_effect=GalleryNotFoundError("GALLERY_RESPONSE_SECRET")
+        side_effect=ProviderGalleryNotFoundError("GALLERY_RESPONSE_SECRET")
     )
     exit_code, failure = await _run_json(
         capsys,

@@ -6,16 +6,16 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from exhentai_api.exceptions import (
-    ExhentaiError,
-    AuthenticationError,
-    SessionError,
-    UpstreamError,
-    ImageLimitError,
-    GalleryNotFoundError,
-    GalleryOffensiveError,
-    ParseError,
-    NetworkError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
+    ProviderSessionError,
+    ProviderUpstreamError,
 )
 from pandora_daemon.config import load_config
 from pandora_daemon.diagnostics import (
@@ -47,7 +47,7 @@ IMAGE_LIMIT_DETAIL = "Image limit reached"
 OFFENSIVE_DETAIL = "Gallery unavailable"
 PARSE_ERROR_DETAIL = "Upstream response parse failed"
 NETWORK_ERROR_DETAIL = "Upstream network request failed"
-EXHENTAI_ERROR_DETAIL = "Upstream request failed"
+PROVIDER_ERROR_DETAIL = "Upstream request failed"
 RUNTIME_ERROR_DETAIL = "Internal server error"
 
 
@@ -175,50 +175,50 @@ def create_app() -> FastAPI:
         )
         return response
 
-    @app.exception_handler(AuthenticationError)
-    async def auth_error_handler(request: Request, exc: AuthenticationError):
+    @app.exception_handler(ProviderAuthenticationError)
+    async def auth_error_handler(request: Request, exc: ProviderAuthenticationError):
         _log_request_error(request, "auth", exc)
         return JSONResponse(status_code=401, content={"error": "auth", "detail": AUTH_ERROR_DETAIL})
 
-    @app.exception_handler(SessionError)
-    async def session_error_handler(request: Request, exc: SessionError):
+    @app.exception_handler(ProviderSessionError)
+    async def session_error_handler(request: Request, exc: ProviderSessionError):
         _log_request_error(request, "session", exc)
         return JSONResponse(status_code=401, content={"error": "session", "detail": SESSION_ERROR_DETAIL})
 
-    @app.exception_handler(UpstreamError)
-    async def upstream_error_handler(request: Request, exc: UpstreamError):
+    @app.exception_handler(ProviderUpstreamError)
+    async def upstream_error_handler(request: Request, exc: ProviderUpstreamError):
         _log_request_error(request, "upstream", exc, level=logging.ERROR)
         return JSONResponse(status_code=502, content={"error": "upstream", "detail": UPSTREAM_ERROR_DETAIL})
 
-    @app.exception_handler(GalleryNotFoundError)
-    async def gallery_not_found_handler(request: Request, exc: GalleryNotFoundError):
+    @app.exception_handler(ProviderGalleryNotFoundError)
+    async def gallery_not_found_handler(request: Request, exc: ProviderGalleryNotFoundError):
         _log_request_error(request, "gallery_not_found", exc)
         return JSONResponse(status_code=404, content={"error": "gallery_not_found", "detail": GALLERY_NOT_FOUND_DETAIL})
 
-    @app.exception_handler(ImageLimitError)
-    async def image_limit_handler(request: Request, exc: ImageLimitError):
+    @app.exception_handler(ProviderQuotaError)
+    async def image_limit_handler(request: Request, exc: ProviderQuotaError):
         _log_request_error(request, "image_limit", exc)
         return JSONResponse(status_code=429, content={"error": "image_limit", "detail": IMAGE_LIMIT_DETAIL})
 
-    @app.exception_handler(GalleryOffensiveError)
-    async def offensive_handler(request: Request, exc: GalleryOffensiveError):
+    @app.exception_handler(ProviderContentBlockedError)
+    async def offensive_handler(request: Request, exc: ProviderContentBlockedError):
         _log_request_error(request, "offensive", exc)
         return JSONResponse(status_code=451, content={"error": "offensive", "detail": OFFENSIVE_DETAIL})
 
-    @app.exception_handler(ParseError)
-    async def parse_error_handler(request: Request, exc: ParseError):
+    @app.exception_handler(ProviderParseError)
+    async def parse_error_handler(request: Request, exc: ProviderParseError):
         _log_request_error(request, "parse", exc, level=logging.ERROR)
         return JSONResponse(status_code=502, content={"error": "parse", "detail": PARSE_ERROR_DETAIL})
 
-    @app.exception_handler(NetworkError)
-    async def network_error_handler(request: Request, exc: NetworkError):
+    @app.exception_handler(ProviderNetworkError)
+    async def network_error_handler(request: Request, exc: ProviderNetworkError):
         _log_request_error(request, "network", exc, level=logging.ERROR)
         return JSONResponse(status_code=502, content={"error": "network", "detail": NETWORK_ERROR_DETAIL})
 
-    @app.exception_handler(ExhentaiError)
-    async def exhentai_error_handler(request: Request, exc: ExhentaiError):
-        _log_request_error(request, "exhentai", exc, level=logging.ERROR)
-        return JSONResponse(status_code=500, content={"error": "exhentai", "detail": EXHENTAI_ERROR_DETAIL})
+    @app.exception_handler(ProviderError)
+    async def provider_error_handler(request: Request, exc: ProviderError):
+        _log_request_error(request, exc.public_code, exc, level=logging.ERROR)
+        return JSONResponse(status_code=500, content={"error": exc.public_code, "detail": PROVIDER_ERROR_DETAIL})
 
     @app.exception_handler(RuntimeError)
     async def runtime_error_handler(request: Request, exc: RuntimeError):

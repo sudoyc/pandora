@@ -2,16 +2,16 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from exhentai_api.exceptions import (
-    ExhentaiError,
-    AuthenticationError,
-    SessionError,
-    UpstreamError,
-    ImageLimitError,
-    GalleryNotFoundError,
-    GalleryOffensiveError,
-    ParseError,
-    NetworkError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
+    ProviderSessionError,
+    ProviderUpstreamError,
 )
 
 
@@ -49,7 +49,7 @@ def app():
 
 class TestExceptionHandlers:
     def test_authentication_error_returns_401(self, app):
-        app.set_exception(AuthenticationError("Sad Panda"))
+        app.set_exception(ProviderAuthenticationError("Sad Panda"))
         resp = app.get()
         assert resp.status_code == 401
         data = resp.json()
@@ -58,7 +58,7 @@ class TestExceptionHandlers:
         assert "Sad Panda" not in data["detail"]
 
     def test_session_error_returns_stable_401(self, app):
-        app.set_exception(SessionError("expired cookie"))
+        app.set_exception(ProviderSessionError("expired cookie"))
         resp = app.get()
 
         assert resp.status_code == 401
@@ -68,7 +68,7 @@ class TestExceptionHandlers:
         }
 
     def test_upstream_error_returns_stable_502(self, app):
-        app.set_exception(UpstreamError(status_code=404))
+        app.set_exception(ProviderUpstreamError(status_code=404))
         resp = app.get()
 
         assert resp.status_code == 502
@@ -78,7 +78,7 @@ class TestExceptionHandlers:
         }
 
     def test_gallery_not_found_returns_404(self, app):
-        app.set_exception(GalleryNotFoundError("Gallery removed"))
+        app.set_exception(ProviderGalleryNotFoundError("Gallery removed"))
         resp = app.get()
         assert resp.status_code == 404
         data = resp.json()
@@ -87,7 +87,7 @@ class TestExceptionHandlers:
         assert "Gallery removed" not in data["detail"]
 
     def test_image_limit_returns_429(self, app):
-        app.set_exception(ImageLimitError("Limit exceeded"))
+        app.set_exception(ProviderQuotaError("Limit exceeded"))
         resp = app.get()
         assert resp.status_code == 429
         data = resp.json()
@@ -96,7 +96,7 @@ class TestExceptionHandlers:
         assert "Limit exceeded" not in data["detail"]
 
     def test_offensive_returns_451(self, app):
-        app.set_exception(GalleryOffensiveError("Offensive content"))
+        app.set_exception(ProviderContentBlockedError("Offensive content"))
         resp = app.get()
         assert resp.status_code == 451
         data = resp.json()
@@ -105,7 +105,7 @@ class TestExceptionHandlers:
         assert "Offensive content" not in data["detail"]
 
     def test_parse_error_returns_502(self, app):
-        app.set_exception(ParseError("Parse failed"))
+        app.set_exception(ProviderParseError("Parse failed"))
         resp = app.get()
         assert resp.status_code == 502
         data = resp.json()
@@ -114,7 +114,7 @@ class TestExceptionHandlers:
         assert "Parse failed" not in data["detail"]
 
     def test_network_error_returns_502(self, app):
-        app.set_exception(NetworkError("Timeout"))
+        app.set_exception(ProviderNetworkError("Timeout"))
         resp = app.get()
         assert resp.status_code == 502
         data = resp.json()
@@ -122,14 +122,14 @@ class TestExceptionHandlers:
         assert data["detail"] == "Upstream network request failed"
         assert "Timeout" not in data["detail"]
 
-    def test_base_exhentai_error_returns_500(self, app):
-        app.set_exception(ExhentaiError("Unknown exhentai error"))
+    def test_base_provider_error_returns_500(self, app):
+        app.set_exception(ProviderError("Unknown provider error", public_code="exhentai"))
         resp = app.get()
         assert resp.status_code == 500
         data = resp.json()
         assert data["error"] == "exhentai"
         assert data["detail"] == "Upstream request failed"
-        assert "Unknown exhentai error" not in data["detail"]
+        assert "Unknown provider error" not in data["detail"]
 
     def test_generic_runtime_error_returns_stable_internal_500(self, app):
         app.set_exception(RuntimeError("Something broke"))
@@ -156,12 +156,12 @@ class TestExceptionHandlers:
     @pytest.mark.parametrize(
         "exc",
         [
-            AuthenticationError("igneous=COOKIE_SECRET"),
-            SessionError("ipb_member_id=COOKIE_SECRET"),
-            UpstreamError("<html>FULL_UPSTREAM_PAGE</html>"),
-            ParseError("<html>FULL_UPSTREAM_PAGE</html>"),
-            NetworkError("https://user:PROXY_SECRET@proxy.example"),
-            ExhentaiError("igneous=COOKIE_SECRET"),
+            ProviderAuthenticationError("igneous=COOKIE_SECRET"),
+            ProviderSessionError("ipb_member_id=COOKIE_SECRET"),
+            ProviderUpstreamError("<html>FULL_UPSTREAM_PAGE</html>"),
+            ProviderParseError("<html>FULL_UPSTREAM_PAGE</html>"),
+            ProviderNetworkError("https://user:PROXY_SECRET@proxy.example"),
+            ProviderError("igneous=COOKIE_SECRET", public_code="exhentai"),
             RuntimeError("<html>FULL_UPSTREAM_PAGE</html>"),
             Exception("ipb_pass_hash=COOKIE_SECRET"),
         ],

@@ -13,9 +13,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from exhentai_api.exceptions import (
-    AuthenticationError, ImageLimitError, GalleryNotFoundError,
-    NetworkError, ParseError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
 )
 from exhentai_api.parsers.gallery_detail import parse_gallery_detail
 from exhentai_api.parsers.image import parse_image_viewer
@@ -687,7 +690,7 @@ class DownloadManager:
                         html = await self._api.client.get_html(viewer_url)
                         image_url, _ = parse_image_viewer(html)
                         if not image_url:
-                            raise ParseError(f"No image URL for page {page_num}")
+                            raise ProviderParseError(f"No image URL for page {page_num}")
                         data = await self._fetch_image(image_url)
                         ext = _ext_from_url(image_url)
                         _atomic_write(pages_dir / f"{page_num:04d}{ext}", data)
@@ -696,13 +699,13 @@ class DownloadManager:
                         last_exc = None
                         break
 
-                    except (AuthenticationError, ImageLimitError, GalleryNotFoundError) as e:
+                    except (ProviderAuthenticationError, ProviderQuotaError, ProviderGalleryNotFoundError) as e:
                         stop_reason = e
                         stop_event.set()
                         task.page_states[page_num] = "failed"
                         return
 
-                    except (NetworkError, ParseError) as e:
+                    except (ProviderNetworkError, ProviderParseError) as e:
                         last_exc = e
                         if attempt < self._config.max_retry:
                             delay = self._config.retry_base_delay * (2 ** attempt)
@@ -855,7 +858,7 @@ class DownloadManager:
                 task.error = ""
                 await self._broadcast_task_event(task, "download_complete")
 
-        except AuthenticationError as e:
+        except ProviderAuthenticationError as e:
             if self._task_is_stopped(task):
                 return
             task.status = "failed"
@@ -867,7 +870,7 @@ class DownloadManager:
             )
             await self._pause_all_tasks()
 
-        except ImageLimitError as e:
+        except ProviderQuotaError as e:
             if self._task_is_stopped(task):
                 return
             task.status = "paused"
@@ -878,7 +881,7 @@ class DownloadManager:
                 reason="image_limit",
             )
 
-        except GalleryNotFoundError as e:
+        except ProviderGalleryNotFoundError as e:
             if self._task_is_stopped(task):
                 return
             task.status = "failed"

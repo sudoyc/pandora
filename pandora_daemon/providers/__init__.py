@@ -6,6 +6,17 @@ from pandora_daemon.providers.contracts import (
     GallerySummary,
     ProviderContext,
 )
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
+    ProviderSessionError,
+    ProviderUpstreamError,
+)
 from pandora_daemon.providers.registry import ProviderRegistry, default_provider_registry
 
 __all__ = [
@@ -13,6 +24,15 @@ __all__ = [
     "GallerySearchQuery",
     "GallerySummary",
     "ProviderContext",
+    "ProviderAuthenticationError",
+    "ProviderContentBlockedError",
+    "ProviderError",
+    "ProviderGalleryNotFoundError",
+    "ProviderNetworkError",
+    "ProviderParseError",
+    "ProviderQuotaError",
+    "ProviderSessionError",
+    "ProviderUpstreamError",
     "ProviderRegistry",
     "default_provider_registry",
 ]

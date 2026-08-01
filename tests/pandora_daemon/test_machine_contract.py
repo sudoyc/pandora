@@ -10,16 +10,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jsonschema import validate
 
-from exhentai_api.exceptions import (
-    AuthenticationError,
-    ExhentaiError,
-    GalleryNotFoundError,
-    GalleryOffensiveError,
-    ImageLimitError,
-    NetworkError,
-    ParseError,
-    SessionError,
-    UpstreamError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
+    ProviderSessionError,
+    ProviderUpstreamError,
 )
 from pandora_daemon.app import create_app
 from pandora_daemon.cli import (
@@ -34,15 +34,15 @@ from pandora_daemon.state import AppState
 
 
 REST_ERROR_MATRIX = [
-    pytest.param(AuthenticationError("private"), 401, "auth", id="auth"),
-    pytest.param(SessionError("private"), 401, "session", id="session"),
-    pytest.param(UpstreamError(status_code=503), 502, "upstream", id="upstream"),
-    pytest.param(GalleryNotFoundError("private"), 404, "gallery_not_found", id="not-found"),
-    pytest.param(ImageLimitError("private"), 429, "image_limit", id="image-limit"),
-    pytest.param(GalleryOffensiveError("private"), 451, "offensive", id="offensive"),
-    pytest.param(ParseError("private"), 502, "parse", id="parse"),
-    pytest.param(NetworkError("private"), 502, "network", id="network"),
-    pytest.param(ExhentaiError("private"), 500, "exhentai", id="upstream-fallback"),
+    pytest.param(ProviderAuthenticationError("private"), 401, "auth", id="auth"),
+    pytest.param(ProviderSessionError("private"), 401, "session", id="session"),
+    pytest.param(ProviderUpstreamError(status_code=503), 502, "upstream", id="upstream"),
+    pytest.param(ProviderGalleryNotFoundError("private"), 404, "gallery_not_found", id="not-found"),
+    pytest.param(ProviderQuotaError("private"), 429, "image_limit", id="image-limit"),
+    pytest.param(ProviderContentBlockedError("private"), 451, "offensive", id="offensive"),
+    pytest.param(ProviderParseError("private"), 502, "parse", id="parse"),
+    pytest.param(ProviderNetworkError("private"), 502, "network", id="network"),
+    pytest.param(ProviderError("private", public_code="exhentai"), 500, "exhentai", id="upstream-fallback"),
     pytest.param(RuntimeError("private"), 500, "internal", id="runtime"),
     pytest.param(Exception("private"), 500, "internal", id="unhandled"),
 ]

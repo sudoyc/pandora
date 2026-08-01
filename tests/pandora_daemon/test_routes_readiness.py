@@ -10,12 +10,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
-from exhentai_api.exceptions import (
-    AuthenticationError,
-    NetworkError,
-    ParseError,
-    SessionError,
-    UpstreamError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderSessionError,
+    ProviderUpstreamError,
 )
 from pandora_daemon.config import CredentialsConfig, PandoraConfig
 from pandora_daemon.providers import GallerySearchQuery
@@ -110,11 +110,11 @@ def test_readiness_reports_ready_only_after_all_four_probes_succeed():
 @pytest.mark.parametrize(
     ("exception", "status", "session"),
     [
-        (AuthenticationError("sensitive auth detail"), "auth", "invalid"),
-        (SessionError("sensitive session detail"), "session", "invalid"),
-        (UpstreamError("sensitive upstream detail"), "upstream", "valid"),
-        (ParseError("sensitive parse detail"), "parse", "valid"),
-        (NetworkError("sensitive network detail"), "network", "valid"),
+        (ProviderAuthenticationError("sensitive auth detail"), "auth", "invalid"),
+        (ProviderSessionError("sensitive session detail"), "session", "invalid"),
+        (ProviderUpstreamError("sensitive upstream detail"), "upstream", "valid"),
+        (ProviderParseError("sensitive parse detail"), "parse", "valid"),
+        (ProviderNetworkError("sensitive network detail"), "network", "valid"),
     ],
 )
 def test_readiness_classifies_failures_without_short_circuiting_or_leaking(
@@ -157,7 +157,7 @@ def test_readiness_reports_unknown_session_when_transport_prevents_all_probes():
         provider.get_popular,
         provider.get_home_detail,
     ):
-        method.side_effect = NetworkError("sensitive network detail")
+        method.side_effect = ProviderNetworkError("sensitive network detail")
 
     response = TestClient(app).get("/api/readiness")
 

@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, ParamSpec, TypeVar
 
 from exhentai_api.api import ExhentaiAPI
 from exhentai_api.client import ExhentaiClient
+from exhentai_api.exceptions import (
+    AuthenticationError,
+    ExhentaiError,
+    GalleryNotFoundError,
+    GalleryOffensiveError,
+    ImageLimitError,
+    NetworkError,
+    ParseError,
+    SessionError,
+    UpstreamError,
+)
 from exhentai_api.models.gallery import GalleryListItem
 from exhentai_api.models.search import SearchParams
 from pandora_daemon.providers.contracts import (
@@ -12,7 +24,21 @@ from pandora_daemon.providers.contracts import (
     GallerySummary,
     ProviderContext,
 )
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderGalleryNotFoundError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderQuotaError,
+    ProviderSessionError,
+    ProviderUpstreamError,
+)
 
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 
 _GALLERY_LINK = re.compile(r"/g/(\d+)/([0-9a-f]+)")
 
@@ -77,18 +103,51 @@ class ExHentaiProvider:
         self._api = api
         self._owns_client = owns_client
 
+    async def _call_api(
+        self,
+        method: Callable[_P, Awaitable[_T]],
+        /,
+        *args: _P.args,
+        **kwargs: _P.kwargs,
+    ) -> _T:
+        try:
+            return await method(*args, **kwargs)
+        except SessionError as exc:
+            raise ProviderSessionError(str(exc), public_code="exhentai") from exc
+        except AuthenticationError as exc:
+            raise ProviderAuthenticationError(str(exc), public_code="exhentai") from exc
+        except UpstreamError as exc:
+            raise ProviderUpstreamError(
+                str(exc),
+                status_code=exc.status_code,
+                public_code="exhentai",
+            ) from exc
+        except ImageLimitError as exc:
+            raise ProviderQuotaError(str(exc), public_code="exhentai") from exc
+        except GalleryNotFoundError as exc:
+            raise ProviderGalleryNotFoundError(str(exc), public_code="exhentai") from exc
+        except GalleryOffensiveError as exc:
+            raise ProviderContentBlockedError(str(exc), public_code="exhentai") from exc
+        except ParseError as exc:
+            raise ProviderParseError(str(exc), public_code="exhentai") from exc
+        except NetworkError as exc:
+            raise ProviderNetworkError(str(exc), public_code="exhentai") from exc
+        except ExhentaiError as exc:
+            raise ProviderError(str(exc), public_code="exhentai") from exc
+
     @property
     def client(self) -> ExhentaiClient:
         return self._api.client
 
     async def aclose(self) -> None:
         if self._owns_client:
-            await self._api.client.aclose()
+            await self._call_api(self._api.client.aclose)
         else:
-            await self._api.aclose()
+            await self._call_api(self._api.aclose)
 
     async def get_homepage(self, next_gid: str | None = None) -> list[GallerySummary]:
-        return [_summary(item) for item in await self._api.get_homepage(next_gid=next_gid)]
+        items = await self._call_api(self._api.get_homepage, next_gid=next_gid)
+        return [_summary(item) for item in items]
 
     async def search(
         self,
@@ -96,15 +155,21 @@ class ExHentaiProvider:
         page: int = 0,
         next_gid: str | None = None,
     ) -> list[GallerySummary]:
-        items = await self._api.search(_search_params(query), page=page, next_gid=next_gid)
+        items = await self._call_api(
+            self._api.search,
+            _search_params(query),
+            page=page,
+            next_gid=next_gid,
+        )
         return [_summary(item) for item in items]
 
     async def get_popular(self) -> list[GallerySummary]:
-        return [_summary(item) for item in await self._api.get_popular()]
+        items = await self._call_api(self._api.get_popular)
+        return [_summary(item) for item in items]
 
     async def get_toplist(self, window: str = "15") -> list[GallerySummary]:
         summaries: list[GallerySummary] = []
-        for item in await self._api.get_toplist(window):
+        for item in await self._call_api(self._api.get_toplist, window):
             match = _GALLERY_LINK.search(item.link)
             if match is None:
                 continue
@@ -128,69 +193,76 @@ class ExHentaiProvider:
         page: int = 0,
         next_gid: str | None = None,
     ) -> list[GallerySummary]:
-        items = await self._api.get_watched(page=page, next_gid=next_gid)
+        items = await self._call_api(self._api.get_watched, page=page, next_gid=next_gid)
         return [_summary(item) for item in items]
 
     async def get_gallery_details(self, gid: str, token: str) -> Any:
-        return await self._api.get_gallery_details(gid, token)
+        return await self._call_api(self._api.get_gallery_details, gid, token)
 
     async def get_image_url(
         self, gid: str, imgkey: str, page: int, nl: str | None = None
     ) -> Any:
-        return await self._api.get_image_url(gid, imgkey, page, nl=nl)
+        return await self._call_api(self._api.get_image_url, gid, imgkey, page, nl=nl)
 
     async def get_gallery_token(self, gid: int, imgkey: str, page: int) -> str:
-        return await self._api.get_gallery_token(gid, imgkey, page)
+        return await self._call_api(self._api.get_gallery_token, gid, imgkey, page)
 
     async def get_favorites(self, **kwargs: Any) -> Any:
-        return await self._api.get_favorites(**kwargs)
+        return await self._call_api(self._api.get_favorites, **kwargs)
 
     async def add_favorite(self, gid: str, token: str, **kwargs: Any) -> str:
-        return await self._api.add_favorite(gid, token, **kwargs)
+        return await self._call_api(self._api.add_favorite, gid, token, **kwargs)
 
     async def modify_favorites(self, gids: list[str], action: str) -> str:
-        return await self._api.modify_favorites(gids, action)
+        return await self._call_api(self._api.modify_favorites, gids, action)
 
     async def comment_gallery(
         self, gid: str, token: str, comment: str, *, edit_id: int | None = None
     ) -> Any:
-        return await self._api.comment_gallery(gid, token, comment, edit_id=edit_id)
+        return await self._call_api(
+            self._api.comment_gallery,
+            gid,
+            token,
+            comment,
+            edit_id=edit_id,
+        )
 
     async def vote_comment(self, *args: Any, **kwargs: Any) -> Any:
-        return await self._api.vote_comment(*args, **kwargs)
+        return await self._call_api(self._api.vote_comment, *args, **kwargs)
 
     async def rate_gallery(self, *args: Any, **kwargs: Any) -> Any:
-        return await self._api.rate_gallery(*args, **kwargs)
+        return await self._call_api(self._api.rate_gallery, *args, **kwargs)
 
     async def get_torrent_list(self, gid: str, token: str) -> Any:
-        return await self._api.get_torrent_list(gid, token)
+        return await self._call_api(self._api.get_torrent_list, gid, token)
 
     async def get_archive_list(self, gid: str, token: str) -> Any:
-        return await self._api.get_archive_list(gid, token)
+        return await self._call_api(self._api.get_archive_list, gid, token)
 
     async def download_archive(self, archive_url: str, resolution: str = "org") -> str:
-        return await self._api.download_archive(archive_url, resolution)
+        return await self._call_api(self._api.download_archive, archive_url, resolution)
 
     async def get_mytags(self) -> Any:
-        return await self._api.get_mytags()
+        return await self._call_api(self._api.get_mytags)
 
     async def add_tag(self, tag_name: str, **kwargs: Any) -> Any:
-        return await self._api.add_tag(tag_name, **kwargs)
+        return await self._call_api(self._api.add_tag, tag_name, **kwargs)
 
     async def delete_tag(self, tag_id: int) -> Any:
-        return await self._api.delete_tag(tag_id)
+        return await self._call_api(self._api.delete_tag, tag_id)
 
     async def get_home_detail(self) -> Any:
-        return await self._api.get_home_detail()
+        return await self._call_api(self._api.get_home_detail)
 
     async def reset_image_limit(self) -> Any:
-        return await self._api.reset_image_limit()
+        return await self._call_api(self._api.reset_image_limit)
 
     async def get_profile(self) -> Any:
-        return await self._api.get_profile()
+        return await self._call_api(self._api.get_profile)
 
     async def image_search(self, *args: Any, **kwargs: Any) -> list[GallerySummary]:
-        return [_summary(item) for item in await self._api.image_search(*args, **kwargs)]
+        items = await self._call_api(self._api.image_search, *args, **kwargs)
+        return [_summary(item) for item in items]
 
 
 def create_provider(context: ProviderContext) -> ExHentaiProvider:

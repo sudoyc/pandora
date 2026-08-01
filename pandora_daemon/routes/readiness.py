@@ -6,13 +6,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from exhentai_api.exceptions import (
-    AuthenticationError,
-    ExhentaiError,
-    NetworkError,
-    ParseError,
-    SessionError,
-    UpstreamError,
+from pandora_daemon.providers.errors import (
+    ProviderAuthenticationError,
+    ProviderError,
+    ProviderNetworkError,
+    ProviderParseError,
+    ProviderSessionError,
+    ProviderUpstreamError,
 )
 from pandora_daemon.dependencies import get_state
 from pandora_daemon.providers import GallerySearchQuery
@@ -30,17 +30,17 @@ async def _run_probe(probe: Callable[[], Awaitable[Any]]) -> str:
             await probe()
     except TimeoutError:
         return "network"
-    except SessionError:
+    except ProviderSessionError:
         return "session"
-    except AuthenticationError:
+    except ProviderAuthenticationError:
         return "auth"
-    except UpstreamError:
+    except ProviderUpstreamError:
         return "upstream"
-    except ParseError:
+    except ProviderParseError:
         return "parse"
-    except NetworkError:
+    except ProviderNetworkError:
         return "network"
-    except ExhentaiError:
+    except ProviderError:
         return "upstream"
     return "ok"
 
