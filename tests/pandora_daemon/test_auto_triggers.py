@@ -48,11 +48,11 @@ def _make_detail():
     return d
 
 
-def _make_app(mock_api, mock_cache, mock_db, mock_image_service=None):
+def _make_app(mock_provider, mock_cache, mock_db, mock_image_service=None):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
-    state.api = mock_api
+    state.provider = mock_provider
     state.cache = mock_cache
     state.db = mock_db
     state.image_service = mock_image_service or MagicMock()
@@ -68,13 +68,13 @@ def test_get_gallery_detail_calls_put_history():
     """GET /api/gallery/{gid}/{token} should call db.put_history with the detail."""
     detail = _make_detail()
 
-    mock_api = MagicMock()
+    mock_provider = MagicMock()
     mock_cache = MagicMock()
     mock_cache.get_gallery.return_value = detail  # cache hit — skip api call
     mock_db = MagicMock()
     mock_db.put_history = AsyncMock()
 
-    app = _make_app(mock_api, mock_cache, mock_db)
+    app = _make_app(mock_provider, mock_cache, mock_db)
     client = TestClient(app)
 
     resp = client.get("/api/gallery/123/abc")
@@ -87,14 +87,14 @@ def test_get_gallery_detail_calls_put_history_on_cache_miss():
     """put_history is also called when detail comes from the API (cache miss)."""
     detail = _make_detail()
 
-    mock_api = MagicMock()
-    mock_api.get_gallery_details = AsyncMock(return_value=detail)
+    mock_provider = MagicMock()
+    mock_provider.get_gallery_details = AsyncMock(return_value=detail)
     mock_cache = MagicMock()
     mock_cache.get_gallery.return_value = None  # cache miss
     mock_db = MagicMock()
     mock_db.put_history = AsyncMock()
 
-    app = _make_app(mock_api, mock_cache, mock_db)
+    app = _make_app(mock_provider, mock_cache, mock_db)
     client = TestClient(app)
 
     resp = client.get("/api/gallery/123/abc")
@@ -107,7 +107,7 @@ def test_prefetch_pages_calls_update_bookmark():
     """POST /api/gallery/{gid}/{token}/prefetch should call db.update_bookmark."""
     detail = _make_detail()
 
-    mock_api = MagicMock()
+    mock_provider = MagicMock()
     mock_cache = MagicMock()
     mock_cache.get_gallery.return_value = detail
     mock_db = MagicMock()
@@ -115,7 +115,7 @@ def test_prefetch_pages_calls_update_bookmark():
     mock_image_service = MagicMock()
     mock_image_service.prefetch = AsyncMock()
 
-    app = _make_app(mock_api, mock_cache, mock_db, mock_image_service)
+    app = _make_app(mock_provider, mock_cache, mock_db, mock_image_service)
     client = TestClient(app)
 
     resp = client.post("/api/gallery/123/abc/prefetch", json={"current_page": 5})
@@ -136,7 +136,7 @@ def test_prefetch_pages_still_calls_image_service_prefetch():
     """update_bookmark does not replace the image_service.prefetch call."""
     detail = _make_detail()
 
-    mock_api = MagicMock()
+    mock_provider = MagicMock()
     mock_cache = MagicMock()
     mock_cache.get_gallery.return_value = detail
     mock_db = MagicMock()
@@ -144,7 +144,7 @@ def test_prefetch_pages_still_calls_image_service_prefetch():
     mock_image_service = MagicMock()
     mock_image_service.prefetch = AsyncMock()
 
-    app = _make_app(mock_api, mock_cache, mock_db, mock_image_service)
+    app = _make_app(mock_provider, mock_cache, mock_db, mock_image_service)
     client = TestClient(app)
 
     client.post("/api/gallery/123/abc/prefetch", json={"current_page": 3})

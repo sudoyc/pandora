@@ -6,9 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from exhentai_api.api import ExhentaiAPI
-from exhentai_api.client import ExhentaiClient
 from pandora_daemon.config import PandoraConfig
+from pandora_daemon.providers import GalleryProvider
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
@@ -21,8 +20,7 @@ from pandora_daemon.db import PandoraDB
 class AppState:
     config: PandoraConfig
     config_path: Path
-    client: ExhentaiClient
-    api: ExhentaiAPI
+    provider: GalleryProvider
     downloads: DownloadManager
     cache: CacheManager
     image_service: ImageService
@@ -47,4 +45,4 @@ class AppState:
         await self.downloads.shutdown()
         await self.image_service.shutdown()
         await self.db.close()
-        await self.api.aclose()
+        await self.provider.aclose()

@@ -15,9 +15,10 @@ from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
+from pandora_daemon.providers import GallerySearchQuery, GallerySummary
 
 
-def _make_gallery_item(
+def _make_gallery_summary(
     gid="12345",
     token="abcdef",
     title="Test Gallery",
@@ -30,52 +31,60 @@ def _make_gallery_item(
     rated=False,
     thumb_width=250,
     thumb_height=350,
-    url="https://exhentai.org/g/12345/abcdef/",
+    url="https://example.com/g/12345/abcdef/",
 ):
-    item = MagicMock()
-    item.gid = gid
-    item.token = token
-    item.title = title
-    item.category = category
-    item.uploader = uploader
-    item.thumb_url = thumb_url
-    item.posted = posted
-    item.rating = rating
-    item.pages = pages
-    item.rated = rated
-    item.thumb_width = thumb_width
-    item.thumb_height = thumb_height
-    item.url = url
-    return item
+    return GallerySummary(
+        gid=gid,
+        token=token,
+        title=title,
+        category=category,
+        uploader=uploader,
+        thumb_url=thumb_url,
+        posted=posted,
+        rating=rating,
+        pages=pages,
+        rated=rated,
+        thumb_width=thumb_width,
+        thumb_height=thumb_height,
+        url=url,
+    )
 
 
 @pytest.fixture
 def mock_state(tmp_path):
     config = PandoraConfig()
     config_path = tmp_path / "config.toml"
-    mock_api = AsyncMock()
-    mock_client = AsyncMock()
-    mock_api.client = mock_client
+    mock_provider = MagicMock()
 
     cache_config = config.cache
     cache_config.image_dir = str(tmp_path / "images")
     cache = CacheManager(cache_config)
     ws = WebSocketManager()
     state_file = tmp_path / "downloads.json"
-    image_service = ImageService(api=mock_api, cache=cache, config=cache_config)
-    downloads = DownloadManager(api=mock_api, config=config.download, ws=ws, image_service=image_service, state_file=state_file)
+    image_service = ImageService(api=mock_provider, cache=cache, config=cache_config)
+    downloads = DownloadManager(
+        api=mock_provider,
+        config=config.download,
+        ws=ws,
+        image_service=image_service,
+        state_file=state_file,
+    )
 
     state = AppState(
-        config=config, config_path=config_path,
-        client=mock_client, api=mock_api,
-        downloads=downloads, cache=cache, image_service=image_service, ws=ws,
+        config=config,
+        config_path=config_path,
+        provider=mock_provider,
+        downloads=downloads,
+        cache=cache,
+        image_service=image_service,
+        ws=ws,
         db=MagicMock(),
     )
-    return state, mock_api
+    return state, mock_provider
 
 
 def _make_test_app(mock_state):
-    state, mock_api = mock_state
+    state, _ = mock_state
 
     app = FastAPI()
 
@@ -92,10 +101,10 @@ def _make_test_app(mock_state):
 
 class TestIntegrationHomepage:
     def test_homepage_returns_galleries(self, mock_state):
-        """Mock api.get_homepage to return a gallery item, verify 200 and title."""
-        state, mock_api = mock_state
-        gallery = _make_gallery_item(title="Integration Test Gallery")
-        mock_api.get_homepage = AsyncMock(return_value=[gallery])
+        """Mock provider.get_homepage to return a gallery summary."""
+        state, mock_provider = mock_state
+        gallery = _make_gallery_summary(title="Integration Test Gallery")
+        mock_provider.get_homepage = AsyncMock(return_value=[gallery])
 
         app = _make_test_app(mock_state)
         client = TestClient(app)
@@ -107,12 +116,12 @@ class TestIntegrationHomepage:
         assert len(data) == 1
         assert data[0]["title"] == "Integration Test Gallery"
         assert data[0]["gid"] == "12345"
-        mock_api.get_homepage.assert_called_once()
+        mock_provider.get_homepage.assert_awaited_once()
 
     def test_sad_panda_returns_401(self, mock_state):
-        """Mock api.get_homepage to raise RuntimeError('Sad Panda: ...'), verify 401."""
-        state, mock_api = mock_state
-        mock_api.get_homepage = AsyncMock(
+        """A provider Sad Panda error preserves the authentication response."""
+        state, mock_provider = mock_state
+        mock_provider.get_homepage = AsyncMock(
             side_effect=RuntimeError("Sad Panda: session expired")
         )
 
@@ -128,10 +137,10 @@ class TestIntegrationHomepage:
 
 class TestIntegrationSearch:
     def test_search_passes_params(self, mock_state):
-        """Verify search with keyword/page/min_rating passes correct SearchParams."""
-        state, mock_api = mock_state
-        gallery = _make_gallery_item()
-        mock_api.search = AsyncMock(return_value=[gallery])
+        """Verify search passes a provider-neutral query and page."""
+        state, mock_provider = mock_state
+        gallery = _make_gallery_summary()
+        mock_provider.search = AsyncMock(return_value=[gallery])
 
         app = _make_test_app(mock_state)
         client = TestClient(app)
@@ -141,14 +150,10 @@ class TestIntegrationSearch:
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
-
-        call_args = mock_api.search.call_args
-        search_params = call_args[0][0]
-        assert search_params.f_search == "test gallery"
-        assert call_args[1]["page"] == 2
-        assert search_params.advsearch is True
-        assert search_params.f_sr is True
-        assert search_params.f_srdd == 4
+        mock_provider.search.assert_awaited_once_with(
+            GallerySearchQuery(keyword="test gallery", minimum_rating=4),
+            page=2,
+        )
 
 
 @pytest.mark.asyncio

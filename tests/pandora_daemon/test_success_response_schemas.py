@@ -53,10 +53,10 @@ def test_health_route_response_matches_schema():
 def test_readiness_route_response_matches_schema_without_credentials():
     app = FastAPI()
     app.include_router(readiness_router)
-    api = MagicMock()
+    provider = MagicMock()
     app.state.pandora = _state(
         config=PandoraConfig(credentials=CredentialsConfig()),
-        api=api,
+        provider=provider,
     )
 
     response = TestClient(app).get("/api/readiness")
@@ -80,11 +80,11 @@ def test_search_route_response_matches_gallery_list_schema():
         thumb_width=250,
         thumb_height=350,
     )
-    api = MagicMock()
-    api.search = AsyncMock(return_value=[item])
+    provider = MagicMock()
+    provider.search = AsyncMock(return_value=[item])
     app = FastAPI()
     app.include_router(browse_router)
-    app.state.pandora = _state(api=api)
+    app.state.pandora = _state(provider=provider)
 
     response = TestClient(app).get("/api/search?keyword=fixture")
 
@@ -114,15 +114,15 @@ def test_gallery_detail_route_response_matches_schema():
         comments=[GalleryComment(id=7, user="reader", comment="hello")],
         comments_has_more=False,
     )
-    api = MagicMock()
-    api.get_gallery_details = AsyncMock(return_value=detail)
+    provider = MagicMock()
+    provider.get_gallery_details = AsyncMock(return_value=detail)
     cache = MagicMock()
     cache.get_gallery.return_value = None
     db = MagicMock()
     db.put_history = AsyncMock()
     app = FastAPI()
     app.include_router(gallery_router)
-    app.state.pandora = _state(api=api, cache=cache, db=db)
+    app.state.pandora = _state(provider=provider, cache=cache, db=db)
 
     response = TestClient(app).get("/api/gallery/123/abcdef0123")
 

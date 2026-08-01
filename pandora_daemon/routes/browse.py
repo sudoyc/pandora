@@ -1,17 +1,16 @@
 """Browse routes for pandora-daemon.
 
-Provides endpoints for browsing ExHentai: homepage, search, popular,
-toplist, watched galleries, and thumbnail proxy.
+Provides endpoints for browsing galleries: homepage, search, popular, toplist,
+watched galleries, and thumbnail proxy.
 """
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from exhentai_api.models.search import SearchParams
-from pandora_daemon.dependencies import get_api, get_image_service
+from pandora_daemon.dependencies import get_gallery_provider, get_image_service
+from pandora_daemon.providers import GallerySearchQuery
 
 router = APIRouter(prefix="/api", tags=["browse"])
 
@@ -34,48 +33,16 @@ def _gallery_item_to_dict(item) -> dict:
     }
 
 
-def _toplist_item_to_dict(item) -> dict:
-    return {
-        "type": item.type,
-        "name": item.name,
-        "link": item.link,
-    }
-
-
-def _toplist_to_gallery_item(item) -> dict | None:
-    """Convert TopListItem to GalleryItem-compatible dict by parsing link URL."""
-    match = re.search(r"/g/(\d+)/([0-9a-f]+)", item.link)
-    if not match:
-        return None
-    gid = match.group(1)
-    token = match.group(2)
-    return {
-        "gid": gid,
-        "token": token,
-        "title": item.name,
-        "category": "",
-        "uploader": "",
-        "thumb_url": "",
-        "posted": "",
-        "rating": 0.0,
-        "pages": 0,
-        "rated": False,
-        "thumb_width": 0,
-        "thumb_height": 0,
-        "url": item.link,
-    }
-
-
 @router.get("/homepage")
 async def get_homepage(
     next_gid: Optional[int] = Query(None, alias="next", ge=1),
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
 ):
     """Return the homepage gallery list."""
     if next_gid is None:
-        items = await api.get_homepage()
+        items = await provider.get_homepage()
     else:
-        items = await api.get_homepage(next_gid=str(next_gid))
+        items = await provider.get_homepage(next_gid=str(next_gid))
     return [_gallery_item_to_dict(item) for item in items]
 
 
@@ -95,79 +62,56 @@ async def search(
     min_pages: Optional[int] = None,
     max_pages: Optional[int] = None,
     next_gid: Optional[int] = Query(None, alias="next", ge=1),
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
 ):
     """Search galleries with optional filters."""
-    params = SearchParams(f_search=keyword)
-    if category is not None:
-        params.f_cats = category
-    if min_rating is not None:
-        params.advsearch = True
-        params.f_sr = True
-        params.f_srdd = min_rating
-    if search_name:
-        params.advsearch = True
-        params.f_sname = True
-    if search_tags:
-        params.advsearch = True
-        params.f_stags = True
-    if search_description:
-        params.advsearch = True
-        params.f_sdesc = True
-    if search_torrent:
-        params.advsearch = True
-        params.f_storr = True
-    if search_low_power_tags:
-        params.advsearch = True
-        params.f_sto = True
-    if disable_language_filter:
-        params.advsearch = True
-        params.f_sdt1 = True
-    if show_expunged:
-        params.f_sh = True
-    if min_pages is not None or max_pages is not None:
-        params.advsearch = True
-        params.f_sp = True
-        params.f_spf = min_pages
-        params.f_spt = max_pages
+    query = GallerySearchQuery(
+        keyword=keyword,
+        category=category,
+        minimum_rating=min_rating,
+        search_name=search_name,
+        search_tags=search_tags,
+        search_description=search_description,
+        search_torrents=search_torrent,
+        search_low_power_tags=search_low_power_tags,
+        disable_language_filter=disable_language_filter,
+        show_expunged=show_expunged,
+        minimum_pages=min_pages,
+        maximum_pages=max_pages,
+    )
 
     if next_gid is None:
-        items = await api.search(params, page=page)
+        items = await provider.search(query, page=page)
     else:
-        items = await api.search(params, page=page, next_gid=str(next_gid))
+        items = await provider.search(query, page=page, next_gid=str(next_gid))
     return [_gallery_item_to_dict(item) for item in items]
 
 
 @router.get("/popular")
-async def get_popular(api=Depends(get_api)):
+async def get_popular(provider=Depends(get_gallery_provider)):
     """Return the popular galleries list."""
-    items = await api.get_popular()
+    items = await provider.get_popular()
     return [_gallery_item_to_dict(item) for item in items]
 
 
 @router.get("/toplist")
-async def get_toplist(tl: str = "15", api=Depends(get_api)):
+async def get_toplist(tl: str = "15", provider=Depends(get_gallery_provider)):
     """Return toplist entries as GalleryItem-compatible dicts."""
-    items = await api.get_toplist(tl)
-    result = []
-    for item in items:
-        converted = _toplist_to_gallery_item(item)
-        if converted:
-            result.append(converted)
-    return result
+    items = await provider.get_toplist(tl)
+    return [_gallery_item_to_dict(item) for item in items]
 
 
 @router.get("/watched")
 async def get_watched(
     page: int = 0,
     next_gid: Optional[int] = Query(None, alias="next", ge=1),
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
 ):
     """Return watched tag galleries for the given page."""
     if next_gid is None:
-        items = await api.get_watched(page=page)
+        items = await provider.get_watched(page=page)
     else:
-        items = await api.get_watched(page=page, next_gid=str(next_gid))
+        items = await provider.get_watched(page=page, next_gid=str(next_gid))
     return [_gallery_item_to_dict(item) for item in items]
 
 

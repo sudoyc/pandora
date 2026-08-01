@@ -1,12 +1,11 @@
 import asyncio
 import logging
+from dataclasses import asdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from exhentai_api.api import ExhentaiAPI
-from exhentai_api.client import ExhentaiClient
 from exhentai_api.exceptions import (
     ExhentaiError,
     AuthenticationError,
@@ -32,6 +31,11 @@ from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
 from pandora_daemon.tag_database import TagDatabase
 from pandora_daemon.db import PandoraDB
+from pandora_daemon.providers import (
+    ProviderContext,
+    ProviderRegistry,
+    default_provider_registry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,23 +90,25 @@ async def _cache_eviction_loop(cache: CacheManager, interval: int) -> None:
             logger.exception("Cache eviction error")
 
 
-async def _build_state() -> AppState:
+async def _build_state(
+    provider_registry: ProviderRegistry | None = None,
+    provider_id: str = "exhentai",
+) -> AppState:
     """Construct all components and return AppState."""
     config_path = Path("~/.config/pandora/config.toml").expanduser()
     config = load_config(config_path)
     db_path = config_path.parent / "pandora.db"
     db = PandoraDB(db_path)
     await db.initialize()
-    client = ExhentaiClient(
-        igneous=config.credentials.igneous,
-        ipb_member_id=config.credentials.ipb_member_id,
-        ipb_pass_hash=config.credentials.ipb_pass_hash,
+    provider_context = ProviderContext(
+        credentials=asdict(config.credentials),
         proxy=config.network.proxy,
         timeout=config.network.timeout,
     )
-    api = ExhentaiAPI(client=client)
+    registry = provider_registry or default_provider_registry()
+    provider = registry.create(provider_id, provider_context)
     cache = CacheManager(config.cache)
-    image_service = ImageService(api=api, cache=cache, config=config.cache)
+    image_service = ImageService(api=provider, cache=cache, config=config.cache)
     ws = WebSocketManager()
     tag_database = TagDatabase()
     try:
@@ -111,12 +117,12 @@ async def _build_state() -> AppState:
         pass  # Non-fatal: suggest will return empty results
     state_file = config_path.parent / "downloads.json"
     downloads = DownloadManager(
-        api=api, config=config.download, ws=ws,
+        api=provider, config=config.download, ws=ws,
         image_service=image_service, state_file=state_file,
     )
     return AppState(
         config=config, config_path=config_path,
-        client=client, api=api,
+        provider=provider,
         downloads=downloads, cache=cache,
         image_service=image_service, ws=ws,
         db=db, tag_database=tag_database,

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from exhentai_api.api import ExhentaiAPI
 from pandora_daemon import cli
 from pandora_daemon.app import create_app
 from pandora_daemon.config import PandoraConfig
@@ -18,11 +17,12 @@ async def test_fixture_daemon_bootstrap_cli_smoke(monkeypatch, capsys, tmp_path)
     state = MagicMock(spec=AppState)
     state.config = PandoraConfig()
     state.config_path = tmp_path / "config.toml"
-    state.api = MagicMock(spec=ExhentaiAPI)
-    state.api.get_homepage = AsyncMock()
-    state.api.search = AsyncMock()
-    state.api.get_popular = AsyncMock()
-    state.api.get_home_detail = AsyncMock()
+    provider = MagicMock()
+    provider.get_homepage = AsyncMock()
+    provider.search = AsyncMock()
+    provider.get_popular = AsyncMock()
+    provider.get_home_detail = AsyncMock()
+    state.provider = provider
     state.downloads = MagicMock()
     state.downloads.status.return_value = []
 
@@ -67,7 +67,7 @@ async def test_fixture_daemon_bootstrap_cli_smoke(monkeypatch, capsys, tmp_path)
         },
     }
     assert results[3][2] == {"tasks": []}
-    state.api.get_homepage.assert_not_awaited()
-    state.api.search.assert_not_awaited()
-    state.api.get_popular.assert_not_awaited()
-    state.api.get_home_detail.assert_not_awaited()
+    provider.get_homepage.assert_not_awaited()
+    provider.search.assert_not_awaited()
+    provider.get_popular.assert_not_awaited()
+    provider.get_home_detail.assert_not_awaited()

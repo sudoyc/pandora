@@ -47,11 +47,11 @@ def _make_detail():
     return d
 
 
-def _make_app(mock_api, mock_cache=None, mock_image_service=None):
+def _make_app(mock_provider, mock_cache=None, mock_image_service=None):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
-    state.api = mock_api
+    state.provider = mock_provider
     state.cache = mock_cache or MagicMock()
     state.image_service = mock_image_service or MagicMock()
     mock_db = MagicMock()
@@ -77,12 +77,12 @@ def _make_cache_miss():
 class TestGalleryDetail:
     def test_gallery_detail(self):
         """Fetch gallery detail, verify 200 and serialized data."""
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         detail = _make_detail()
-        mock_api.get_gallery_details = AsyncMock(return_value=detail)
+        mock_provider.get_gallery_details = AsyncMock(return_value=detail)
         mock_cache = _make_cache_miss()
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_provider, mock_cache)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc")
@@ -102,19 +102,19 @@ class TestGalleryDetail:
         assert "api_uid" not in data
         assert "api_key" not in data
         assert data["url"] == "https://exhentai.org/g/123/abc/"
-        mock_api.get_gallery_details.assert_called_once_with("123", "abc")
+        mock_provider.get_gallery_details.assert_called_once_with("123", "abc")
         mock_cache.put_gallery.assert_called_once_with(detail)
 
     def test_gallery_detail_uses_cache(self):
         """When cache hits, API should NOT be called."""
-        mock_api = MagicMock()
-        mock_api.get_gallery_details = AsyncMock()
+        mock_provider = MagicMock()
+        mock_provider.get_gallery_details = AsyncMock()
         detail = _make_detail()
 
         mock_cache = MagicMock()
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_provider, mock_cache)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc")
@@ -123,16 +123,16 @@ class TestGalleryDetail:
         data = response.json()
         assert data["gid"] == "123"
         # API must NOT have been called because cache returned a hit
-        mock_api.get_gallery_details.assert_not_called()
+        mock_provider.get_gallery_details.assert_not_called()
         mock_cache.get_gallery.assert_called_once_with("123", "abc")
 
     def test_gallery_detail_does_not_expose_internal_fields(self):
-        mock_api = AsyncMock()
+        mock_provider = AsyncMock()
         detail = _make_detail()
         detail.thumb_urls = ["https://ex.com/t1.jpg", "https://ex.com/t2.jpg"]
         mock_cache = MagicMock()
         mock_cache.get_gallery.return_value = detail
-        app = _make_app(mock_api, mock_cache=mock_cache)
+        app = _make_app(mock_provider, mock_cache=mock_cache)
         client = TestClient(app)
 
         resp = client.get("/api/gallery/123/abc")
@@ -144,12 +144,12 @@ class TestGalleryDetail:
         assert "api_key" not in data
 
     def test_gallery_detail_does_not_expose_api_identity(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         detail = _make_detail()
-        mock_api.get_gallery_details = AsyncMock(return_value=detail)
+        mock_provider.get_gallery_details = AsyncMock(return_value=detail)
         mock_cache = _make_cache_miss()
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_provider, mock_cache)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc")
@@ -165,10 +165,10 @@ class TestGalleryDetail:
 class TestCommentGallery:
     def test_comment_gallery(self):
         """Post a comment, verify api.comment_gallery called correctly."""
-        mock_api = MagicMock()
-        mock_api.comment_gallery = AsyncMock(return_value={"status": "ok"})
+        mock_provider = MagicMock()
+        mock_provider.comment_gallery = AsyncMock(return_value={"status": "ok"})
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.post(
@@ -179,16 +179,16 @@ class TestCommentGallery:
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        mock_api.comment_gallery.assert_called_once_with(
+        mock_provider.comment_gallery.assert_called_once_with(
             "123", "abc", "Great gallery!", edit_id=None
         )
 
     def test_comment_gallery_with_edit_id(self):
         """Post an edit comment with a specific edit_id."""
-        mock_api = MagicMock()
-        mock_api.comment_gallery = AsyncMock(return_value=None)
+        mock_provider = MagicMock()
+        mock_provider.comment_gallery = AsyncMock(return_value=None)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.post(
@@ -197,7 +197,7 @@ class TestCommentGallery:
         )
 
         assert response.status_code == 200
-        mock_api.comment_gallery.assert_called_once_with(
+        mock_provider.comment_gallery.assert_called_once_with(
             "123", "abc", "Edited comment", edit_id=42
         )
 
@@ -205,14 +205,14 @@ class TestCommentGallery:
 class TestRateGallery:
     def test_rate_gallery(self):
         """Post a rating, verify result. Cache provides api_uid/api_key."""
-        mock_api = MagicMock()
-        mock_api.rate_gallery = AsyncMock(return_value={"rating_avg": 4.5})
+        mock_provider = MagicMock()
+        mock_provider.rate_gallery = AsyncMock(return_value={"rating_avg": 4.5})
         detail = _make_detail()
 
         mock_cache = MagicMock()
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_provider, mock_cache)
         client = TestClient(app)
 
         response = client.post(
@@ -223,18 +223,18 @@ class TestRateGallery:
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        mock_api.rate_gallery.assert_called_once_with("uid1", "key1", 123, "abc", 8)
+        mock_provider.rate_gallery.assert_called_once_with("uid1", "key1", 123, "abc", 8)
 
     def test_rate_gallery_fetches_detail_on_cache_miss(self):
         """When cache misses, detail is fetched for api_uid/api_key."""
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         detail = _make_detail()
-        mock_api.get_gallery_details = AsyncMock(return_value=detail)
-        mock_api.rate_gallery = AsyncMock(return_value={})
+        mock_provider.get_gallery_details = AsyncMock(return_value=detail)
+        mock_provider.rate_gallery = AsyncMock(return_value={})
 
         mock_cache = _make_cache_miss()
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_provider, mock_cache)
         client = TestClient(app)
 
         response = client.post(
@@ -243,20 +243,20 @@ class TestRateGallery:
         )
 
         assert response.status_code == 200
-        mock_api.get_gallery_details.assert_called_once_with("123", "abc")
-        mock_api.rate_gallery.assert_called_once_with("uid1", "key1", 123, "abc", 6)
+        mock_provider.get_gallery_details.assert_called_once_with("123", "abc")
+        mock_provider.rate_gallery.assert_called_once_with("uid1", "key1", 123, "abc", 6)
 
 
 class TestTorrents:
     def test_torrents(self):
         """Verify torrent list is returned correctly."""
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         torrent = MagicMock()
         torrent.name = "Test Torrent"
         torrent.url = "https://exhentai.org/torrent/123/test.torrent"
-        mock_api.get_torrent_list = AsyncMock(return_value=[torrent])
+        mock_provider.get_torrent_list = AsyncMock(return_value=[torrent])
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/torrents")
@@ -266,14 +266,14 @@ class TestTorrents:
         assert len(data) == 1
         assert data[0]["name"] == "Test Torrent"
         assert data[0]["url"] == "https://exhentai.org/torrent/123/test.torrent"
-        mock_api.get_torrent_list.assert_called_once_with("123", "abc")
+        mock_provider.get_torrent_list.assert_called_once_with("123", "abc")
 
     def test_torrents_empty(self):
         """Empty torrent list returns an empty array."""
-        mock_api = MagicMock()
-        mock_api.get_torrent_list = AsyncMock(return_value=[])
+        mock_provider = MagicMock()
+        mock_provider.get_torrent_list = AsyncMock(return_value=[])
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/torrents")
@@ -285,7 +285,7 @@ class TestTorrents:
 class TestArchive:
     def test_archive(self):
         """Verify archive data is returned correctly."""
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         archive = MagicMock()
         archive.funds = "5000 GP"
         archive.original = MagicMock()
@@ -296,9 +296,9 @@ class TestArchive:
         archive.resample.url = "https://exhentai.org/archiver.php?res"
         archive.resample.size = "20 MB"
         archive.resample.cost = "200 GP"
-        mock_api.get_archive_list = AsyncMock(return_value=archive)
+        mock_provider.get_archive_list = AsyncMock(return_value=archive)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/archive")
@@ -309,18 +309,18 @@ class TestArchive:
         assert data["original"]["size"] == "100 MB"
         assert data["original"]["cost"] == "1000 GP"
         assert data["resample"]["url"] == "https://exhentai.org/archiver.php?res"
-        mock_api.get_archive_list.assert_called_once_with("123", "abc")
+        mock_provider.get_archive_list.assert_called_once_with("123", "abc")
 
     def test_archive_no_options(self):
         """Archive with no original/resample returns only funds."""
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         archive = MagicMock()
         archive.funds = "0 GP"
         archive.original = None
         archive.resample = None
-        mock_api.get_archive_list = AsyncMock(return_value=archive)
+        mock_provider.get_archive_list = AsyncMock(return_value=archive)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/archive")
@@ -333,14 +333,14 @@ class TestArchive:
 class TestVoteComment:
     def test_vote_comment(self):
         """Vote on a comment, verify api.vote_comment called correctly."""
-        mock_api = MagicMock()
-        mock_api.vote_comment = AsyncMock(return_value={"comment_score": 5})
+        mock_provider = MagicMock()
+        mock_provider.vote_comment = AsyncMock(return_value={"comment_score": 5})
         detail = _make_detail()
 
         mock_cache = MagicMock()
         mock_cache.get_gallery = MagicMock(return_value=detail)
 
-        app = _make_app(mock_api, mock_cache)
+        app = _make_app(mock_provider, mock_cache)
         client = TestClient(app)
 
         response = client.post(
@@ -351,17 +351,17 @@ class TestVoteComment:
         assert response.status_code == 200
         data = response.json()
         assert data["ok"] is True
-        mock_api.vote_comment.assert_called_once_with("uid1", "key1", 123, "abc", 1, 1)
+        mock_provider.vote_comment.assert_called_once_with("uid1", "key1", 123, "abc", 1, 1)
 
 
 class TestPageImage:
     def test_page_image_returns_bytes(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         mock_cache = MagicMock()
         mock_image_service = MagicMock()
         mock_image_service.get_page_image = AsyncMock(return_value=b"\xff\xd8page_image")
 
-        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/page/5")
@@ -371,12 +371,12 @@ class TestPageImage:
         mock_image_service.get_page_image.assert_awaited_once_with("123", "abc", 5)
 
     def test_page_image_invalid_page(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         mock_cache = MagicMock()
         mock_image_service = MagicMock()
         mock_image_service.get_page_image = AsyncMock(side_effect=ValueError("Page 99 out of range"))
 
-        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/page/99")
@@ -386,14 +386,14 @@ class TestPageImage:
         assert "Page 99 out of range" not in response.json()["detail"]
 
     def test_page_image_runtime_error_is_sanitized_to_bad_request(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         mock_cache = MagicMock()
         mock_image_service = MagicMock()
         mock_image_service.get_page_image = AsyncMock(
             side_effect=RuntimeError("viewer token leaked")
         )
 
-        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/page/5")
@@ -403,12 +403,12 @@ class TestPageImage:
         assert "viewer token leaked" not in response.json()["detail"]
 
     def test_page_image_upstream_failure_hides_exception_detail(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         mock_cache = MagicMock()
         mock_image_service = MagicMock()
         mock_image_service.get_page_image = AsyncMock(side_effect=Exception("upstream token leaked"))
 
-        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
         client = TestClient(app)
 
         response = client.get("/api/gallery/123/abc/page/5")
@@ -420,13 +420,13 @@ class TestPageImage:
 
 class TestPrefetch:
     def test_prefetch_returns_ok(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         mock_cache = MagicMock()
         mock_cache.get_gallery = MagicMock(return_value=MagicMock(pages=20))
         mock_image_service = MagicMock()
         mock_image_service.prefetch = AsyncMock()
 
-        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
         client = TestClient(app)
 
         response = client.post(
@@ -439,15 +439,15 @@ class TestPrefetch:
         mock_image_service.prefetch.assert_awaited_once()
 
     def test_prefetch_fetches_detail_on_cache_miss(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         detail = _make_detail()
         detail.pages = 20
-        mock_api.get_gallery_details = AsyncMock(return_value=detail)
+        mock_provider.get_gallery_details = AsyncMock(return_value=detail)
         mock_cache = _make_cache_miss()
         mock_image_service = MagicMock()
         mock_image_service.prefetch = AsyncMock()
 
-        app = _make_app(mock_api, mock_cache, mock_image_service=mock_image_service)
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
         client = TestClient(app)
 
         response = client.post(

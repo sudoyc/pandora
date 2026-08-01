@@ -14,8 +14,8 @@ from exhentai_api.exceptions import (
     SessionError,
     UpstreamError,
 )
-from exhentai_api.models.search import SearchParams
 from pandora_daemon.dependencies import get_state
+from pandora_daemon.providers import GallerySearchQuery
 from pandora_daemon.state import AppState
 
 
@@ -72,12 +72,12 @@ async def get_readiness(state: AppState = Depends(get_state)):
         }
 
     probes = {
-        "homepage": state.api.get_homepage,
-        "search": lambda: state.api.search(
-            SearchParams(f_search=_READINESS_SEARCH_TERM)
+        "homepage": state.provider.get_homepage,
+        "search": lambda: state.provider.search(
+            GallerySearchQuery(keyword=_READINESS_SEARCH_TERM)
         ),
-        "popular": state.api.get_popular,
-        "home": state.api.get_home_detail,
+        "popular": state.provider.get_popular,
+        "home": state.provider.get_home_detail,
     }
     statuses = await asyncio.gather(*(_run_probe(probe) for probe in probes.values()))
     checks = dict(zip(probes, statuses, strict=True))

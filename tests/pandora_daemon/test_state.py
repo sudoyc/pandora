@@ -22,14 +22,13 @@ def _make_state() -> AppState:
     db = MagicMock()
     db.close = AsyncMock()
 
-    api = MagicMock()
-    api.aclose = AsyncMock()
+    provider = MagicMock()
+    provider.aclose = AsyncMock()
 
     return AppState(
         config=MagicMock(),
         config_path=MagicMock(),
-        client=MagicMock(),
-        api=api,
+        provider=provider,
         downloads=downloads,
         cache=MagicMock(),
         image_service=image_service,
@@ -80,7 +79,7 @@ class TestAppStateShutdown:
         state.downloads.shutdown = AsyncMock(side_effect=lambda: order.append("downloads"))
         state.image_service.shutdown = AsyncMock(side_effect=lambda: order.append("image_service"))
         state.db.close = AsyncMock(side_effect=lambda: order.append("db"))
-        state.api.aclose = AsyncMock(side_effect=lambda: order.append("api"))
+        state.provider.aclose = AsyncMock(side_effect=lambda: order.append("provider"))
 
         # start first so _eviction_task exists
         async def fake_loop():
@@ -89,7 +88,7 @@ class TestAppStateShutdown:
         await state.start(fake_loop())
         await state.shutdown()
 
-        assert order == ["downloads", "image_service", "db", "api"]
+        assert order == ["downloads", "image_service", "db", "provider"]
 
     @pytest.mark.asyncio
     async def test_shutdown_cancels_eviction_task(self):
@@ -109,4 +108,4 @@ class TestAppStateShutdown:
         state = _make_state()
         await state.shutdown()  # should not raise
         state.downloads.shutdown.assert_awaited_once()
-        state.api.aclose.assert_awaited_once()
+        state.provider.aclose.assert_awaited_once()

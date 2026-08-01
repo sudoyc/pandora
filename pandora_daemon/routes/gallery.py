@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from pandora_daemon.dependencies import get_api, get_cache, get_image_service, get_db
+from pandora_daemon.dependencies import get_gallery_provider, get_cache, get_image_service, get_db
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 logger = logging.getLogger(__name__)
@@ -113,12 +113,12 @@ def _archive_to_dict(a) -> dict:
 # Cache helper
 # ---------------------------------------------------------------------------
 
-async def _get_detail(gid: str, token: str, api, cache):
+async def _get_detail(gid: str, token: str, provider, cache):
     """Return gallery detail from cache or fetch and cache it."""
     cached = cache.get_gallery(gid, token)
     if cached is not None:
         return cached
-    detail = await api.get_gallery_details(gid, token)
+    detail = await provider.get_gallery_details(gid, token)
     cache.put_gallery(detail)
     return detail
 
@@ -128,9 +128,9 @@ async def _get_detail(gid: str, token: str, api, cache):
 # ---------------------------------------------------------------------------
 
 @router.get("/{gid}/{token}")
-async def get_gallery_detail(gid: str, token: str, api=Depends(get_api), cache=Depends(get_cache), db=Depends(get_db)):
+async def get_gallery_detail(gid: str, token: str, provider=Depends(get_gallery_provider), cache=Depends(get_cache), db=Depends(get_db)):
     """Return gallery detail. Checks cache first; fetches and caches on miss."""
-    detail = await _get_detail(gid, token, api, cache)
+    detail = await _get_detail(gid, token, provider, cache)
     await db.put_history(detail)
     return _detail_to_dict(detail)
 
@@ -140,10 +140,10 @@ async def comment_gallery(
     gid: str,
     token: str,
     body: CommentBody,
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
 ):
     """Post or edit a comment on a gallery."""
-    result = await api.comment_gallery(gid, token, body.comment, edit_id=body.edit_id)
+    result = await provider.comment_gallery(gid, token, body.comment, edit_id=body.edit_id)
     return {"ok": True, "result": result}
 
 
@@ -152,12 +152,12 @@ async def rate_gallery(
     gid: str,
     token: str,
     body: RateBody,
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
     cache=Depends(get_cache),
 ):
     """Rate a gallery. Fetches api_uid/api_key from gallery detail (uses cache)."""
-    detail = await _get_detail(gid, token, api, cache)
-    result = await api.rate_gallery(detail.api_uid, detail.api_key, int(gid), token, body.rating)
+    detail = await _get_detail(gid, token, provider, cache)
+    result = await provider.rate_gallery(detail.api_uid, detail.api_key, int(gid), token, body.rating)
     return {"ok": True, "result": result}
 
 
@@ -166,12 +166,12 @@ async def vote_comment(
     gid: str,
     token: str,
     body: VoteCommentBody,
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
     cache=Depends(get_cache),
 ):
     """Vote on a comment. Fetches api_uid/api_key from gallery detail (uses cache)."""
-    detail = await _get_detail(gid, token, api, cache)
-    result = await api.vote_comment(
+    detail = await _get_detail(gid, token, provider, cache)
+    result = await provider.vote_comment(
         detail.api_uid,
         detail.api_key,
         int(gid),
@@ -183,16 +183,16 @@ async def vote_comment(
 
 
 @router.get("/{gid}/{token}/torrents")
-async def get_torrents(gid: str, token: str, api=Depends(get_api)):
+async def get_torrents(gid: str, token: str, provider=Depends(get_gallery_provider)):
     """Return the torrent list for a gallery."""
-    torrents = await api.get_torrent_list(gid, token)
+    torrents = await provider.get_torrent_list(gid, token)
     return [_torrent_to_dict(t) for t in torrents]
 
 
 @router.get("/{gid}/{token}/archive")
-async def get_archive(gid: str, token: str, api=Depends(get_api)):
+async def get_archive(gid: str, token: str, provider=Depends(get_gallery_provider)):
     """Return the archive download options for a gallery."""
-    archive = await api.get_archive_list(gid, token)
+    archive = await provider.get_archive_list(gid, token)
     return _archive_to_dict(archive)
 
 
@@ -228,7 +228,7 @@ async def get_thumb_image(
     gid: str,
     token: str,
     page: int,
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
     cache=Depends(get_cache),
     image_service=Depends(get_image_service),
 ):
@@ -238,7 +238,7 @@ async def get_thumb_image(
     Otherwise falls back to direct thumb_url proxy.
     Loads additional preview pages on demand if needed.
     """
-    detail = await _get_detail(gid, token, api, cache)
+    detail = await _get_detail(gid, token, provider, cache)
     page_idx = page - 1
     if page_idx < 0 or page_idx >= detail.pages:
         raise HTTPException(status_code=400, detail=f"Page {page} out of range")
@@ -296,13 +296,13 @@ async def prefetch_pages(
     gid: str,
     token: str,
     body: PrefetchBody,
-    api=Depends(get_api),
+    provider=Depends(get_gallery_provider),
     cache=Depends(get_cache),
     image_service=Depends(get_image_service),
     db=Depends(get_db),
 ):
     """Report current page and trigger background prefetch."""
-    detail = await _get_detail(gid, token, api, cache)
+    detail = await _get_detail(gid, token, provider, cache)
     await db.update_bookmark(
         gid=gid, token=token, title=detail.title,
         thumb_url=detail.cover_url, page=body.current_page, total=detail.pages,

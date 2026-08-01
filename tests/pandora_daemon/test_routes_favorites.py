@@ -43,18 +43,18 @@ def _make_gallery_item(
     return item
 
 
-def _make_app(mock_api):
+def _make_app(mock_provider):
     app = FastAPI()
     app.include_router(router)
     state = MagicMock(spec=AppState)
-    state.api = mock_api
+    state.provider = mock_provider
     app.state.pandora = state
     return app
 
 
 class TestGetFavorites:
     def test_get_favorites_returns_200_with_categories_and_galleries(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
 
         category = MagicMock()
         category.slot = 0
@@ -67,9 +67,9 @@ class TestGetFavorites:
         favorites_resp.categories = [category]
         favorites_resp.galleries = [gallery]
 
-        mock_api.get_favorites = AsyncMock(return_value=favorites_resp)
+        mock_provider.get_favorites = AsyncMock(return_value=favorites_resp)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.get("/api/favorites")
@@ -91,44 +91,44 @@ class TestGetFavorites:
         assert gal["title"] == "Test Gallery"
 
     def test_get_favorites_default_params(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         favorites_resp = MagicMock()
         favorites_resp.categories = []
         favorites_resp.galleries = []
-        mock_api.get_favorites = AsyncMock(return_value=favorites_resp)
+        mock_provider.get_favorites = AsyncMock(return_value=favorites_resp)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         client.get("/api/favorites")
 
-        mock_api.get_favorites.assert_called_once_with(
+        mock_provider.get_favorites.assert_called_once_with(
             favcat=-1, page=0, keyword="", sn=False, st=False, sf=False
         )
 
     def test_get_favorites_with_slot_and_page(self):
-        mock_api = MagicMock()
+        mock_provider = MagicMock()
         favorites_resp = MagicMock()
         favorites_resp.categories = []
         favorites_resp.galleries = []
-        mock_api.get_favorites = AsyncMock(return_value=favorites_resp)
+        mock_provider.get_favorites = AsyncMock(return_value=favorites_resp)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         client.get("/api/favorites?slot=2&page=3&keyword=test&sn=true&st=true&sf=true")
 
-        mock_api.get_favorites.assert_called_once_with(
+        mock_provider.get_favorites.assert_called_once_with(
             favcat=2, page=3, keyword="test", sn=True, st=True, sf=True
         )
 
 
 class TestAddFavorite:
     def test_add_favorite_returns_ok(self):
-        mock_api = MagicMock()
-        mock_api.add_favorite = AsyncMock(return_value=None)
+        mock_provider = MagicMock()
+        mock_provider.add_favorite = AsyncMock(return_value=None)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.post(
@@ -139,11 +139,11 @@ class TestAddFavorite:
         assert response.status_code == 200
         assert response.json() == {"ok": True}
 
-    def test_add_favorite_calls_api_with_correct_args(self):
-        mock_api = MagicMock()
-        mock_api.add_favorite = AsyncMock(return_value=None)
+    def test_add_favorite_calls_provider_with_correct_args(self):
+        mock_provider = MagicMock()
+        mock_provider.add_favorite = AsyncMock(return_value=None)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         client.post(
@@ -151,30 +151,30 @@ class TestAddFavorite:
             json={"gid": "99999", "token": "xyz123", "slot": 3, "note": "my note"},
         )
 
-        mock_api.add_favorite.assert_called_once_with(
+        mock_provider.add_favorite.assert_called_once_with(
             "99999", "xyz123", favcat=3, favnote="my note"
         )
 
     def test_add_favorite_default_slot_and_note(self):
-        mock_api = MagicMock()
-        mock_api.add_favorite = AsyncMock(return_value=None)
+        mock_provider = MagicMock()
+        mock_provider.add_favorite = AsyncMock(return_value=None)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         client.post("/api/favorites", json={"gid": "111", "token": "aaa"})
 
-        mock_api.add_favorite.assert_called_once_with(
+        mock_provider.add_favorite.assert_called_once_with(
             "111", "aaa", favcat=0, favnote=""
         )
 
 
 class TestModifyFavorites:
     def test_modify_favorites_returns_ok(self):
-        mock_api = MagicMock()
-        mock_api.modify_favorites = AsyncMock(return_value=None)
+        mock_provider = MagicMock()
+        mock_provider.modify_favorites = AsyncMock(return_value=None)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         response = client.request(
@@ -186,11 +186,11 @@ class TestModifyFavorites:
         assert response.status_code == 200
         assert response.json() == {"ok": True}
 
-    def test_modify_favorites_calls_api_with_correct_args(self):
-        mock_api = MagicMock()
-        mock_api.modify_favorites = AsyncMock(return_value=None)
+    def test_modify_favorites_calls_provider_with_correct_args(self):
+        mock_provider = MagicMock()
+        mock_provider.modify_favorites = AsyncMock(return_value=None)
 
-        app = _make_app(mock_api)
+        app = _make_app(mock_provider)
         client = TestClient(app)
 
         client.request(
@@ -199,4 +199,4 @@ class TestModifyFavorites:
             json={"gids": ["111", "222", "333"], "action": "delete"},
         )
 
-        mock_api.modify_favorites.assert_called_once_with(["111", "222", "333"], "delete")
+        mock_provider.modify_favorites.assert_called_once_with(["111", "222", "333"], "delete")

@@ -1,6 +1,6 @@
 from fastapi import Request, Depends
 from pandora_daemon.state import AppState
-from exhentai_api.api import ExhentaiAPI
+from pandora_daemon.providers import GalleryProvider
 from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
@@ -11,8 +11,10 @@ from pandora_daemon.db import PandoraDB
 def get_state(request: Request) -> AppState:
     return request.app.state.pandora
 
-def get_api(state: AppState = Depends(get_state)) -> ExhentaiAPI:
-    return state.api
+def get_gallery_provider(
+    state: AppState = Depends(get_state),
+) -> GalleryProvider:
+    return state.provider
 
 def get_downloads(state: AppState = Depends(get_state)) -> DownloadManager:
     return state.downloads

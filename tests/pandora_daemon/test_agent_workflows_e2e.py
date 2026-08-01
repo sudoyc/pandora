@@ -161,12 +161,12 @@ def workflow_daemon(monkeypatch, tmp_path):
         ),
         download=DownloadConfig(path=str(download_root)),
     )
-    api = MagicMock(spec=ExhentaiAPI)
-    api.get_homepage = AsyncMock(return_value=[])
-    api.search = AsyncMock(return_value=[])
-    api.get_popular = AsyncMock(return_value=[])
-    api.get_home_detail = AsyncMock(return_value={})
-    api.get_gallery_details = AsyncMock(return_value=_gallery_detail())
+    provider = MagicMock(spec=ExhentaiAPI)
+    provider.get_homepage = AsyncMock(return_value=[])
+    provider.search = AsyncMock(return_value=[])
+    provider.get_popular = AsyncMock(return_value=[])
+    provider.get_home_detail = AsyncMock(return_value={})
+    provider.get_gallery_details = AsyncMock(return_value=_gallery_detail())
 
     cache = MagicMock()
     cache.get_gallery.return_value = None
@@ -178,7 +178,7 @@ def workflow_daemon(monkeypatch, tmp_path):
     state = MagicMock(spec=AppState)
     state.config = config
     state.config_path = tmp_path / "config.toml"
-    state.api = api
+    state.provider = provider
     state.cache = cache
     state.db = db
     state.downloads = downloads
@@ -194,7 +194,7 @@ def workflow_daemon(monkeypatch, tmp_path):
 
     monkeypatch.setattr("pandora_daemon.cli.httpx.AsyncClient", fixture_client)
     return SimpleNamespace(
-        api=api,
+        provider=provider,
         app=app,
         cache=cache,
         db=db,
@@ -255,19 +255,19 @@ async def test_search_workflow_covers_success_and_sanitized_failure(
     workflow_daemon,
     capsys,
 ):
-    workflow_daemon.api.search = AsyncMock(return_value=[_gallery_item()])
+    workflow_daemon.provider.search = AsyncMock(return_value=[_gallery_item()])
 
     exit_code, payload = await _run_json(capsys, "search", "fixture", "--page", "2")
 
     assert exit_code == 0
     assert payload[0]["gid"] == "123"
     assert payload[0]["title"] == "Fixture Search Result"
-    params = workflow_daemon.api.search.await_args.args[0]
-    assert params.f_search == "fixture"
-    assert workflow_daemon.api.search.await_args.kwargs["page"] == 2
+    params = workflow_daemon.provider.search.await_args.args[0]
+    assert params.keyword == "fixture"
+    assert workflow_daemon.provider.search.await_args.kwargs["page"] == 2
     _validate("search-response.schema.json", payload)
 
-    workflow_daemon.api.search = AsyncMock(
+    workflow_daemon.provider.search = AsyncMock(
         side_effect=SessionError("SEARCH_RESPONSE_SECRET")
     )
     exit_code, failure = await _run_json(capsys, "search", "fixture")
@@ -299,7 +299,7 @@ async def test_gallery_workflow_covers_success_and_sanitized_failure(
     workflow_daemon.db.put_history.assert_awaited_once()
     _validate("gallery-detail-response.schema.json", payload)
 
-    workflow_daemon.api.get_gallery_details = AsyncMock(
+    workflow_daemon.provider.get_gallery_details = AsyncMock(
         side_effect=GalleryNotFoundError("GALLERY_RESPONSE_SECRET")
     )
     exit_code, failure = await _run_json(
