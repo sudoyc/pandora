@@ -1,7 +1,7 @@
 [project]
 name = "pandora"
 version = "0.2.0"
-description = "Open the box. Browse, search, and download from ExHentai — daemon + CLI + agent workflows."
+description = "Cross-platform local gallery browsing, search, downloads, and agent workflows through a daemon and CLI."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

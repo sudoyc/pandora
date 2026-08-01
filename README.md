@@ -1,22 +1,22 @@
 # Pandora
 
-Open the box. Browse, search, and download from ExHentai — daemon + CLI + agent workflows.
+A cross-platform local gallery service for browsing, search, downloads, and offline libraries through a daemon, CLI, and Agent Pack.
 
 ## Architecture
 
 ```
-exhentai_api (Python library)     -- stateless, reusable
+GalleryProvider adapters           -- upstream-specific HTTP and parsing
         |
-pandora-daemon (FastAPI)          -- session, cache, download, image proxy
+pandora-daemon (FastAPI)           -- provider selection, state, cache, downloads
         | REST + WebSocket (localhost:7860)
-        |-- CLI                   -- daemon-backed JSON/NDJSON workflow
-        |-- Agent Pack            -- generic daemon-backed agent workflows
-        |   |-- Hermes skill      -- first packaged consumer
-        |   +-- thin wrappers     -- optional future consumers
-        +-- Web frontend          -- optional browser UI, work in progress
+        |-- CLI                    -- daemon-backed JSON/NDJSON workflow
+        |-- Agent Pack             -- generic daemon-backed agent workflows
+        |   |-- Hermes skill       -- first packaged consumer
+        |   +-- thin wrappers      -- optional future consumers
+        +-- Web frontend           -- optional browser UI, work in progress
 ```
 
-**Design principle:** frontends and agents never access ExHentai directly. All requests go through the daemon, which handles session, caching, downloads, and rate limiting. Agent/bot workflows should prefer the generic [Pandora Agent Pack](docs/agent/README.md) and CLI JSON/NDJSON contract over Web/TUI/client-cache work.
+**Design principle:** frontends and agents never access provider adapters or upstream services directly. All requests go through the daemon, which owns provider selection, sessions, caching, downloads, and rate limiting. Agent/bot workflows should prefer the generic [Pandora Agent Pack](docs/agent/README.md) and CLI JSON/NDJSON contract over Web/TUI/client-cache work.
 
 ## Documentation
 
@@ -49,9 +49,9 @@ Scheme A for translated tag search is preserved. Agents run `tags status --json`
 
 ## Components
 
-### exhentai_api
+### Built-in ExHentai provider
 
-Async Python library. 22 API methods, 17 model types, 11 parsers, 112 tests. Its behavior is fixture-tested against the Android reference project; live upstream compatibility remains an explicit maintenance concern.
+The built-in adapter uses the stateless `exhentai_api` library for upstream HTTP and parsing. Its 22 API methods, 17 model types, and 11 parsers are fixture-tested against the Android reference project; live upstream compatibility remains an explicit maintenance concern.
 
 | Category | Methods |
 |----------|---------|
@@ -66,7 +66,7 @@ Async Python library. 22 API methods, 17 model types, 11 parsers, 112 tests. Its
 
 ### pandora-daemon
 
-FastAPI service wrapping `exhentai_api`.
+FastAPI service orchestrating the selected `GalleryProvider` and owning all persistent application state.
 
 - **Image proxy** — all image types cached with SHA256 keys, LRU eviction (2 GB default)
 - **SQLite database** — browsing history, local favorites, reading bookmarks, saved searches, gallery filters, tag cache. Auto-triggers on gallery view and page prefetch
