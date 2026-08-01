@@ -9,9 +9,10 @@ from pandora_daemon.providers.errors import (
     ProviderAuthenticationError,
     ProviderGalleryNotFoundError,
     ProviderNetworkError,
+    ProviderParseError,
     ProviderQuotaError,
 )
-from pandora_daemon.download import DownloadTask, _atomic_write
+from pandora_daemon.download import DownloadTask, _atomic_write, _ext_from_image_bytes
 
 
 class TestDownloadTaskNewFields:
@@ -65,11 +66,25 @@ class TestAtomicWrite:
         assert target.read_bytes() == b"new"
 
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from pandora_daemon.config import DownloadConfig
 from pandora_daemon.download import DownloadManager
+
+class TestImageExtensions:
+    @pytest.mark.parametrize(
+        ("data", "extension"),
+        [
+            (b"\xff\xd8\xffimage", ".jpg"),
+            (b"\x89PNG\r\n\x1a\nimage", ".png"),
+            (b"GIF89aimage", ".gif"),
+            (b"RIFF\x00\x00\x00\x00WEBPimage", ".webp"),
+            (b"unknown", ".jpg"),
+        ],
+    )
+    def test_ext_from_image_bytes(self, data, extension):
+        assert _ext_from_image_bytes(data) == extension
+
 
 
 @pytest.fixture
@@ -83,16 +98,12 @@ def state_file(tmp_path):
 
 
 @pytest.fixture
-def mock_api():
-    api = AsyncMock()
+def mock_provider():
+    provider = AsyncMock()
     detail = MagicMock()
     detail.title = "Test Gallery"
     detail.title_jpn = "Test JPN"
     detail.pages = 3
-    detail.preview_pages = 1
-    detail.viewer_urls = ["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"]
-    detail.thumb_urls = ["https://ex.org/t/1.jpg", "https://ex.org/t/2.jpg", "https://ex.org/t/3.jpg"]
-    detail.thumb_sprites = []
     detail.gid = "1"
     detail.token = "t"
     detail.url = "https://ex.org/g/1/t/"
@@ -109,8 +120,8 @@ def mock_api():
     detail.torrent_count = 0
     detail.comments = []
     detail.comments_has_more = False
-    api.get_gallery_details.return_value = detail
-    return api
+    provider.get_gallery_details.return_value = detail
+    return provider
 
 
 @pytest.fixture
@@ -122,40 +133,36 @@ def mock_ws():
 def mock_image_service():
     svc = AsyncMock()
     svc.proxy_image.return_value = b"fake image bytes"
+    svc.get_page_image.return_value = b"\xff\xd8\xffpage"
+    svc.get_thumbnail.return_value = b"\x89PNG\r\n\x1a\nthumb"
     return svc
 
 
 class TestDownloadManagerInit:
-    def test_constructor_accepts_image_service(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    def test_constructor_accepts_provider(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
+        assert mgr._provider is mock_provider
         assert mgr._image_service is mock_image_service
+        assert not hasattr(mgr, "_api")
 
-    def test_constructor_no_cache_param(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    def test_constructor_no_cache_param(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         assert not hasattr(mgr, '_cache')
 
-
-class TestFetchImage:
-    @pytest.mark.asyncio
-    async def test_fetch_image_uses_image_service(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
-        result = await mgr._fetch_image("https://example.com/img.jpg")
-        mock_image_service.proxy_image.assert_awaited_once_with("https://example.com/img.jpg")
-        assert result == b"fake image bytes"
 
 
 class TestDebounce:
     @pytest.mark.asyncio
-    async def test_mark_dirty_creates_save_task(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_mark_dirty_creates_save_task(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         mgr._mark_dirty()
         assert mgr._save_task is not None
         assert not mgr._save_task.done()
         mgr._save_task.cancel()
 
     @pytest.mark.asyncio
-    async def test_shutdown_cancels_debounce_and_saves(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_shutdown_cancels_debounce_and_saves(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.start()
         await mgr.submit("1", "t")
         mgr._mark_dirty()
@@ -169,82 +176,74 @@ class TestDownloadPages:
 
     @pytest.mark.asyncio
     async def test_concurrent_download_all_pages_succeed(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
         )
         pages_dir = Path(task.output_dir) / "pages"
         pages_dir.mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            await mgr._download_pages(task)
+        await mgr._download_pages(task)
 
         assert task.downloaded_pages == 3
         assert task.failed_pages == []
         assert all(task.page_states[i] == "done" for i in range(1, 4))
+        mock_image_service.get_page_image.assert_has_awaits(
+            [call("1", "t", page) for page in range(1, 4)],
+            any_order=True,
+        )
 
     @pytest.mark.asyncio
     async def test_concurrent_download_skips_existing_files(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
         )
         pages_dir = Path(task.output_dir) / "pages"
         pages_dir.mkdir(parents=True)
         (pages_dir / "0001.jpg").write_bytes(b"existing")
         (pages_dir / "0002.jpg").write_bytes(b"existing")
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/3.jpg", None)):
-            await mgr._download_pages(task)
+        await mgr._download_pages(task)
 
         assert task.page_states[1] == "done"
         assert task.page_states[2] == "done"
         assert task.page_states[3] == "done"
         assert task.downloaded_pages == 3
-        assert mock_api.client.get_html.await_count == 1
+        mock_image_service.get_page_image.assert_awaited_once_with("1", "t", 3)
 
     @pytest.mark.asyncio
     async def test_concurrent_download_ignores_tmp_files(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         pages_dir = Path(task.output_dir) / "pages"
         pages_dir.mkdir(parents=True)
         (pages_dir / "0001.jpg.tmp").write_bytes(b"partial")
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            await mgr._download_pages(task)
+        await mgr._download_pages(task)
 
         assert task.page_states[1] == "done"
         assert not (pages_dir / "0001.jpg.tmp").exists()
 
     @pytest.mark.asyncio
     async def test_concurrent_download_broadcasts_progress(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=2, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            await mgr._download_pages(task)
+        await mgr._download_pages(task)
 
         progress_calls = [
             c[0][0] for c in mock_ws.broadcast.call_args_list
@@ -254,47 +253,43 @@ class TestDownloadPages:
 
     @pytest.mark.asyncio
     async def test_uses_atomic_write(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            with patch("pandora_daemon.download._atomic_write") as mock_aw:
-                await mgr._download_pages(task)
-                mock_aw.assert_called_once()
+        with patch("pandora_daemon.download._atomic_write") as mock_aw:
+            await mgr._download_pages(task)
+            mock_aw.assert_called_once()
 
 
 class TestRetryBehavior:
     @pytest.mark.asyncio
     async def test_network_error_retries_and_succeeds(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
         dl_config.max_retry = 2
         dl_config.retry_base_delay = 0.01
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
         call_count = 0
-        async def get_html_side_effect(url):
+
+        async def get_page_image_side_effect(gid, token, page):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 raise ProviderNetworkError("timeout")
-            return "<html></html>"
+            return b"\xff\xd8\xffpage"
 
-        mock_api.client.get_html = AsyncMock(side_effect=get_html_side_effect)
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            await mgr._download_pages(task)
+        mock_image_service.get_page_image.side_effect = get_page_image_side_effect
+        await mgr._download_pages(task)
 
         assert task.page_states[1] == "done"
         assert task.failed_pages == []
@@ -302,106 +297,100 @@ class TestRetryBehavior:
 
     @pytest.mark.asyncio
     async def test_network_error_exhausts_retries(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
         dl_config.max_retry = 1
         dl_config.retry_base_delay = 0.01
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderNetworkError("timeout"))
+        mock_image_service.get_page_image.side_effect = ProviderNetworkError("timeout")
         await mgr._download_pages(task)
 
         assert task.page_states[1] == "failed"
         assert 1 in task.failed_pages
 
     @pytest.mark.asyncio
-    async def test_parse_error_retries(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    async def test_provider_parse_error_retries(
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
         dl_config.max_retry = 1
         dl_config.retry_base_delay = 0.01
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=(None, None)):
-            await mgr._download_pages(task)
+        mock_image_service.get_page_image.side_effect = ProviderParseError("unparseable")
+        await mgr._download_pages(task)
 
         assert task.page_states[1] == "failed"
         assert 1 in task.failed_pages
+        assert mock_image_service.get_page_image.await_count == 2
 
     @pytest.mark.asyncio
     async def test_unknown_exception_no_retry(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
         dl_config.max_retry = 3
         dl_config.retry_base_delay = 0.01
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=RuntimeError("unexpected"))
+        mock_image_service.get_page_image.side_effect = RuntimeError("unexpected")
         await mgr._download_pages(task)
 
         assert task.page_states[1] == "failed"
-        assert mock_api.client.get_html.await_count == 1
+        assert mock_image_service.get_page_image.await_count == 1
 
 
 class TestFatalExceptions:
     @pytest.mark.asyncio
     async def test_auth_error_stops_all_pages(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderAuthenticationError("Sad Panda"))
+        mock_image_service.get_page_image.side_effect = ProviderAuthenticationError("Sad Panda")
         with pytest.raises(ProviderAuthenticationError):
             await mgr._download_pages(task)
 
     @pytest.mark.asyncio
     async def test_image_limit_error_raises(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderQuotaError("509"))
+        mock_image_service.get_page_image.side_effect = ProviderQuotaError("509")
         with pytest.raises(ProviderQuotaError):
             await mgr._download_pages(task)
 
     @pytest.mark.asyncio
     async def test_gallery_not_found_raises(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
         )
         Path(task.output_dir, "pages").mkdir(parents=True)
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderGalleryNotFoundError("removed"))
+        mock_image_service.get_page_image.side_effect = ProviderGalleryNotFoundError("removed")
         with pytest.raises(ProviderGalleryNotFoundError):
             await mgr._download_pages(task)
 
@@ -409,57 +398,62 @@ class TestFatalExceptions:
 class TestDownloadGallery:
     @pytest.mark.asyncio
     async def test_successful_download_sets_completed(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
-            gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
-            thumb_urls=["https://ex.org/t/1.jpg"],
+            gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
         )
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            await mgr._download_gallery(task)
+        await mgr._download_gallery(task)
 
         assert task.status == "completed"
         assert task.metadata_saved is True
         assert task.cover_downloaded is True
+        assert task.downloaded_thumbs == 3
+        assert (Path(task.output_dir) / "thumbs" / "0001.png").is_file()
+        assert (Path(task.output_dir) / "pages" / "0001.jpg").is_file()
+        mock_provider.get_gallery_details.assert_awaited_once_with("1", "t")
+        mock_image_service.proxy_image.assert_awaited_once_with(
+            mock_provider.get_gallery_details.return_value.cover_url
+        )
+        mock_image_service.get_thumbnail.assert_has_awaits(
+            [call("1", "t", page) for page in range(1, 4)]
+        )
+        mock_image_service.get_page_image.assert_has_awaits(
+            [call("1", "t", page) for page in range(1, 4)],
+            any_order=True,
+        )
 
     @pytest.mark.asyncio
     async def test_download_gallery_sets_downloading_before_work(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
-            thumb_urls=[],
         )
 
-        async def assert_downloading(url):
+        async def assert_downloading(gid, token, page):
             assert task.status == "downloading"
-            return "<html></html>"
+            return b"\x89PNG\r\n\x1a\nthumb"
 
-        mock_api.client.get_html = AsyncMock(side_effect=assert_downloading)
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/1.jpg", None)):
-            await mgr._download_gallery(task)
+        mock_image_service.get_thumbnail.side_effect = assert_downloading
+        await mgr._download_gallery(task)
 
         assert task.status == "completed"
 
     @pytest.mark.asyncio
     async def test_failed_pages_sets_completed_with_errors(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
         dl_config.max_retry = 0
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
-            thumb_urls=[],
         )
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderNetworkError("fail"))
+        mock_image_service.get_page_image.side_effect = ProviderNetworkError("fail")
         await mgr._download_gallery(task)
 
         assert task.status == "completed_with_errors"
@@ -467,16 +461,14 @@ class TestDownloadGallery:
 
     @pytest.mark.asyncio
     async def test_auth_error_sets_failed_and_broadcasts(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
-            thumb_urls=[],
         )
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderAuthenticationError("Sad Panda"))
+        mock_image_service.get_page_image.side_effect = ProviderAuthenticationError("Sad Panda")
         await mgr._download_gallery(task)
 
         assert task.status == "failed"
@@ -485,16 +477,14 @@ class TestDownloadGallery:
 
     @pytest.mark.asyncio
     async def test_image_limit_sets_paused(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=1, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1"],
-            thumb_urls=[],
         )
 
-        mock_api.client.get_html = AsyncMock(side_effect=ProviderQuotaError("509"))
+        mock_image_service.get_page_image.side_effect = ProviderQuotaError("509")
         await mgr._download_gallery(task)
 
         assert task.status == "paused"
@@ -502,15 +492,13 @@ class TestDownloadGallery:
         assert "download_paused" in events
 
     @pytest.mark.asyncio
-    async def test_is_retry_skips_metadata_cover_thumbs(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file, tmp_path
+    async def test_retry_skips_metadata_and_cover(
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file, tmp_path
     ):
-        """When task has failed_pages and downloaded_pages > 0, skip early phases."""
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        """When pages are retried, skip completed metadata and cover phases."""
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         task = DownloadTask(
             gid="1", token="t", title="T", total_pages=3, output_dir=str(tmp_path / "gallery"),
-            viewer_urls=["https://ex.org/s/a/1-1", "https://ex.org/s/b/1-2", "https://ex.org/s/c/1-3"],
-            thumb_urls=[],
             downloaded_pages=2,
             metadata_saved=True,
             cover_downloaded=True,
@@ -522,18 +510,24 @@ class TestDownloadGallery:
         (pages_dir / "0001.jpg").write_bytes(b"ok")
         (pages_dir / "0002.jpg").write_bytes(b"ok")
 
-        mock_api.client.get_html = AsyncMock(return_value="<html></html>")
-        with patch("pandora_daemon.download.parse_image_viewer", return_value=("https://ex.org/img/3.jpg", None)):
-            await mgr._download_gallery(task)
+        assert task.viewer_urls == []
+        assert task.thumb_urls == []
+        assert task.thumb_sprites == []
+        await mgr._download_gallery(task)
 
         assert task.status == "completed"
-        mock_api.get_gallery_details.assert_not_awaited()
+        mock_provider.get_gallery_details.assert_not_awaited()
+        mock_image_service.proxy_image.assert_not_awaited()
+        mock_image_service.get_thumbnail.assert_has_awaits(
+            [call("1", "t", page) for page in range(1, 4)]
+        )
+        mock_image_service.get_page_image.assert_awaited_once_with("1", "t", 3)
 
 
 class TestResumeRetry:
     @pytest.mark.asyncio
-    async def test_resume_paused_task(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_resume_paused_task(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.submit("1", "t")
         task = mgr._tasks["1"]
         task.status = "paused"
@@ -543,22 +537,22 @@ class TestResumeRetry:
         assert task.status == "queued"
 
     @pytest.mark.asyncio
-    async def test_resume_non_paused_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_resume_non_paused_returns_false(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.submit("1", "t")
 
         result = await mgr.resume("1")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_resume_nonexistent_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_resume_nonexistent_returns_false(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         result = await mgr.resume("999")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_retry_failed_completed_with_errors(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_retry_failed_completed_with_errors(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.submit("1", "t")
         task = mgr._tasks["1"]
         task.status = "completed_with_errors"
@@ -570,8 +564,8 @@ class TestResumeRetry:
         assert task.status == "queued"
 
     @pytest.mark.asyncio
-    async def test_retry_failed_wrong_status_returns_false(self, mock_api, mock_ws, mock_image_service, dl_config, state_file):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+    async def test_retry_failed_wrong_status_returns_false(self, mock_provider, mock_ws, mock_image_service, dl_config, state_file):
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.submit("1", "t")
 
         result = await mgr.retry_failed("1")
@@ -579,9 +573,9 @@ class TestResumeRetry:
 
     @pytest.mark.asyncio
     async def test_retry_reconciles_missing_pages_when_failed_list_is_stale(
-        self, mock_api, mock_ws, mock_image_service, dl_config, state_file
+        self, mock_provider, mock_ws, mock_image_service, dl_config, state_file
     ):
-        mgr = DownloadManager(mock_api, dl_config, mock_ws, mock_image_service, state_file)
+        mgr = DownloadManager(mock_provider, dl_config, mock_ws, mock_image_service, state_file)
         await mgr.submit("1", "t")
         task = mgr._tasks["1"]
         task.status = "completed_with_errors"

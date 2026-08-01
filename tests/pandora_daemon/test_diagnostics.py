@@ -83,17 +83,13 @@ def _download_manager(tmp_path: Path):
     detail = SimpleNamespace(
         title="PRIVATE_TITLE",
         pages=2,
-        preview_pages=1,
-        viewer_urls=["https://example.test/view/1", "https://example.test/view/2"],
-        thumb_urls=[],
-        thumb_sprites=[],
     )
-    api = MagicMock()
-    api.get_gallery_details = AsyncMock(return_value=detail)
+    provider = MagicMock()
+    provider.get_gallery_details = AsyncMock(return_value=detail)
     ws = MagicMock()
     ws.broadcast = AsyncMock()
     config = DownloadConfig(path=str(tmp_path / "downloads"))
-    manager = DownloadManager(api, config, ws, AsyncMock(), tmp_path / "downloads.json")
+    manager = DownloadManager(provider, config, ws, AsyncMock(), tmp_path / "downloads.json")
     return manager, ws
 
 
@@ -143,7 +139,7 @@ def test_download_rest_task_state_ws_and_logs_share_diagnostic_ids(tmp_path, cap
 
 def test_failed_download_submission_logs_ids_without_sensitive_detail(tmp_path, caplog):
     manager, _ = _download_manager(tmp_path)
-    manager._api.get_gallery_details = AsyncMock(
+    manager._provider.get_gallery_details = AsyncMock(
         side_effect=RuntimeError("UPSTREAM_RESPONSE_SECRET")
     )
     app = create_app()

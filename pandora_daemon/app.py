@@ -108,7 +108,7 @@ async def _build_state(
     registry = provider_registry or default_provider_registry()
     provider = registry.create(provider_id, provider_context)
     cache = CacheManager(config.cache)
-    image_service = ImageService(api=provider, cache=cache, config=config.cache)
+    image_service = ImageService(provider=provider, cache=cache, config=config.cache)
     ws = WebSocketManager()
     tag_database = TagDatabase()
     try:
@@ -117,7 +117,7 @@ async def _build_state(
         pass  # Non-fatal: suggest will return empty results
     state_file = config_path.parent / "downloads.json"
     downloads = DownloadManager(
-        api=provider, config=config.download, ws=ws,
+        provider=provider, config=config.download, ws=ws,
         image_service=image_service, state_file=state_file,
     )
     return AppState(

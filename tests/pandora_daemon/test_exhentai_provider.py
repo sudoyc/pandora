@@ -174,16 +174,46 @@ async def test_toplist_normalizes_gallery_links_and_drops_unparseable_items() ->
 
 
 @pytest.mark.asyncio
-async def test_owned_provider_closes_its_client_directly() -> None:
+async def test_owned_provider_closes_media_and_client_once() -> None:
     client = MagicMock()
     client.aclose = AsyncMock()
     api = AsyncMock(spec=ExhentaiAPI)
     api.client = client
+    media = MagicMock()
+    media.aclose = AsyncMock()
+    provider = ExHentaiProvider(api, owns_client=True, media=media)
 
-    await ExHentaiProvider(api, owns_client=True).aclose()
+    await provider.aclose()
+    await provider.aclose()
 
+    media.aclose.assert_awaited_once_with()
     client.aclose.assert_awaited_once_with()
     api.aclose.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_media_methods_delegate_through_the_error_boundary() -> None:
+    api = AsyncMock(spec=ExhentaiAPI)
+    media = MagicMock()
+    media.fetch_image = AsyncMock(return_value=b"source")
+    media.get_page_image = AsyncMock(return_value=b"page")
+    media.get_thumbnail = AsyncMock(return_value=b"thumbnail")
+    provider = ExHentaiProvider(api, media=media)
+    detail = object()
+
+    assert await provider.fetch_image("https://ehgt.org/source.jpg") == b"source"
+    assert await provider.get_page_image(detail, 2) == b"page"
+    assert await provider.get_thumbnail(detail, 2) == b"thumbnail"
+    media.fetch_image.assert_awaited_once_with("https://ehgt.org/source.jpg")
+    media.get_page_image.assert_awaited_once_with(detail, 2)
+    media.get_thumbnail.assert_awaited_once_with(detail, 2)
+
+    source = NetworkError("connection reset")
+    media.get_page_image.side_effect = source
+    with pytest.raises(ProviderNetworkError) as raised:
+        await provider.get_page_image(detail, 2)
+
+    assert raised.value.__cause__ is source
 
 
 def test_factory_forwards_credentials_and_network_context() -> None:

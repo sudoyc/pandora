@@ -19,6 +19,7 @@ from exhentai_api.exceptions import (
 )
 from exhentai_api.models.gallery import GalleryListItem
 from exhentai_api.models.search import SearchParams
+from pandora_daemon.providers.exhentai.media import ExHentaiMedia
 from pandora_daemon.providers.contracts import (
     GallerySearchQuery,
     GallerySummary,
@@ -99,9 +100,17 @@ class ExHentaiProvider:
 
     provider_id = "exhentai"
 
-    def __init__(self, api: ExhentaiAPI, *, owns_client: bool = False) -> None:
+    def __init__(
+        self,
+        api: ExhentaiAPI,
+        *,
+        owns_client: bool = False,
+        media: ExHentaiMedia | None = None,
+    ) -> None:
         self._api = api
+        self._media = media
         self._owns_client = owns_client
+        self._closed = False
 
     async def _call_api(
         self,
@@ -135,15 +144,27 @@ class ExHentaiProvider:
         except ExhentaiError as exc:
             raise ProviderError(str(exc), public_code="exhentai") from exc
 
+    def _get_media(self) -> ExHentaiMedia:
+        if self._media is None:
+            self._media = ExHentaiMedia(self._api.client)
+        return self._media
+
     @property
     def client(self) -> ExhentaiClient:
         return self._api.client
 
     async def aclose(self) -> None:
-        if self._owns_client:
-            await self._call_api(self._api.client.aclose)
-        else:
-            await self._call_api(self._api.aclose)
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self._media is not None:
+                await self._call_api(self._media.aclose)
+        finally:
+            if self._owns_client:
+                await self._call_api(self._api.client.aclose)
+            else:
+                await self._call_api(self._api.aclose)
 
     async def get_homepage(self, next_gid: str | None = None) -> list[GallerySummary]:
         items = await self._call_api(self._api.get_homepage, next_gid=next_gid)
@@ -206,6 +227,15 @@ class ExHentaiProvider:
 
     async def get_gallery_token(self, gid: int, imgkey: str, page: int) -> str:
         return await self._call_api(self._api.get_gallery_token, gid, imgkey, page)
+
+    async def fetch_image(self, source: str) -> bytes:
+        return await self._call_api(self._get_media().fetch_image, source)
+
+    async def get_page_image(self, detail: object, page: int) -> bytes:
+        return await self._call_api(self._get_media().get_page_image, detail, page)
+
+    async def get_thumbnail(self, detail: object, page: int) -> bytes:
+        return await self._call_api(self._get_media().get_thumbnail, detail, page)
 
     async def get_favorites(self, **kwargs: Any) -> Any:
         return await self._call_api(self._api.get_favorites, **kwargs)

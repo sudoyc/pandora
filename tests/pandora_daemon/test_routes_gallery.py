@@ -30,7 +30,6 @@ def _make_detail():
     d.posted = "2026-01-01"
     d.favorite_slot = None
     d.preview_pages = 1
-    d.viewer_urls = []
     d.rating = 4.5
     d.rating_count = 100
     d.favorite_count = 50
@@ -129,7 +128,6 @@ class TestGalleryDetail:
     def test_gallery_detail_does_not_expose_internal_fields(self):
         mock_provider = AsyncMock()
         detail = _make_detail()
-        detail.thumb_urls = ["https://ex.com/t1.jpg", "https://ex.com/t2.jpg"]
         mock_cache = MagicMock()
         mock_cache.get_gallery.return_value = detail
         app = _make_app(mock_provider, mock_cache=mock_cache)
@@ -415,6 +413,103 @@ class TestPageImage:
 
         assert response.status_code == 502
         assert response.json()["detail"] == "Failed to fetch page image"
+        assert "upstream token leaked" not in response.json()["detail"]
+
+
+class TestThumbnail:
+    @pytest.mark.parametrize(
+        ("image_bytes", "media_type"),
+        [
+            (b"\x89PNGthumbnail", "image/png"),
+            (b"GIF89athumbnail", "image/gif"),
+            (b"RIFF\x00\x00\x00\x00WEBPthumbnail", "image/webp"),
+            (b"\xff\xd8thumbnail", "image/jpeg"),
+        ],
+    )
+    def test_thumb_image_delegates_and_detects_media_type(self, image_bytes, media_type):
+        mock_provider = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_thumbnail = AsyncMock(return_value=image_bytes)
+
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/thumb/5")
+
+        assert response.status_code == 200
+        assert response.content == image_bytes
+        assert response.headers["content-type"] == media_type
+        mock_image_service.get_thumbnail.assert_awaited_once_with("123", "abc", 5)
+        mock_provider.get_gallery_details.assert_not_called()
+        mock_cache.get_gallery.assert_not_called()
+
+    def test_thumb_image_invalid_page_is_sanitized(self):
+        mock_provider = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_thumbnail = AsyncMock(
+            side_effect=ValueError("Page 99 out of range")
+        )
+
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/thumb/99")
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid thumbnail request"
+        assert "Page 99 out of range" not in response.json()["detail"]
+
+    def test_thumb_image_runtime_error_is_sanitized_to_bad_request(self):
+        mock_provider = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_thumbnail = AsyncMock(
+            side_effect=RuntimeError("provider preview URL leaked")
+        )
+
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/thumb/5")
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid thumbnail request"
+        assert "provider preview URL leaked" not in response.json()["detail"]
+
+    def test_thumb_image_missing_is_sanitized(self):
+        mock_provider = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_thumbnail = AsyncMock(
+            side_effect=LookupError("provider thumbnail URL leaked")
+        )
+
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/thumb/5")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "No thumbnail for page 5"
+        assert "provider thumbnail URL leaked" not in response.json()["detail"]
+
+    def test_thumb_image_upstream_failure_hides_exception_detail(self):
+        mock_provider = MagicMock()
+        mock_cache = MagicMock()
+        mock_image_service = MagicMock()
+        mock_image_service.get_thumbnail = AsyncMock(
+            side_effect=Exception("upstream token leaked")
+        )
+
+        app = _make_app(mock_provider, mock_cache, mock_image_service=mock_image_service)
+        client = TestClient(app)
+
+        response = client.get("/api/gallery/123/abc/thumb/5")
+
+        assert response.status_code == 502
+        assert response.json()["detail"] == "Failed to fetch thumbnail"
         assert "upstream token leaked" not in response.json()["detail"]
 
 

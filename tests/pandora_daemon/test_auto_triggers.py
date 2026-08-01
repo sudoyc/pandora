@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -30,8 +29,6 @@ def _make_detail():
     d.posted = "2026-01-01"
     d.favorite_slot = None
     d.preview_pages = 1
-    d.viewer_urls = []
-    d.thumb_urls = []
     d.rating = 4.5
     d.rating_count = 100
     d.favorite_count = 50

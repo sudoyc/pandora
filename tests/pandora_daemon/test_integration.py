@@ -61,9 +61,9 @@ def mock_state(tmp_path):
     cache = CacheManager(cache_config)
     ws = WebSocketManager()
     state_file = tmp_path / "downloads.json"
-    image_service = ImageService(api=mock_provider, cache=cache, config=cache_config)
+    image_service = ImageService(provider=mock_provider, cache=cache, config=cache_config)
     downloads = DownloadManager(
-        api=mock_provider,
+        provider=mock_provider,
         config=config.download,
         ws=ws,
         image_service=image_service,

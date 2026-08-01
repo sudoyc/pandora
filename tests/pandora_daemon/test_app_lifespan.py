@@ -60,12 +60,12 @@ class TestBuildState:
             mock_db.initialize.assert_awaited_once()
             mock_tag.download_and_load.assert_awaited_once()
             mock_img_cls.assert_called_once_with(
-                api=provider,
+                provider=provider,
                 cache=mock_cache_cls.return_value,
                 config=mock_config.cache,
             )
             mock_dl_cls.assert_called_once_with(
-                api=provider,
+                provider=provider,
                 config=mock_config.download,
                 ws=mock_ws_cls.return_value,
                 image_service=mock_img_cls.return_value,

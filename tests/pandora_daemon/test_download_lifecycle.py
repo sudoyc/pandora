@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -19,12 +19,13 @@ def manager(tmp_path):
         page_concurrency=2,
         max_retry=0,
     )
-    api = AsyncMock()
-    api.client.get_html = AsyncMock(return_value="<html></html>")
+    provider = AsyncMock()
     ws = AsyncMock()
     image_service = AsyncMock()
-    image_service.proxy_image.return_value = b"image"
-    return DownloadManager(api, config, ws, image_service, tmp_path / "downloads.json")
+    image_service.proxy_image.return_value = b"\xff\xd8\xffcover"
+    image_service.get_page_image.return_value = b"\xff\xd8\xffpage"
+    image_service.get_thumbnail.return_value = b"\x89PNG\r\n\x1a\nthumb"
+    return DownloadManager(provider, config, ws, image_service, tmp_path / "downloads.json")
 
 
 def _task(manager: DownloadManager, *, status: str, total_pages: int = 3) -> DownloadTask:
@@ -35,7 +36,6 @@ def _task(manager: DownloadManager, *, status: str, total_pages: int = 3) -> Dow
         total_pages=total_pages,
         output_dir=str(Path(manager._config.path) / "123-Gallery"),
         status=status,
-        viewer_urls=[f"https://example.test/view/{page}" for page in range(1, total_pages + 1)],
         metadata_saved=True,
         cover_downloaded=True,
     )
@@ -146,18 +146,14 @@ async def test_retry_completed_task_redownloads_page_missing_from_disk(manager):
     assert task.page_states == {1: "done", 2: "pending"}
     assert task.downloaded_pages == 1
 
-    with patch(
-        "pandora_daemon.download.parse_image_viewer",
-        return_value=("https://example.test/image/2.jpg", None),
-    ):
-        await manager._download_gallery(task)
+    await manager._download_gallery(task)
 
     assert task.status == "completed"
     assert task.error == ""
     assert task.failed_pages == []
     assert task.downloaded_pages == 2
-    assert manager._api.client.get_html.await_count == 1
-    manager._api.get_gallery_details.assert_not_awaited()
+    manager._image_service.get_page_image.assert_awaited_once_with(task.gid, task.token, 2)
+    manager._provider.get_gallery_details.assert_not_awaited()
     await manager.shutdown()
 
 
@@ -203,7 +199,7 @@ async def test_retry_normalizes_restored_failed_pages_without_network_work(manag
             "correlation_id": task.correlation_id,
         }
     ]
-    manager._api.client.get_html.assert_not_awaited()
+    manager._image_service.get_page_image.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -216,45 +212,32 @@ async def test_retry_all_failed_pages_without_prior_success_skips_completed_phas
 
     assert await manager.retry_failed(task.gid) is True
 
-    with patch(
-        "pandora_daemon.download.parse_image_viewer",
-        return_value=("https://example.test/image/page.jpg", None),
-    ):
-        await manager._download_gallery(task)
+    await manager._download_gallery(task)
 
     assert task.status == "completed"
     assert task.error == ""
     assert task.downloaded_pages == 2
     assert task.failed_pages == []
-    manager._api.get_gallery_details.assert_not_awaited()
+    manager._provider.get_gallery_details.assert_not_awaited()
     await manager.shutdown()
 
 
 @pytest.mark.asyncio
-async def test_retry_rebuilds_missing_viewer_urls_for_repaired_task(manager):
+async def test_retry_downloads_repaired_task_without_transport_locators(manager):
     task = _task(manager, status="completed", total_pages=1)
-    task.viewer_urls = []
     task.page_states = {1: "done"}
     task.downloaded_pages = 1
     manager._tasks[task.gid] = task
-    detail = MagicMock(
-        preview_pages=1,
-        viewer_urls=["https://example.test/view/restored"],
-        thumb_urls=[],
-        thumb_sprites=[],
-    )
-    manager._api.get_gallery_details.return_value = detail
 
     assert await manager.retry_failed(task.gid) is True
-    with patch(
-        "pandora_daemon.download.parse_image_viewer",
-        return_value=("https://example.test/image/restored.jpg", None),
-    ):
-        await manager._download_gallery(task)
+    assert task.viewer_urls == []
+    assert task.thumb_urls == []
+    assert task.thumb_sprites == []
+    await manager._download_gallery(task)
 
     assert task.status == "completed"
-    assert task.viewer_urls == ["https://example.test/view/restored"]
-    manager._api.get_gallery_details.assert_awaited_once_with(task.gid, task.token)
+    manager._image_service.get_page_image.assert_awaited_once_with(task.gid, task.token, 1)
+    manager._provider.get_gallery_details.assert_not_awaited()
     await manager.shutdown()
 
 
@@ -333,4 +316,11 @@ async def test_pause_from_another_worker_cannot_be_overwritten_by_completion(man
     await manager._download_gallery(task)
 
     assert task.status == "paused"
-    assert {event["event"] for event in _events(manager)} == {"download_paused"}
+    events = {event["event"] for event in _events(manager)}
+    assert "download_paused" in events
+    assert not events & {
+        "download_auth_failed",
+        "download_complete",
+        "download_complete_with_errors",
+        "download_error",
+    }

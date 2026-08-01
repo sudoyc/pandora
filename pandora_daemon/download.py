@@ -20,9 +20,6 @@ from pandora_daemon.providers.errors import (
     ProviderParseError,
     ProviderQuotaError,
 )
-from exhentai_api.parsers.gallery_detail import parse_gallery_detail
-from exhentai_api.parsers.image import parse_image_viewer
-from pandora_daemon.cache import _ext_from_url
 from pandora_daemon.diagnostics import new_diagnostic_id, normalize_diagnostic_id
 
 
@@ -40,6 +37,18 @@ def _atomic_write(path: Path, data: bytes) -> None:
     tmp_path.write_bytes(data)
     tmp_path.rename(path)
 
+
+def _ext_from_image_bytes(data: bytes) -> str:
+    """Choose a stable image extension from supported image signatures."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return ".gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return ".jpg"
 
 _TERMINAL_ARTIFACT_STATUSES = {"completed", "completed_with_errors"}
 _PAGE_FILE_RE = re.compile(r"^(\d{4,})\.[^.]+$")
@@ -99,9 +108,10 @@ class DownloadTask:
     created_at: str = ""
     request_id: str = ""
     correlation_id: str = ""
+    # Legacy persisted transport fields retained for state-file compatibility.
     viewer_urls: list[str] = field(default_factory=list)
     thumb_urls: list[str] = field(default_factory=list)
-    thumb_sprites: list[dict] = field(default_factory=list)  # [{url, offset_x, offset_y, width, height}]
+    thumb_sprites: list[dict] = field(default_factory=list)
     page_states: dict[int, str] = field(default_factory=dict)
     failed_pages: list[int] = field(default_factory=list)
 
@@ -142,8 +152,8 @@ class DownloadTask:
 class DownloadManager:
     """Produces complete offline gallery clones with metadata, covers, thumbs, and pages."""
 
-    def __init__(self, api, config, ws, image_service, state_file: Path) -> None:
-        self._api = api
+    def __init__(self, provider, config, ws, image_service, state_file: Path) -> None:
+        self._provider = provider
         self._config = config
         self._ws = ws
         self._image_service = image_service
@@ -218,18 +228,6 @@ class DownloadManager:
             await asyncio.gather(self._save_task, return_exceptions=True)
         self._save_state()
 
-    async def _collect_preview_assets(self, detail, gid: str, token: str):
-        viewer_urls = list(detail.viewer_urls)
-        thumb_urls = list(detail.thumb_urls)
-        thumb_sprites = [asdict(sprite) for sprite in detail.thumb_sprites]
-        for page in range(1, detail.preview_pages):
-            html = await self._api.client.get_html(f"{detail.url}?p={page}")
-            page_detail = parse_gallery_detail(html, gid, token)
-            viewer_urls.extend(page_detail.viewer_urls)
-            thumb_urls.extend(page_detail.thumb_urls)
-            thumb_sprites.extend(asdict(sprite) for sprite in page_detail.thumb_sprites)
-        return viewer_urls, thumb_urls, thumb_sprites
-
     async def submit(
         self,
         gid: str,
@@ -245,11 +243,7 @@ class DownloadManager:
 
             self._cancelled.discard(gid)
 
-            detail = await self._api.get_gallery_details(gid, token)
-
-            viewer_urls, thumb_urls, thumb_sprites = await self._collect_preview_assets(
-                detail, gid, token
-            )
+            detail = await self._provider.get_gallery_details(gid, token)
 
             safe_title = _sanitize_filename(detail.title)
             output_dir = str(self._download_path / f"{gid}-{safe_title}")
@@ -262,9 +256,6 @@ class DownloadManager:
                 output_dir=output_dir,
                 request_id=request_id,
                 correlation_id=correlation_id,
-                viewer_urls=viewer_urls,
-                thumb_urls=thumb_urls,
-                thumb_sprites=thumb_sprites,
             )
             self._tasks[gid] = task
             await self._queue.put(gid)
@@ -674,12 +665,6 @@ class DownloadManager:
                 if stop_event.is_set() or self._task_is_stopped(task):
                     return
 
-                idx = page_num - 1
-                if idx >= len(task.viewer_urls):
-                    task.page_states[page_num] = "failed"
-                    return
-
-                viewer_url = task.viewer_urls[idx]
                 last_exc = None
 
                 for attempt in range(self._config.max_retry + 1):
@@ -687,12 +672,10 @@ class DownloadManager:
                         return
                     try:
                         task.page_states[page_num] = "downloading"
-                        html = await self._api.client.get_html(viewer_url)
-                        image_url, _ = parse_image_viewer(html)
-                        if not image_url:
-                            raise ProviderParseError(f"No image URL for page {page_num}")
-                        data = await self._fetch_image(image_url)
-                        ext = _ext_from_url(image_url)
+                        data = await self._image_service.get_page_image(
+                            task.gid, task.token, page_num
+                        )
+                        ext = _ext_from_image_bytes(data)
                         _atomic_write(pages_dir / f"{page_num:04d}{ext}", data)
                         task.page_states[page_num] = "done"
                         task.downloaded_pages = _count_done_pages()
@@ -752,21 +735,10 @@ class DownloadManager:
                 return
 
             detail = None
-            needs_viewer_urls = len(task.viewer_urls) < task.total_pages
-            if not task.metadata_saved or not task.cover_downloaded or needs_viewer_urls:
-                detail = await self._api.get_gallery_details(task.gid, task.token)
+            if not task.metadata_saved or not task.cover_downloaded:
+                detail = await self._provider.get_gallery_details(task.gid, task.token)
                 if self._task_is_stopped(task):
                     return
-
-            if needs_viewer_urls:
-                (
-                    task.viewer_urls,
-                    task.thumb_urls,
-                    task.thumb_sprites,
-                ) = await self._collect_preview_assets(detail, task.gid, task.token)
-                if self._task_is_stopped(task):
-                    return
-                self._save_state()
 
             if not task.metadata_saved:
                 self._write_metadata(detail, str(output_dir))
@@ -776,8 +748,8 @@ class DownloadManager:
             if not task.cover_downloaded:
                 if detail.cover_url:
                     try:
-                        cover_data = await self._fetch_image(detail.cover_url)
-                        ext = _ext_from_url(detail.cover_url)
+                        cover_data = await self._image_service.proxy_image(detail.cover_url)
+                        ext = _ext_from_image_bytes(cover_data)
                         _atomic_write(output_dir / f"cover{ext}", cover_data)
                     except Exception:
                         pass
@@ -793,37 +765,24 @@ class DownloadManager:
 
             thumbs_dir = output_dir / "thumbs"
             thumbs_dir.mkdir(exist_ok=True)
-            sprite_cache: dict[str, bytes] = {}
-            for idx in range(len(task.thumb_sprites or task.thumb_urls)):
+            for page_num in range(1, task.total_pages + 1):
                 if self._task_is_stopped(task):
                     return
 
-                page_num = idx + 1
-                existing = [f for f in thumbs_dir.glob(f"{page_num:04d}.*")
-                            if not f.name.endswith(".tmp")]
+                existing = [
+                    f for f in thumbs_dir.glob(f"{page_num:04d}.*")
+                    if not f.name.endswith(".tmp")
+                ]
                 if existing:
                     task.downloaded_thumbs = page_num
                     continue
 
                 try:
-                    sprite = task.thumb_sprites[idx] if task.thumb_sprites else None
-                    if sprite and sprite.get("width", 0) > 0:
-                        sprite_url = sprite["url"]
-                        if sprite_url not in sprite_cache:
-                            sprite_cache[sprite_url] = await self._fetch_image(sprite_url)
-                        result = self._crop_sprite(
-                            sprite_cache[sprite_url],
-                            sprite["offset_x"], sprite["offset_y"],
-                            sprite["width"], sprite["height"],
-                        )
-                        if result:
-                            data, ext = result
-                            _atomic_write(thumbs_dir / f"{page_num:04d}{ext}", data)
-                    elif idx < len(task.thumb_urls):
-                        thumb_url = task.thumb_urls[idx]
-                        data = await self._fetch_image(thumb_url)
-                        ext = _ext_from_url(thumb_url)
-                        _atomic_write(thumbs_dir / f"{page_num:04d}{ext}", data)
+                    data = await self._image_service.get_thumbnail(
+                        task.gid, task.token, page_num
+                    )
+                    ext = _ext_from_image_bytes(data)
+                    _atomic_write(thumbs_dir / f"{page_num:04d}{ext}", data)
                 except Exception:
                     pass
 
@@ -918,33 +877,6 @@ class DownloadManager:
                 )
         self._save_state()
 
-    @staticmethod
-    def _crop_sprite(sprite_data: bytes, x: int, y: int, w: int, h: int) -> tuple[bytes, str] | None:
-        """Crop a single thumbnail from a CSS sprite sheet. Returns (data, ext) or None."""
-        try:
-            from PIL import Image
-            import io
-            img = Image.open(io.BytesIO(sprite_data))
-            cropped = img.crop((x, y, x + w, y + h))
-            buf = io.BytesIO()
-            # Preserve original format
-            fmt = img.format or "JPEG"
-            if fmt == "WEBP":
-                cropped.save(buf, format="WEBP", quality=90)
-                ext = ".webp"
-            elif fmt == "PNG":
-                cropped.save(buf, format="PNG")
-                ext = ".png"
-            else:
-                cropped.save(buf, format="JPEG", quality=90)
-                ext = ".jpg"
-            return buf.getvalue(), ext
-        except Exception:
-            return None
-
-    async def _fetch_image(self, url: str) -> bytes:
-        """Fetch image bytes via ImageService (cache-first)."""
-        return await self._image_service.proxy_image(url)
 
     def _mark_dirty(self) -> None:
         """Mark state as dirty, start delayed save."""

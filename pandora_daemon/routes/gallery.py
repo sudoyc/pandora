@@ -109,6 +109,17 @@ def _archive_to_dict(a) -> dict:
     return result
 
 
+def _media_type_from_image_bytes(data: bytes) -> str:
+    """Infer an image response media type from its magic bytes."""
+    if data[:4] == b"\x89PNG":
+        return "image/png"
+    if data[:4] == b"GIF8":
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/jpeg"
+
+
 # ---------------------------------------------------------------------------
 # Cache helper
 # ---------------------------------------------------------------------------
@@ -208,14 +219,7 @@ async def get_page_image(gid: str, token: str, page: int, image_service=Depends(
         logger.exception("Failed to fetch page image gid=%s page=%s", gid, page)
         raise HTTPException(status_code=502, detail="Failed to fetch page image")
     # Detect media type from magic bytes
-    if data[:4] == b"\x89PNG":
-        media_type = "image/png"
-    elif data[:4] == b"GIF8":
-        media_type = "image/gif"
-    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        media_type = "image/webp"
-    else:
-        media_type = "image/jpeg"
+    media_type = _media_type_from_image_bytes(data)
     return Response(
         content=data,
         media_type=media_type,
@@ -228,67 +232,21 @@ async def get_thumb_image(
     gid: str,
     token: str,
     page: int,
-    provider=Depends(get_gallery_provider),
-    cache=Depends(get_cache),
     image_service=Depends(get_image_service),
 ):
-    """Return a single cropped thumbnail for a gallery page.
-
-    If thumb_sprites are available (gdtm mode), downloads the sprite and crops.
-    Otherwise falls back to direct thumb_url proxy.
-    Loads additional preview pages on demand if needed.
-    """
-    detail = await _get_detail(gid, token, provider, cache)
-    page_idx = page - 1
-    if page_idx < 0 or page_idx >= detail.pages:
-        raise HTTPException(status_code=400, detail=f"Page {page} out of range")
-
-    # Load additional preview pages if we don't have enough sprites/thumbs
-    if page_idx >= len(detail.thumb_sprites) and page_idx >= len(detail.thumb_urls):
-        try:
-            await image_service._load_preview_page(detail, page_idx)
-        except Exception:
-            raise HTTPException(status_code=502, detail=f"Failed to load preview page for thumb {page}")
-
-    # Try sprite-based cropping first
-    if page_idx < len(detail.thumb_sprites):
-        sprite = detail.thumb_sprites[page_idx]
-        try:
-            sprite_data = await image_service.proxy_image(sprite.url)
-        except Exception:
-            raise HTTPException(status_code=502, detail="Failed to fetch sprite")
-        from io import BytesIO
-        from PIL import Image
-        img = Image.open(BytesIO(sprite_data))
-        left = sprite.offset_x
-        top = sprite.offset_y
-        right = left + sprite.width
-        bottom = top + sprite.height
-        cropped = img.crop((left, top, right, bottom))
-        buf = BytesIO()
-        fmt = img.format or "JPEG"
-        cropped.save(buf, format=fmt)
-        data = buf.getvalue()
-        media_map = {"WEBP": "image/webp", "PNG": "image/png", "GIF": "image/gif"}
-        media_type = media_map.get(fmt.upper(), "image/jpeg")
-        return Response(content=data, media_type=media_type)
-
-    # Fallback: direct thumb URL
-    if page_idx < len(detail.thumb_urls):
-        url = detail.thumb_urls[page_idx]
-        try:
-            data = await image_service.proxy_image(url)
-        except Exception:
-            raise HTTPException(status_code=502, detail="Failed to fetch thumbnail")
-        if data[:4] == b"\x89PNG":
-            media_type = "image/png"
-        elif data[:4] == b"RIFF" and len(data) >= 12 and data[8:12] == b"WEBP":
-            media_type = "image/webp"
-        else:
-            media_type = "image/jpeg"
-        return Response(content=data, media_type=media_type)
-
-    raise HTTPException(status_code=404, detail=f"No thumbnail for page {page}")
+    """Return thumbnail bytes for a gallery page."""
+    try:
+        data = await image_service.get_thumbnail(gid, token, page)
+    except (ValueError, RuntimeError):
+        logger.warning("Invalid thumbnail request gid=%s page=%s", gid, page, exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid thumbnail request")
+    except LookupError:
+        logger.warning("Thumbnail unavailable gid=%s page=%s", gid, page, exc_info=True)
+        raise HTTPException(status_code=404, detail=f"No thumbnail for page {page}")
+    except Exception:
+        logger.exception("Failed to fetch thumbnail gid=%s page=%s", gid, page)
+        raise HTTPException(status_code=502, detail="Failed to fetch thumbnail")
+    return Response(content=data, media_type=_media_type_from_image_bytes(data))
 
 
 @router.post("/{gid}/{token}/prefetch")

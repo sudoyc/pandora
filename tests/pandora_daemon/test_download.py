@@ -27,23 +27,12 @@ def state_file(tmp_path):
 
 
 @pytest.fixture
-def mock_api():
-    api = AsyncMock()
+def mock_provider():
+    provider = AsyncMock()
     detail = MagicMock()
     detail.title = "Test Gallery"
     detail.title_jpn = "Test JPN"
     detail.pages = 3
-    detail.preview_pages = 1
-    detail.viewer_urls = [
-        "https://exhentai.org/s/abc/123-1",
-        "https://exhentai.org/s/def/123-2",
-        "https://exhentai.org/s/ghi/123-3",
-    ]
-    detail.thumb_urls = [
-        "https://exhentai.org/t/thumb1.jpg",
-        "https://exhentai.org/t/thumb2.jpg",
-        "https://exhentai.org/t/thumb3.jpg",
-    ]
     detail.gid = "123"
     detail.token = "abc"
     detail.url = "https://exhentai.org/g/123/abc/"
@@ -60,8 +49,8 @@ def mock_api():
     detail.torrent_count = 2
     detail.comments = []
     detail.comments_has_more = False
-    api.get_gallery_details.return_value = detail
-    return api
+    provider.get_gallery_details.return_value = detail
+    return provider
 
 
 @pytest.fixture
@@ -73,6 +62,8 @@ def mock_ws():
 def mock_image_service():
     svc = AsyncMock()
     svc.proxy_image.return_value = b"fake image bytes"
+    svc.get_page_image.return_value = b"\xff\xd8\xffpage"
+    svc.get_thumbnail.return_value = b"\x89PNG\r\n\x1a\nthumb"
     return svc
 
 
@@ -152,8 +143,8 @@ def test_download_task_to_public_dict_redacts_internal_fields():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_submit_creates_task(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_submit_creates_task(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
     task = await manager.submit("123", "abc")
 
@@ -161,14 +152,16 @@ async def test_submit_creates_task(mock_api, mock_ws, mock_image_service, downlo
     assert task.token == "abc"
     assert task.title == "Test Gallery"
     assert task.total_pages == 3
-    assert len(task.viewer_urls) == 3
-    assert len(task.thumb_urls) == 3
+    assert task.viewer_urls == []
+    assert task.thumb_urls == []
     assert task.status == "queued"
+    assert task.thumb_sprites == []
+    mock_provider.get_gallery_details.assert_awaited_once_with("123", "abc")
 
 
 @pytest.mark.asyncio
-async def test_submit_broadcasts_queued_event(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_submit_broadcasts_queued_event(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
     await manager.submit("123", "abc")
 
@@ -179,8 +172,8 @@ async def test_submit_broadcasts_queued_event(mock_api, mock_ws, mock_image_serv
 
 
 @pytest.mark.asyncio
-async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_submit_duplicate_rejected(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
     await manager.submit("123", "abc")
 
@@ -189,14 +182,14 @@ async def test_submit_duplicate_rejected(mock_api, mock_ws, mock_image_service, 
 
 
 @pytest.mark.asyncio
-async def test_submit_duplicate_rejected_under_concurrency(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_submit_duplicate_rejected_under_concurrency(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
     async def slow_detail(gid, token):
         await asyncio.sleep(0.01)
-        return mock_api.get_gallery_details.return_value
+        return mock_provider.get_gallery_details.return_value
 
-    mock_api.get_gallery_details.side_effect = slow_detail
+    mock_provider.get_gallery_details.side_effect = slow_detail
     results = await asyncio.gather(
         manager.submit("123", "abc"),
         manager.submit("123", "abc"),
@@ -209,8 +202,8 @@ async def test_submit_duplicate_rejected_under_concurrency(mock_api, mock_ws, mo
 
 
 @pytest.mark.asyncio
-async def test_submit_saves_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_submit_saves_state(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
     await manager.submit("123", "abc")
 
@@ -225,8 +218,8 @@ async def test_submit_saves_state(mock_api, mock_ws, mock_image_service, downloa
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_status_returns_all_tasks(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_status_returns_all_tasks(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     result = manager.status()
@@ -235,8 +228,8 @@ async def test_status_returns_all_tasks(mock_api, mock_ws, mock_image_service, d
 
 
 @pytest.mark.asyncio
-async def test_cancel_marks_cancelled(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_cancel_marks_cancelled(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     result = await manager.cancel("123")
@@ -246,8 +239,8 @@ async def test_cancel_marks_cancelled(mock_api, mock_ws, mock_image_service, dow
 
 
 @pytest.mark.asyncio
-async def test_cancel_nonexistent(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_cancel_nonexistent(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
     result = await manager.cancel("999")
 
@@ -255,8 +248,8 @@ async def test_cancel_nonexistent(mock_api, mock_ws, mock_image_service, downloa
 
 
 @pytest.mark.asyncio
-async def test_submit_clears_cancelled_state_for_same_gid(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_submit_clears_cancelled_state_for_same_gid(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
     await manager.cancel("123")
     manager._download_gallery = AsyncMock()
@@ -274,8 +267,8 @@ async def test_submit_clears_cancelled_state_for_same_gid(mock_api, mock_ws, moc
 
 
 @pytest.mark.asyncio
-async def test_resume_clears_cancelled_state_for_same_gid(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_resume_clears_cancelled_state_for_same_gid(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     manager._tasks["123"] = DownloadTask(
         gid="123",
         token="abc",
@@ -300,8 +293,8 @@ async def test_resume_clears_cancelled_state_for_same_gid(mock_api, mock_ws, moc
 
 
 @pytest.mark.asyncio
-async def test_retry_failed_clears_cancelled_state_for_same_gid(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_retry_failed_clears_cancelled_state_for_same_gid(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     manager._tasks["123"] = DownloadTask(
         gid="123",
         token="abc",
@@ -331,8 +324,8 @@ async def test_retry_failed_clears_cancelled_state_for_same_gid(mock_api, mock_w
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_save_and_load_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_save_and_load_state(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     manager._save_state()
@@ -344,7 +337,7 @@ async def test_save_and_load_state(mock_api, mock_ws, mock_image_service, downlo
 
 
 @pytest.mark.asyncio
-async def test_load_state_requeues_pending(mock_api, mock_ws, mock_image_service, download_config, state_file):
+async def test_load_state_preserves_legacy_transport_fields(mock_provider, mock_ws, mock_image_service, download_config, state_file):
     task = DownloadTask(
         gid="456",
         token="def",
@@ -352,21 +345,25 @@ async def test_load_state_requeues_pending(mock_api, mock_ws, mock_image_service
         total_pages=5,
         output_dir="/tmp/456",
         status="queued",
-        viewer_urls=["https://exhentai.org/s/zzz/456-1"],
-        thumb_urls=["https://exhentai.org/t/t1.jpg"],
+        viewer_urls=["legacy-viewer"],
+        thumb_urls=["legacy-thumbnail"],
+        thumb_sprites=[{"legacy": True}],
     )
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps({"456": task.to_dict()}), encoding="utf-8")
 
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     manager._load_state()
 
     assert "456" in manager._tasks
     assert manager._tasks["456"].title == "Persisted Gallery"
+    assert manager._tasks["456"].viewer_urls == ["legacy-viewer"]
+    assert manager._tasks["456"].thumb_urls == ["legacy-thumbnail"]
+    assert manager._tasks["456"].thumb_sprites == [{"legacy": True}]
 
 
 @pytest.mark.asyncio
-async def test_load_state_normalizes_page_state_keys(mock_api, mock_ws, mock_image_service, download_config, state_file):
+async def test_load_state_normalizes_page_state_keys(mock_provider, mock_ws, mock_image_service, download_config, state_file):
     task = DownloadTask(
         gid="456",
         token="def",
@@ -379,15 +376,15 @@ async def test_load_state_normalizes_page_state_keys(mock_api, mock_ws, mock_ima
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(json.dumps({"456": task.to_dict()}), encoding="utf-8")
 
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     manager._load_state()
 
     assert manager._tasks["456"].page_states == {1: "done", 2: "failed"}
 
 
 @pytest.mark.asyncio
-async def test_save_state_writes_atomically(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_save_state_writes_atomically(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.submit("123", "abc")
 
     manager._save_state()
@@ -404,8 +401,8 @@ async def test_save_state_writes_atomically(mock_api, mock_ws, mock_image_servic
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_start_creates_workers(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_start_creates_workers(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.start()
 
     try:
@@ -415,8 +412,8 @@ async def test_start_creates_workers(mock_api, mock_ws, mock_image_service, down
 
 
 @pytest.mark.asyncio
-async def test_shutdown_saves_state(mock_api, mock_ws, mock_image_service, download_config, state_file):
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+async def test_shutdown_saves_state(mock_provider, mock_ws, mock_image_service, download_config, state_file):
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
     await manager.start()
     await manager.submit("123", "abc")
 
@@ -433,11 +430,11 @@ async def test_shutdown_saves_state(mock_api, mock_ws, mock_image_service, downl
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_write_metadata(mock_api, mock_ws, mock_image_service, download_config, state_file):
+async def test_write_metadata(mock_provider, mock_ws, mock_image_service, download_config, state_file):
     """_write_metadata creates a valid metadata.json in the output dir."""
-    manager = DownloadManager(mock_api, download_config, mock_ws, mock_image_service, state_file)
+    manager = DownloadManager(mock_provider, download_config, mock_ws, mock_image_service, state_file)
 
-    detail = mock_api.get_gallery_details.return_value
+    detail = mock_provider.get_gallery_details.return_value
     output_dir = Path(download_config.path) / "123-Test Gallery"
     output_dir.mkdir(parents=True, exist_ok=True)
 
