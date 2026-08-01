@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:rc\d+)?$")
 CHANGELOG_DATE_PATTERN = r"\d{4}-\d{2}-\d{2}"
 SDIST_ROOT_FILES = {".gitignore", "CHANGELOG.md", "PKG-INFO", "README.md", "pyproject.toml"}
-SOURCE_PACKAGES = {"exhentai_api", "pandora_daemon"}
+SOURCE_PACKAGES = {"pandora_daemon"}
 FORBIDDEN_PATH_PARTS = {"__pycache__", "dist", "downloads", "node_modules"}
 PRIVATE_FILE_NAMES = {".env", "cookie.txt", "credentials.txt", "downloads.json"}
 REQUIRED_PYTHON = ">=3.12"
@@ -144,7 +144,7 @@ def _wheel_errors(path: Path, version: str) -> list[str]:
                 if _is_forbidden_path(parts) or name.endswith((".pyc", ".pyo")):
                     errors.append(f"wheel contains forbidden path: {name}")
             for required in (
-                "exhentai_api/__init__.py",
+                "pandora_daemon/providers/exhentai/upstream/__init__.py",
                 "pandora_daemon/__init__.py",
                 metadata_path,
                 entry_points_path,
@@ -195,7 +195,7 @@ def _sdist_errors(path: Path, version: str) -> list[str]:
                 f"{root_name}/README.md",
                 f"{root_name}/CHANGELOG.md",
                 f"{root_name}/pyproject.toml",
-                f"{root_name}/exhentai_api/__init__.py",
+                f"{root_name}/pandora_daemon/providers/exhentai/upstream/__init__.py",
                 f"{root_name}/pandora_daemon/__init__.py",
                 metadata_path,
             ):
@@ -267,7 +267,7 @@ def _smoke_install(wheel: Path, version: str, python_version: str) -> None:
         env.pop("PYTHONPATH", None)
         smoke = (
             "from importlib.metadata import version; "
-            "import exhentai_api, pandora_daemon; "
+            "import pandora_daemon.providers.exhentai.upstream, pandora_daemon; "
             f"assert version('pandora') == {version!r}"
         )
         _run([str(python), "-c", smoke], cwd=temp_dir, env=env)

@@ -5,14 +5,14 @@ import asyncio
 import ipaddress
 import socket
 from io import BytesIO
-from exhentai_api.models.gallery import GalleryDetail as ExHentaiGalleryDetail
+from pandora_daemon.providers.exhentai.upstream.models.gallery import GalleryDetail as ExHentaiGalleryDetail
 from urllib.parse import urljoin, urlsplit
 
 import httpx
 from PIL import Image
-from exhentai_api.client import ExhentaiClient
-from exhentai_api.parsers.gallery_detail import parse_gallery_detail
-from exhentai_api.parsers.image import parse_image_viewer
+from pandora_daemon.providers.exhentai.upstream.client import ExhentaiClient
+from pandora_daemon.providers.exhentai.upstream.parsers.gallery_detail import parse_gallery_detail
+from pandora_daemon.providers.exhentai.upstream.parsers.image import parse_image_viewer
 
 _ALLOWED_IMAGE_HOSTS = (
     "e-hentai.org",

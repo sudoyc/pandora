@@ -12,7 +12,7 @@ import pytest
 from jsonschema import validate
 from PIL import Image
 
-from exhentai_api.models.gallery import GalleryListItem
+from pandora_daemon.providers.exhentai.upstream.models.gallery import GalleryListItem
 from pandora_daemon import cli
 from pandora_daemon.app import create_app
 from pandora_daemon.config import DownloadConfig, PandoraConfig, ProviderConfig

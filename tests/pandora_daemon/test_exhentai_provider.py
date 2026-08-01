@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from exhentai_api.api import ExhentaiAPI
-from exhentai_api.exceptions import (
+from pandora_daemon.providers.exhentai.upstream.api import ExhentaiAPI
+from pandora_daemon.providers.exhentai.upstream.exceptions import (
     AuthenticationError,
     ExhentaiError,
     GalleryNotFoundError,
@@ -14,13 +14,13 @@ from exhentai_api.exceptions import (
     SessionError,
     UpstreamError,
 )
-from exhentai_api.models.comment import GalleryComment as ExHentaiGalleryComment
-from exhentai_api.models.gallery import (
+from pandora_daemon.providers.exhentai.upstream.models.comment import GalleryComment as ExHentaiGalleryComment
+from pandora_daemon.providers.exhentai.upstream.models.gallery import (
     GalleryDetail as ExHentaiGalleryDetail,
     GalleryListItem,
 )
-from exhentai_api.models.search import SearchParams
-from exhentai_api.models.toplist import TopListItem
+from pandora_daemon.providers.exhentai.upstream.models.search import SearchParams
+from pandora_daemon.providers.exhentai.upstream.models.toplist import TopListItem
 from pandora_daemon.providers.contracts import (
     GalleryComment,
     GalleryDetail,

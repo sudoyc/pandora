@@ -59,7 +59,7 @@ def _write_artifacts(
 ) -> None:
     wheel = dist_dir / f"pandora-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
-        archive.writestr("exhentai_api/__init__.py", "")
+        archive.writestr("pandora_daemon/providers/exhentai/upstream/__init__.py", "")
         archive.writestr("pandora_daemon/__init__.py", "")
         archive.writestr(
             f"pandora-{version}.dist-info/METADATA",
@@ -83,7 +83,7 @@ def _write_artifacts(
         _add_tar_bytes(archive, f"{root}/README.md", b"# Pandora\n")
         _add_tar_bytes(archive, f"{root}/CHANGELOG.md", b"# Changelog\n")
         _add_tar_bytes(archive, f"{root}/pyproject.toml", b"[project]\n")
-        _add_tar_bytes(archive, f"{root}/exhentai_api/__init__.py", b"")
+        _add_tar_bytes(archive, f"{root}/pandora_daemon/providers/exhentai/upstream/__init__.py", b"")
         _add_tar_bytes(archive, f"{root}/pandora_daemon/__init__.py", b"")
         _add_tar_bytes(
             archive,

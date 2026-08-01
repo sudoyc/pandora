@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import httpx
 import pytest
 from PIL import Image
-from exhentai_api.models.gallery import GalleryDetail as ExHentaiGalleryDetail, ThumbSprite
+from pandora_daemon.providers.exhentai.upstream.models.gallery import GalleryDetail as ExHentaiGalleryDetail, ThumbSprite
 
 from pandora_daemon.providers.exhentai.media import ExHentaiMedia
 
