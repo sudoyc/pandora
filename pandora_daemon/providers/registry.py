@@ -2,16 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from importlib import import_module
+from pathlib import Path
+from pkgutil import iter_modules
 
 from pandora_daemon.providers.contracts import GalleryProvider, ProviderContext
 
 
 ProviderFactory = Callable[[ProviderContext], GalleryProvider]
 
-DEFAULT_PROVIDER_ID = "exhentai"
-PROVIDER_REGISTRY: dict[str, str] = {
-    DEFAULT_PROVIDER_ID: "pandora_daemon.providers.exhentai.adapter:create_provider",
-}
+_BUILTIN_PROVIDER_PACKAGE = "pandora_daemon.providers"
 
 
 def _normalize_provider_id(provider_id: str) -> str:
@@ -29,7 +28,8 @@ class ProviderRegistry:
         factories: Mapping[str, ProviderFactory] | None = None,
         default_provider_id: str | None = None,
     ) -> None:
-        self._factories: dict[str, ProviderFactory] = {}
+        registry: dict[str, ProviderFactory] = {}
+        self._factories = registry
         for provider_id, factory in (factories or {}).items():
             self.register(provider_id, factory)
         self._default_provider_id = (
@@ -77,11 +77,30 @@ def _load_factory(target: str) -> ProviderFactory:
     return load
 
 
+def _builtin_provider_targets() -> dict[str, str]:
+    providers_path = Path(__file__).parent
+    targets: dict[str, str] = {}
+    for module_info in iter_modules([str(providers_path)]):
+        if not module_info.ispkg:
+            continue
+        package = import_module(f"{_BUILTIN_PROVIDER_PACKAGE}.{module_info.name}")
+        provider_id = getattr(package, "PROVIDER_ID", None)
+        factory_target = getattr(package, "FACTORY_TARGET", None)
+        if provider_id is None or factory_target is None:
+            continue
+        normalized_id = _normalize_provider_id(provider_id)
+        if normalized_id in targets:
+            raise ValueError(f"Provider already registered: {normalized_id}")
+        targets[normalized_id] = factory_target
+    return targets
+
+
 def default_provider_registry() -> ProviderRegistry:
+    targets = _builtin_provider_targets()
+    provider_ids = sorted(targets)
+    if not provider_ids:
+        raise ValueError("No built-in providers registered")
     return ProviderRegistry(
-        {
-            provider_id: _load_factory(target)
-            for provider_id, target in PROVIDER_REGISTRY.items()
-        },
-        default_provider_id=DEFAULT_PROVIDER_ID,
+        {provider_id: _load_factory(targets[provider_id]) for provider_id in provider_ids},
+        default_provider_id=provider_ids[0],
     )

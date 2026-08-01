@@ -69,17 +69,30 @@ def test_create_rejects_unknown_ids_and_lists_sorted_available_ids() -> None:
         registry.create("missing", _context())
 
 
-def test_default_registry_uses_builtin_factory_mapping(monkeypatch) -> None:
+def test_default_registry_discovers_builtin_package_and_loads_factory(monkeypatch) -> None:
     context = _context()
     provider = MagicMock()
     factory = MagicMock(return_value=provider)
-    import_module = MagicMock(return_value=SimpleNamespace(create_provider=factory))
+    builtin = SimpleNamespace(
+        PROVIDER_ID="fixture",
+        FACTORY_TARGET="fixture.adapter:create_provider",
+    )
+    adapter = SimpleNamespace(create_provider=factory)
+    import_module = MagicMock(side_effect=(builtin, adapter))
+    monkeypatch.setattr(
+        registry_module,
+        "iter_modules",
+        lambda _paths: (SimpleNamespace(ispkg=True, name="fixture"),),
+    )
     monkeypatch.setattr(registry_module, "import_module", import_module)
 
     registry = default_provider_registry()
 
-    assert registry.provider_ids == ("exhentai",)
-    assert registry.default_provider_id == "exhentai"
-    assert registry.create("exhentai", context) is provider
-    import_module.assert_called_once_with("pandora_daemon.providers.exhentai.adapter")
+    assert registry.provider_ids == ("fixture",)
+    assert registry.default_provider_id == "fixture"
+    assert registry.create("fixture", context) is provider
+    assert import_module.call_args_list == [
+        (("pandora_daemon.providers.fixture",),),
+        (("fixture.adapter",),),
+    ]
     factory.assert_called_once_with(context)

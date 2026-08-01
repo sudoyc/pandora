@@ -1,5 +1,6 @@
 """Built-in ExHentai provider adapter."""
 
-from pandora_daemon.providers.exhentai.adapter import ExHentaiProvider, create_provider
+PROVIDER_ID = "exhentai"
+FACTORY_TARGET = "pandora_daemon.providers.exhentai.adapter:create_provider"
 
-__all__ = ["ExHentaiProvider", "create_provider"]
+__all__ = ["FACTORY_TARGET", "PROVIDER_ID"]
