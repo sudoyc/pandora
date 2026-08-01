@@ -103,7 +103,12 @@ class TestGetFavorites:
         client.get("/api/favorites")
 
         mock_provider.get_favorites.assert_called_once_with(
-            favcat=-1, page=0, keyword="", sn=False, st=False, sf=False
+            slot=-1,
+            page=0,
+            keyword="",
+            search_name=False,
+            search_tags=False,
+            search_notes=False,
         )
 
     def test_get_favorites_with_slot_and_page(self):
@@ -119,7 +124,12 @@ class TestGetFavorites:
         client.get("/api/favorites?slot=2&page=3&keyword=test&sn=true&st=true&sf=true")
 
         mock_provider.get_favorites.assert_called_once_with(
-            favcat=2, page=3, keyword="test", sn=True, st=True, sf=True
+            slot=2,
+            page=3,
+            keyword="test",
+            search_name=True,
+            search_tags=True,
+            search_notes=True,
         )
 
 
@@ -152,7 +162,7 @@ class TestAddFavorite:
         )
 
         mock_provider.add_favorite.assert_called_once_with(
-            "99999", "xyz123", favcat=3, favnote="my note"
+            "99999", "xyz123", slot=3, note="my note"
         )
 
     def test_add_favorite_default_slot_and_note(self):
@@ -165,7 +175,7 @@ class TestAddFavorite:
         client.post("/api/favorites", json={"gid": "111", "token": "aaa"})
 
         mock_provider.add_favorite.assert_called_once_with(
-            "111", "aaa", favcat=0, favnote=""
+            "111", "aaa", slot=0, note=""
         )
 
 

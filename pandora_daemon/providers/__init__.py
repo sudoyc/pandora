@@ -1,11 +1,21 @@
 """Provider contracts and built-in registry for Pandora."""
 
 from pandora_daemon.providers.contracts import (
+    AccountOverview,
+    ArchiveOption,
+    ArchiveOptions,
+    CommentVoteResult,
+    FavoriteCategory,
+    FavoritesPage,
     GalleryComment,
     GalleryDetail,
     GalleryProvider,
     GallerySearchQuery,
     GallerySummary,
+    GalleryTorrent,
+    RatingResult,
+    UserProfile,
+    UserTag,
     ProviderContext,
 )
 from pandora_daemon.providers.errors import (
@@ -26,11 +36,21 @@ from pandora_daemon.providers.registry import (
 )
 
 __all__ = [
+    "AccountOverview",
+    "ArchiveOption",
+    "ArchiveOptions",
+    "CommentVoteResult",
+    "FavoriteCategory",
+    "FavoritesPage",
     "GalleryComment",
     "GalleryDetail",
     "GalleryProvider",
     "GallerySearchQuery",
     "GallerySummary",
+    "GalleryTorrent",
+    "RatingResult",
+    "UserProfile",
+    "UserTag",
     "ProviderContext",
     "ProviderAuthenticationError",
     "ProviderContentBlockedError",

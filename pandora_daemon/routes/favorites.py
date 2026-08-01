@@ -8,6 +8,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from pandora_daemon.dependencies import get_gallery_provider
+from pandora_daemon.providers.contracts import (
+    FavoriteCategory,
+    FavoritesPage,
+    GalleryProvider,
+    GallerySummary,
+)
 
 router = APIRouter(prefix="/api/favorites", tags=["favorites"])
 
@@ -32,7 +38,7 @@ class ModifyFavoritesBody(BaseModel):
 # Serializers
 # ---------------------------------------------------------------------------
 
-def _gallery_item_to_dict(item) -> dict:
+def _gallery_item_to_dict(item: GallerySummary) -> dict[str, object]:
     return {
         "gid": item.gid,
         "token": item.token,
@@ -62,25 +68,46 @@ async def get_favorites(
     sn: bool = False,
     st: bool = False,
     sf: bool = False,
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
 ):
     """Return favorites list with categories and galleries."""
-    resp = await provider.get_favorites(favcat=slot, page=page, keyword=keyword, sn=sn, st=st, sf=sf)
+    response: FavoritesPage = await provider.get_favorites(
+        slot=slot,
+        page=page,
+        keyword=keyword,
+        search_name=sn,
+        search_tags=st,
+        search_notes=sf,
+    )
     return {
-        "categories": [{"slot": c.slot, "name": c.name, "count": c.count} for c in resp.categories],
-        "galleries": [_gallery_item_to_dict(g) for g in resp.galleries],
+        "categories": [
+            {"slot": category.slot, "name": category.name, "count": category.count}
+            for category in response.categories
+        ],
+        "galleries": [_gallery_item_to_dict(gallery) for gallery in response.galleries],
     }
 
 
 @router.post("")
-async def add_favorite(body: AddFavoriteBody, provider=Depends(get_gallery_provider)):
+async def add_favorite(
+    body: AddFavoriteBody,
+    provider: GalleryProvider = Depends(get_gallery_provider),
+):
     """Add a gallery to favorites."""
-    await provider.add_favorite(body.gid, body.token, favcat=body.slot, favnote=body.note)
+    await provider.add_favorite(
+        body.gid,
+        body.token,
+        slot=body.slot,
+        note=body.note,
+    )
     return {"ok": True}
 
 
 @router.delete("")
-async def modify_favorites(body: ModifyFavoritesBody, provider=Depends(get_gallery_provider)):
+async def modify_favorites(
+    body: ModifyFavoritesBody,
+    provider: GalleryProvider = Depends(get_gallery_provider),
+):
     """Modify (e.g. delete) favorites entries."""
     await provider.modify_favorites(body.gids, body.action)
     return {"ok": True}

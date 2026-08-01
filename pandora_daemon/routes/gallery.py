@@ -13,7 +13,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from pandora_daemon.dependencies import get_gallery_provider, get_cache, get_image_service, get_db
-from pandora_daemon.providers.contracts import GalleryComment, GalleryDetail
+from pandora_daemon.providers.contracts import (
+    ArchiveOptions,
+    GalleryComment,
+    GalleryDetail,
+    GalleryProvider,
+    GalleryTorrent,
+)
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 logger = logging.getLogger(__name__)
@@ -86,26 +92,26 @@ def _detail_to_dict(d: GalleryDetail) -> dict[str, object]:
     }
 
 
-def _torrent_to_dict(t) -> dict:
+def _torrent_to_dict(torrent: GalleryTorrent) -> dict[str, str]:
     return {
-        "name": t.name,
-        "url": t.url,
+        "name": torrent.name,
+        "url": torrent.url,
     }
 
 
-def _archive_to_dict(a) -> dict:
-    result: dict = {"funds": a.funds}
-    if a.original:
+def _archive_to_dict(archive: ArchiveOptions) -> dict[str, object]:
+    result: dict[str, object] = {"funds": archive.funds}
+    if archive.original:
         result["original"] = {
-            "url": a.original.url,
-            "size": a.original.size,
-            "cost": a.original.cost,
+            "url": archive.original.url,
+            "size": archive.original.size,
+            "cost": archive.original.cost,
         }
-    if a.resample:
+    if archive.resample:
         result["resample"] = {
-            "url": a.resample.url,
-            "size": a.resample.size,
-            "cost": a.resample.cost,
+            "url": archive.resample.url,
+            "size": archive.resample.size,
+            "cost": archive.resample.cost,
         }
     return result
 
@@ -125,7 +131,12 @@ def _media_type_from_image_bytes(data: bytes) -> str:
 # Cache helper
 # ---------------------------------------------------------------------------
 
-async def _get_detail(gid: str, token: str, provider, cache) -> GalleryDetail:
+async def _get_detail(
+    gid: str,
+    token: str,
+    provider: GalleryProvider,
+    cache,
+) -> GalleryDetail:
     """Return gallery detail from cache or fetch and cache it."""
     cached = cache.get_gallery(gid, token)
     if cached is not None:
@@ -140,7 +151,7 @@ async def _get_detail(gid: str, token: str, provider, cache) -> GalleryDetail:
 # ---------------------------------------------------------------------------
 
 @router.get("/{gid}/{token}")
-async def get_gallery_detail(gid: str, token: str, provider=Depends(get_gallery_provider), cache=Depends(get_cache), db=Depends(get_db)):
+async def get_gallery_detail(gid: str, token: str, provider: GalleryProvider = Depends(get_gallery_provider), cache=Depends(get_cache), db=Depends(get_db)):
     """Return gallery detail. Checks cache first; fetches and caches on miss."""
     detail = await _get_detail(gid, token, provider, cache)
     await db.put_history(detail)
@@ -152,7 +163,7 @@ async def comment_gallery(
     gid: str,
     token: str,
     body: CommentBody,
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
 ):
     """Post or edit a comment on a gallery."""
     result = await provider.comment_gallery(gid, token, body.comment, edit_id=body.edit_id)
@@ -164,7 +175,7 @@ async def rate_gallery(
     gid: str,
     token: str,
     body: RateBody,
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
     cache=Depends(get_cache),
 ):
     """Rate a gallery using its normalized detail."""
@@ -178,7 +189,7 @@ async def vote_comment(
     gid: str,
     token: str,
     body: VoteCommentBody,
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
     cache=Depends(get_cache),
 ):
     """Vote on a comment using its normalized gallery detail."""
@@ -188,14 +199,14 @@ async def vote_comment(
 
 
 @router.get("/{gid}/{token}/torrents")
-async def get_torrents(gid: str, token: str, provider=Depends(get_gallery_provider)):
+async def get_torrents(gid: str, token: str, provider: GalleryProvider = Depends(get_gallery_provider)):
     """Return the torrent list for a gallery."""
     torrents = await provider.get_torrent_list(gid, token)
     return [_torrent_to_dict(t) for t in torrents]
 
 
 @router.get("/{gid}/{token}/archive")
-async def get_archive(gid: str, token: str, provider=Depends(get_gallery_provider)):
+async def get_archive(gid: str, token: str, provider: GalleryProvider = Depends(get_gallery_provider)):
     """Return the archive download options for a gallery."""
     archive = await provider.get_archive_list(gid, token)
     return _archive_to_dict(archive)

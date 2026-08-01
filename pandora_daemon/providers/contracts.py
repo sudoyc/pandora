@@ -67,6 +67,74 @@ class GalleryComment:
     editable: bool = False
     last_edited: str = ""
 
+@dataclass(frozen=True, slots=True)
+class FavoriteCategory:
+    slot: int
+    name: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class FavoritesPage:
+    categories: Sequence[FavoriteCategory]
+    galleries: Sequence[GallerySummary]
+
+
+@dataclass(frozen=True, slots=True)
+class GalleryTorrent:
+    name: str
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveOption:
+    url: str
+    size: str
+    cost: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveOptions:
+    funds: str
+    original: ArchiveOption | None = None
+    resample: ArchiveOption | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AccountOverview:
+    image_used: int
+    image_total: int
+    reset_cost: int
+
+
+@dataclass(frozen=True, slots=True)
+class UserProfile:
+    display_name: str
+    avatar_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class UserTag:
+    id: int
+    name: str
+    watched: bool
+    hidden: bool
+    color: str | None
+    weight: int
+
+
+@dataclass(frozen=True, slots=True)
+class RatingResult:
+    rating: float
+    rating_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class CommentVoteResult:
+    comment_id: int
+    comment_score: int
+    comment_vote: int
+
 
 @dataclass(frozen=True, slots=True)
 class GalleryDetail:
@@ -117,11 +185,10 @@ class BrowseProvider(Protocol):
 
 
 class GalleryProvider(BrowseProvider, Protocol):
-    """Lifecycle and core browse contract implemented by every provider."""
+    """Complete provider-neutral contract consumed by the daemon."""
 
     provider_id: str
     auth_configured: bool
-
 
     async def get_gallery_details(self, gid: str, token: str) -> GalleryDetail: ...
 
@@ -131,15 +198,70 @@ class GalleryProvider(BrowseProvider, Protocol):
 
     async def get_thumbnail(self, detail: GalleryDetail, page: int) -> bytes: ...
 
-    async def rate_gallery(self, detail: GalleryDetail, rating: int) -> object: ...
+    async def get_favorites(
+        self,
+        slot: int = -1,
+        page: int = 0,
+        keyword: str = "",
+        search_name: bool = False,
+        search_tags: bool = False,
+        search_notes: bool = False,
+    ) -> FavoritesPage: ...
+
+    async def add_favorite(
+        self,
+        gid: str,
+        token: str,
+        slot: int = 0,
+        note: str = "",
+    ) -> None: ...
+
+    async def modify_favorites(self, gids: Sequence[str], action: str) -> None: ...
+
+    async def comment_gallery(
+        self,
+        gid: str,
+        token: str,
+        comment: str,
+        *,
+        edit_id: int | None = None,
+    ) -> Sequence[GalleryComment]: ...
+
+    async def rate_gallery(self, detail: GalleryDetail, rating: int) -> RatingResult: ...
 
     async def vote_comment(
         self,
         detail: GalleryDetail,
         comment_id: int,
         vote: int,
-    ) -> object: ...
+    ) -> CommentVoteResult: ...
 
-    async def get_home_detail(self) -> object: ...
+    async def get_torrent_list(
+        self,
+        gid: str,
+        token: str,
+    ) -> Sequence[GalleryTorrent]: ...
+
+    async def get_archive_list(self, gid: str, token: str) -> ArchiveOptions: ...
+
+    async def get_home_detail(self) -> AccountOverview: ...
+
+    async def reset_image_limit(self) -> AccountOverview: ...
+
+    async def get_profile(self) -> UserProfile: ...
+
+    async def get_user_tags(self) -> Sequence[UserTag]: ...
+
+    async def add_tag(
+        self,
+        tag_name: str,
+        *,
+        watched: bool = False,
+        hidden: bool = False,
+        color: str = "",
+        weight: int = 0,
+    ) -> Sequence[UserTag]: ...
+
+    async def delete_tag(self, tag_id: int) -> Sequence[UserTag]: ...
 
     async def aclose(self) -> None: ...

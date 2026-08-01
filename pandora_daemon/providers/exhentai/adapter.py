@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, ParamSpec, TypeVar, cast
 
 from pandora_daemon.providers.exhentai.upstream.api import ExhentaiAPI
@@ -17,19 +17,45 @@ from pandora_daemon.providers.exhentai.upstream.exceptions import (
     SessionError,
     UpstreamError,
 )
+from pandora_daemon.providers.exhentai.upstream.models.archive import (
+    ArchiveOption as ExHentaiArchiveOption,
+    ArchiverData,
+)
 from pandora_daemon.providers.exhentai.upstream.models.comment import GalleryComment as ExHentaiGalleryComment
 from pandora_daemon.providers.exhentai.upstream.models.gallery import (
     GalleryDetail as ExHentaiGalleryDetail,
     GalleryListItem,
 )
+from pandora_daemon.providers.exhentai.upstream.models.favorites import (
+    FavoriteCategory as ExHentaiFavoriteCategory,
+    FavoritesResponse,
+)
+from pandora_daemon.providers.exhentai.upstream.models.home import HomeDetail
+from pandora_daemon.providers.exhentai.upstream.models.profile import ProfileResult
 from pandora_daemon.providers.exhentai.upstream.models.search import SearchParams
+from pandora_daemon.providers.exhentai.upstream.models.tags import WatchedTag
+from pandora_daemon.providers.exhentai.upstream.models.torrent import TorrentItem
+from pandora_daemon.providers.exhentai.upstream.models.vote import (
+    RateResult,
+    VoteCommentResult,
+)
 from pandora_daemon.providers.exhentai.media import ExHentaiMedia
 from pandora_daemon.providers.contracts import (
+    AccountOverview,
+    ArchiveOption,
+    ArchiveOptions,
+    CommentVoteResult,
+    FavoriteCategory,
+    FavoritesPage,
     GalleryComment,
     GalleryDetail,
     GallerySearchQuery,
     GallerySummary,
     ProviderContext,
+    GalleryTorrent,
+    RatingResult,
+    UserProfile,
+    UserTag,
 )
 from pandora_daemon.providers.errors import (
     ProviderAuthenticationError,
@@ -81,6 +107,69 @@ def _comment(comment: ExHentaiGalleryComment) -> GalleryComment:
         vote_down_ed=comment.vote_down_ed,
         editable=comment.editable,
         last_edited=comment.last_edited,
+    )
+
+def _favorite_category(category: ExHentaiFavoriteCategory) -> FavoriteCategory:
+    return FavoriteCategory(slot=category.slot, name=category.name, count=category.count)
+
+
+def _favorites(response: FavoritesResponse) -> FavoritesPage:
+    return FavoritesPage(
+        categories=tuple(_favorite_category(category) for category in response.categories),
+        galleries=tuple(_summary(gallery) for gallery in response.galleries),
+    )
+
+
+def _torrent(torrent: TorrentItem) -> GalleryTorrent:
+    return GalleryTorrent(name=torrent.name, url=torrent.url)
+
+
+def _archive_option(option: ExHentaiArchiveOption | None) -> ArchiveOption | None:
+    if option is None:
+        return None
+    return ArchiveOption(url=option.url, size=option.size, cost=option.cost)
+
+
+def _archive(archive: ArchiverData) -> ArchiveOptions:
+    return ArchiveOptions(
+        funds=archive.funds,
+        original=_archive_option(archive.original),
+        resample=_archive_option(archive.resample),
+    )
+
+
+def _account_overview(detail: HomeDetail) -> AccountOverview:
+    return AccountOverview(
+        image_used=detail.image_used,
+        image_total=detail.image_total,
+        reset_cost=detail.reset_cost,
+    )
+
+
+def _profile(profile: ProfileResult) -> UserProfile:
+    return UserProfile(display_name=profile.display_name, avatar_url=profile.avatar_url)
+
+
+def _user_tag(tag: WatchedTag) -> UserTag:
+    return UserTag(
+        id=tag.id,
+        name=tag.name,
+        watched=tag.watched,
+        hidden=tag.hidden,
+        color=tag.color,
+        weight=tag.weight,
+    )
+
+
+def _rating(result: RateResult) -> RatingResult:
+    return RatingResult(rating=result.rating, rating_count=result.rating_count)
+
+
+def _comment_vote(result: VoteCommentResult) -> CommentVoteResult:
+    return CommentVoteResult(
+        comment_id=result.comment_id,
+        comment_score=result.comment_score,
+        comment_vote=result.comment_vote,
     )
 
 
@@ -299,34 +388,58 @@ class ExHentaiProvider:
             page,
         )
 
-    async def get_favorites(self, **kwargs: Any) -> Any:
-        return await self._call_api(self._api.get_favorites, **kwargs)
+    async def get_favorites(
+        self,
+        slot: int = -1,
+        page: int = 0,
+        keyword: str = "",
+        search_name: bool = False,
+        search_tags: bool = False,
+        search_notes: bool = False,
+    ) -> FavoritesPage:
+        response = await self._call_api(
+            self._api.get_favorites,
+            favcat=slot,
+            page=page,
+            keyword=keyword,
+            sn=search_name,
+            st=search_tags,
+            sf=search_notes,
+        )
+        return _favorites(response)
 
-    async def add_favorite(self, gid: str, token: str, **kwargs: Any) -> str:
-        return await self._call_api(self._api.add_favorite, gid, token, **kwargs)
+    async def add_favorite(
+        self,
+        gid: str,
+        token: str,
+        slot: int = 0,
+        note: str = "",
+    ) -> None:
+        await self._call_api(self._api.add_favorite, gid, token, favcat=slot, favnote=note)
 
-    async def modify_favorites(self, gids: list[str], action: str) -> str:
-        return await self._call_api(self._api.modify_favorites, gids, action)
+    async def modify_favorites(self, gids: Sequence[str], action: str) -> None:
+        await self._call_api(self._api.modify_favorites, list(gids), action)
 
     async def comment_gallery(
         self, gid: str, token: str, comment: str, *, edit_id: int | None = None
-    ) -> Any:
-        return await self._call_api(
+    ) -> list[GalleryComment]:
+        comments = await self._call_api(
             self._api.comment_gallery,
             gid,
             token,
             comment,
             edit_id=edit_id,
         )
+        return [_comment(item) for item in comments]
 
     async def vote_comment(
         self,
         detail: GalleryDetail,
         comment_id: int,
         vote: int,
-    ) -> object:
+    ) -> CommentVoteResult:
         raw_detail = _raw_detail(detail)
-        return await self._call_api(
+        result = await self._call_api(
             self._api.vote_comment,
             raw_detail.api_uid,
             raw_detail.api_key,
@@ -335,10 +448,11 @@ class ExHentaiProvider:
             comment_id,
             vote,
         )
+        return _comment_vote(result)
 
-    async def rate_gallery(self, detail: GalleryDetail, rating: int) -> object:
+    async def rate_gallery(self, detail: GalleryDetail, rating: int) -> RatingResult:
         raw_detail = _raw_detail(detail)
-        return await self._call_api(
+        result = await self._call_api(
             self._api.rate_gallery,
             raw_detail.api_uid,
             raw_detail.api_key,
@@ -346,33 +460,42 @@ class ExHentaiProvider:
             detail.token,
             rating,
         )
+        return _rating(result)
 
-    async def get_torrent_list(self, gid: str, token: str) -> Any:
-        return await self._call_api(self._api.get_torrent_list, gid, token)
+    async def get_torrent_list(self, gid: str, token: str) -> list[GalleryTorrent]:
+        torrents = await self._call_api(self._api.get_torrent_list, gid, token)
+        return [_torrent(torrent) for torrent in torrents]
 
-    async def get_archive_list(self, gid: str, token: str) -> Any:
-        return await self._call_api(self._api.get_archive_list, gid, token)
+    async def get_archive_list(self, gid: str, token: str) -> ArchiveOptions:
+        archive = await self._call_api(self._api.get_archive_list, gid, token)
+        return _archive(archive)
 
     async def download_archive(self, archive_url: str, resolution: str = "org") -> str:
         return await self._call_api(self._api.download_archive, archive_url, resolution)
 
-    async def get_mytags(self) -> Any:
-        return await self._call_api(self._api.get_mytags)
+    async def get_user_tags(self) -> list[UserTag]:
+        tags = await self._call_api(self._api.get_mytags)
+        return [_user_tag(tag) for tag in tags]
 
-    async def add_tag(self, tag_name: str, **kwargs: Any) -> Any:
-        return await self._call_api(self._api.add_tag, tag_name, **kwargs)
+    async def add_tag(self, tag_name: str, **kwargs: Any) -> list[UserTag]:
+        tags = await self._call_api(self._api.add_tag, tag_name, **kwargs)
+        return [_user_tag(tag) for tag in tags]
 
-    async def delete_tag(self, tag_id: int) -> Any:
-        return await self._call_api(self._api.delete_tag, tag_id)
+    async def delete_tag(self, tag_id: int) -> list[UserTag]:
+        tags = await self._call_api(self._api.delete_tag, tag_id)
+        return [_user_tag(tag) for tag in tags]
 
-    async def get_home_detail(self) -> Any:
-        return await self._call_api(self._api.get_home_detail)
+    async def get_home_detail(self) -> AccountOverview:
+        detail = await self._call_api(self._api.get_home_detail)
+        return _account_overview(detail)
 
-    async def reset_image_limit(self) -> Any:
-        return await self._call_api(self._api.reset_image_limit)
+    async def reset_image_limit(self) -> AccountOverview:
+        detail = await self._call_api(self._api.reset_image_limit)
+        return _account_overview(detail)
 
-    async def get_profile(self) -> Any:
-        return await self._call_api(self._api.get_profile)
+    async def get_profile(self) -> UserProfile:
+        profile = await self._call_api(self._api.get_profile)
+        return _profile(profile)
 
     async def image_search(self, *args: Any, **kwargs: Any) -> list[GallerySummary]:
         items = await self._call_api(self._api.image_search, *args, **kwargs)

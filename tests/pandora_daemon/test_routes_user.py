@@ -138,7 +138,7 @@ class TestGetTags:
     def test_get_tags_returns_200_with_tag_list(self):
         mock_provider = MagicMock()
         tag = _make_watched_tag(id=7, name="artist:niku", watched=True, hidden=False, color="#123456", weight=5)
-        mock_provider.get_mytags = AsyncMock(return_value=[tag])
+        mock_provider.get_user_tags = AsyncMock(return_value=[tag])
 
         app = _make_app(mock_provider)
         client = TestClient(app)
@@ -157,7 +157,7 @@ class TestGetTags:
 
     def test_get_tags_returns_empty_list(self):
         mock_provider = MagicMock()
-        mock_provider.get_mytags = AsyncMock(return_value=[])
+        mock_provider.get_user_tags = AsyncMock(return_value=[])
 
         app = _make_app(mock_provider)
         client = TestClient(app)
@@ -166,7 +166,7 @@ class TestGetTags:
 
         assert response.status_code == 200
         assert response.json() == []
-        mock_provider.get_mytags.assert_called_once_with()
+        mock_provider.get_user_tags.assert_called_once_with()
 
 
 class TestAddTag:

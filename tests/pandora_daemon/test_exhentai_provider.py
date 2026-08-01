@@ -20,12 +20,15 @@ from pandora_daemon.providers.exhentai.upstream.models.gallery import (
     GalleryListItem,
 )
 from pandora_daemon.providers.exhentai.upstream.models.search import SearchParams
+from pandora_daemon.providers.exhentai.upstream.models.vote import RateResult, VoteCommentResult
 from pandora_daemon.providers.exhentai.upstream.models.toplist import TopListItem
 from pandora_daemon.providers.contracts import (
+    CommentVoteResult,
     GalleryComment,
     GalleryDetail,
     GallerySearchQuery,
     GallerySummary,
+    RatingResult,
     ProviderContext,
 )
 from pandora_daemon.providers.errors import (
@@ -249,13 +252,24 @@ async def test_generic_interactions_translate_to_raw_exhentai_arguments() -> Non
     raw_detail = _gallery_detail()
     api = AsyncMock(spec=ExhentaiAPI)
     api.get_gallery_details.return_value = raw_detail
-    api.rate_gallery.return_value = "rated"
-    api.vote_comment.return_value = "voted"
+    api.rate_gallery.return_value = RateResult(rating=4.5, rating_count=42)
+    api.vote_comment.return_value = VoteCommentResult(
+        comment_id=17,
+        comment_score=3,
+        comment_vote=-1,
+    )
     provider = ExHentaiProvider(api)
     detail = await provider.get_gallery_details(raw_detail.gid, raw_detail.token)
 
-    assert await provider.rate_gallery(detail, 9) == "rated"
-    assert await provider.vote_comment(detail, 17, -1) == "voted"
+    assert await provider.rate_gallery(detail, 9) == RatingResult(
+        rating=4.5,
+        rating_count=42,
+    )
+    assert await provider.vote_comment(detail, 17, -1) == CommentVoteResult(
+        comment_id=17,
+        comment_score=3,
+        comment_vote=-1,
+    )
 
     api.rate_gallery.assert_awaited_once_with(
         raw_detail.api_uid,
