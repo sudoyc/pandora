@@ -10,12 +10,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Response
 
 from pandora_daemon.dependencies import get_gallery_provider, get_image_service
-from pandora_daemon.providers import GallerySearchQuery
+from pandora_daemon.providers import GalleryProvider, GallerySearchQuery, GallerySummary
 
 router = APIRouter(prefix="/api", tags=["browse"])
 
 
-def _gallery_item_to_dict(item) -> dict:
+def _gallery_item_to_dict(item: GallerySummary) -> dict[str, object]:
     return {
         "gid": item.gid,
         "token": item.token,
@@ -36,7 +36,7 @@ def _gallery_item_to_dict(item) -> dict:
 @router.get("/homepage")
 async def get_homepage(
     next_gid: Optional[int] = Query(None, alias="next", ge=1),
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
 ):
     """Return the homepage gallery list."""
     if next_gid is None:
@@ -62,7 +62,7 @@ async def search(
     min_pages: Optional[int] = None,
     max_pages: Optional[int] = None,
     next_gid: Optional[int] = Query(None, alias="next", ge=1),
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
 ):
     """Search galleries with optional filters."""
     query = GallerySearchQuery(
@@ -88,14 +88,19 @@ async def search(
 
 
 @router.get("/popular")
-async def get_popular(provider=Depends(get_gallery_provider)):
+async def get_popular(
+    provider: GalleryProvider = Depends(get_gallery_provider),
+):
     """Return the popular galleries list."""
     items = await provider.get_popular()
     return [_gallery_item_to_dict(item) for item in items]
 
 
 @router.get("/toplist")
-async def get_toplist(tl: str = "15", provider=Depends(get_gallery_provider)):
+async def get_toplist(
+    tl: str = "15",
+    provider: GalleryProvider = Depends(get_gallery_provider),
+):
     """Return toplist entries as GalleryItem-compatible dicts."""
     items = await provider.get_toplist(tl)
     return [_gallery_item_to_dict(item) for item in items]
@@ -105,7 +110,7 @@ async def get_toplist(tl: str = "15", provider=Depends(get_gallery_provider)):
 async def get_watched(
     page: int = 0,
     next_gid: Optional[int] = Query(None, alias="next", ge=1),
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
 ):
     """Return watched tag galleries for the given page."""
     if next_gid is None:

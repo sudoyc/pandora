@@ -259,7 +259,7 @@ async def prefetch_pages(
     gid: str,
     token: str,
     body: PrefetchBody,
-    provider=Depends(get_gallery_provider),
+    provider: GalleryProvider = Depends(get_gallery_provider),
     cache=Depends(get_cache),
     image_service=Depends(get_image_service),
     db=Depends(get_db),
