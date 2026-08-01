@@ -4,8 +4,8 @@ This document summarizes Pandora's provider contracts, the built-in provider dev
 
 ## Provider application contract
 
-`pandora_daemon.providers.contracts` defines `ProviderContext`, `GallerySearchQuery`,
-`GallerySummary`, `GalleryDetail`, `GalleryComment`, and the `GalleryProvider` protocol.
+`pandora_daemon.providers.contracts` defines immutable provider context, search, browse, detail,
+account, mutation-result, and media metadata values together with the `GalleryProvider` protocol.
 Routes, image handling, downloads, and application state depend on these types only.
 Every provider supplies a stable `provider_id`, authentication readiness, browse/search/detail
 operations, page/thumbnail/media access, supported mutations, home diagnostics, and `aclose()`.

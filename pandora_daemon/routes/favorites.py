@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from pandora_daemon.dependencies import get_gallery_provider
 from pandora_daemon.providers.contracts import (
-    FavoriteCategory,
     FavoritesPage,
     GalleryProvider,
     GallerySummary,

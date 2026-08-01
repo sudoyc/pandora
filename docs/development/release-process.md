@@ -47,8 +47,8 @@ remain outside the runtime artifact.
 
 Use a new empty temporary directory. The command builds the sdist first, builds
 the wheel from that sdist, rejects unexpected files or metadata drift, installs
-the wheel into a temporary Python 3.12 environment, imports both Python
-packages from outside the checkout, and runs `pandora --help`:
+the wheel into a temporary Python 3.12 environment, imports `pandora_daemon` and its nested
+built-in provider implementation from outside the checkout, and runs `pandora --help`:
 
 ```bash
 RC_DIR="$(mktemp -d -t pandora-release.XXXXXX)"
@@ -58,8 +58,8 @@ uv run --frozen python scripts/release.py candidate \
 ```
 
 The output directory contains only the wheel, source distribution, and the
-non-artifact `.gitignore` marker created by `uv build`. The sdist contains the
-two runtime packages and release metadata only; it does not contain tests,
+non-artifact `.gitignore` marker created by `uv build`. The sdist contains the single
+`pandora_daemon` package tree and release metadata only; it does not contain tests,
 documentation archives, the frozen TUI, Web `node_modules`/`dist`, caches,
 downloads, or credentials. The command prints SHA-256 checksums for the two
 artifacts. Repeat the command in another empty directory when a byte-for-byte

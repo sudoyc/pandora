@@ -92,6 +92,8 @@ Pandora 是一个本地运行的画廊浏览、检索、下载和离线库服务
 默认 provider 继续使用表中的兼容路径。非默认 provider 使用
 `~/.config/pandora/providers/<provider-id>/pandora.db`、同目录的 `downloads.json`，以及
 `download.path/<provider-id>`；公开配置中的 `download.path` 仍是用户配置的根目录。
+Provider ID 是规范化的小写安全路径组件，且 factory 声明的 ID 必须与 registry 选择一致；
+不合法或不一致的 ID 在数据库、下载状态或 library 初始化前终止启动。
 
 consumer 不应直接编辑 daemon 状态文件。需要修复或迁移时，应由 daemon/CLI 提供
 显式操作并保持原子写入。

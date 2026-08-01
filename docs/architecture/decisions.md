@@ -33,6 +33,8 @@
 内置 adapter 位于 `pandora_daemon/providers/<provider-id>/`，其包元数据声明 `PROVIDER_ID` 和
 惰性 factory target；默认 registry 只确定性发现仓库内置包，不加载第三方 entry point。测试或
 组合根可以显式注入 `ProviderRegistry`，不需要修改应用层。
+Provider ID 统一规范化为小写安全路径组件；registry 拒绝未注册默认项，并要求 factory 返回的
+`provider_id` 与注册键一致，避免 adapter 切换后错误复用其他 provider 的持久化 workspace。
 
 默认 provider 保留既有 `pandora.db`、`downloads.json` 和 library 路径。其他 provider 的数据库、
 下载状态和 library 使用 provider-qualified workspace，防止切换 provider 时共享不兼容状态。
