@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import ParamSpec, TypeVar, cast
 
 from pandora_daemon.providers.exhentai.upstream.api import ExhentaiAPI
 from pandora_daemon.providers.exhentai.upstream.client import ExhentaiClient
@@ -291,9 +291,6 @@ class ExHentaiProvider:
             self._media = ExHentaiMedia(self._api.client)
         return self._media
 
-    @property
-    def client(self) -> ExhentaiClient:
-        return self._api.client
 
     async def aclose(self) -> None:
         if self._closed:
@@ -363,13 +360,7 @@ class ExHentaiProvider:
         detail = await self._call_api(self._api.get_gallery_details, gid, token)
         return _detail(detail)
 
-    async def get_image_url(
-        self, gid: str, imgkey: str, page: int, nl: str | None = None
-    ) -> Any:
-        return await self._call_api(self._api.get_image_url, gid, imgkey, page, nl=nl)
 
-    async def get_gallery_token(self, gid: int, imgkey: str, page: int) -> str:
-        return await self._call_api(self._api.get_gallery_token, gid, imgkey, page)
 
     async def fetch_image(self, source: str) -> bytes:
         return await self._call_api(self._get_media().fetch_image, source)
@@ -470,15 +461,28 @@ class ExHentaiProvider:
         archive = await self._call_api(self._api.get_archive_list, gid, token)
         return _archive(archive)
 
-    async def download_archive(self, archive_url: str, resolution: str = "org") -> str:
-        return await self._call_api(self._api.download_archive, archive_url, resolution)
 
     async def get_user_tags(self) -> list[UserTag]:
         tags = await self._call_api(self._api.get_mytags)
         return [_user_tag(tag) for tag in tags]
 
-    async def add_tag(self, tag_name: str, **kwargs: Any) -> list[UserTag]:
-        tags = await self._call_api(self._api.add_tag, tag_name, **kwargs)
+    async def add_tag(
+        self,
+        tag_name: str,
+        *,
+        watched: bool = False,
+        hidden: bool = False,
+        color: str = "",
+        weight: int = 0,
+    ) -> list[UserTag]:
+        tags = await self._call_api(
+            self._api.add_tag,
+            tag_name,
+            watched=watched,
+            hidden=hidden,
+            color=color,
+            weight=weight,
+        )
         return [_user_tag(tag) for tag in tags]
 
     async def delete_tag(self, tag_id: int) -> list[UserTag]:
@@ -497,9 +501,6 @@ class ExHentaiProvider:
         profile = await self._call_api(self._api.get_profile)
         return _profile(profile)
 
-    async def image_search(self, *args: Any, **kwargs: Any) -> list[GallerySummary]:
-        items = await self._call_api(self._api.image_search, *args, **kwargs)
-        return [_summary(item) for item in items]
 
 
 def create_provider(context: ProviderContext) -> ExHentaiProvider:

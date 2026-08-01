@@ -397,7 +397,6 @@ def test_factory_forwards_credentials_and_network_context() -> None:
         timeout=43,
     )
     api_type.assert_called_once_with(client=client)
-    assert provider.client is client
     assert provider.auth_configured is True
 
 @pytest.mark.parametrize(
