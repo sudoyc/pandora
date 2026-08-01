@@ -12,6 +12,8 @@ _STATIC_METRIC_KEYS = (
     "concrete_provider_state_fields",
     "provider_factory_calls",
     "uncontracted_provider_calls",
+    "adapter_surface_leaks",
+    "untyped_provider_dependencies",
     "missing_provider_contract",
     "missing_provider_registry",
     "top_level_provider_packages",
@@ -305,6 +307,70 @@ def _uncontracted_provider_calls(root: Path) -> int:
     return len(route_calls - _provider_contract_methods(root))
 
 
+def _adapter_surface_leaks(root: Path) -> int:
+    adapters_path = root / "pandora_daemon" / "providers"
+    if not adapters_path.is_dir():
+        return 0
+    contract_methods = _provider_contract_methods(root)
+    leaks = 0
+    for path in sorted(adapters_path.glob("*/adapter.py")):
+        tree = ast.parse(
+            path.read_text(encoding="utf-8"),
+            filename=str(path.relative_to(root)),
+        )
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or not node.name.endswith("Provider"):
+                continue
+            leaks += sum(
+                1
+                for statement in node.body
+                if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and not statement.name.startswith("_")
+                and statement.name not in contract_methods
+            )
+    return leaks
+
+
+def _is_provider_dependency(default: ast.expr | None) -> bool:
+    if not isinstance(default, ast.Call) or _call_name(default.func) != "Depends":
+        return False
+    dependencies = [*default.args, *(keyword.value for keyword in default.keywords)]
+    return any(
+        isinstance(dependency, (ast.Name, ast.Attribute))
+        and _call_name(dependency) == "get_gallery_provider"
+        for dependency in dependencies
+    )
+
+
+def _untyped_provider_dependencies(root: Path) -> int:
+    routes_path = root / "pandora_daemon" / "routes"
+    if not routes_path.is_dir():
+        return 0
+    violations = 0
+    for path in sorted(routes_path.glob("*.py")):
+        tree = ast.parse(
+            path.read_text(encoding="utf-8"),
+            filename=str(path.relative_to(root)),
+        )
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            positional = [*node.args.posonlyargs, *node.args.args]
+            positional_defaults = [None] * (
+                len(positional) - len(node.args.defaults)
+            ) + list(node.args.defaults)
+            arguments = [
+                *zip(positional, positional_defaults, strict=True),
+                *zip(node.args.kwonlyargs, node.args.kw_defaults, strict=True),
+            ]
+            for argument, default in arguments:
+                if not _is_provider_dependency(default):
+                    continue
+                annotation = _normalized(_annotation_text(argument.annotation))
+                violations += int(not annotation.endswith("galleryprovider"))
+    return violations
+
+
 def _top_level_provider_packages(root: Path) -> int:
     if not root.is_dir():
         return 0
@@ -390,6 +456,8 @@ def collect_static_metrics(root: Path) -> dict[str, int]:
     metrics = {
         **python_counts,
         "uncontracted_provider_calls": _uncontracted_provider_calls(root),
+        "adapter_surface_leaks": _adapter_surface_leaks(root),
+        "untyped_provider_dependencies": _untyped_provider_dependencies(root),
         "missing_provider_contract": int(not has_contract),
         "missing_provider_registry": int(not has_registry),
         "top_level_provider_packages": _top_level_provider_packages(root),

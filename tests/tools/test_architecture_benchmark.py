@@ -15,6 +15,8 @@ STATIC_METRIC_KEYS = frozenset(
         "concrete_provider_state_fields",
         "provider_factory_calls",
         "uncontracted_provider_calls",
+        "adapter_surface_leaks",
+        "untyped_provider_dependencies",
         "missing_provider_contract",
         "missing_provider_registry",
         "top_level_provider_packages",
@@ -29,11 +31,15 @@ WORKLOAD_METRIC_KEYS = frozenset(
         "swap_endpoints_passed",
         "swap_workload_failures",
         "swap_contract_leaks",
+        "provider_registry_failures",
+        "workspace_isolation_failures",
     }
 )
 PENALTY_METRIC_KEYS = STATIC_METRIC_KEYS | {
     "swap_workload_failures",
     "swap_contract_leaks",
+    "provider_registry_failures",
+    "workspace_isolation_failures",
 }
 
 
@@ -67,8 +73,29 @@ def _write_coupled_repository(root: Path) -> None:
             class GalleryProvider(Protocol):
                 async def get_homepage(self) -> list[object]: ...
         """,
+        "pandora_daemon/providers/exhentai/__init__.py": "",
+        "pandora_daemon/providers/exhentai/adapter.py": """
+            class ExHentaiProvider:
+                async def get_homepage(self):
+                    return []
+
+                @property
+                def client(self):
+                    return object()
+
+                async def image_search(self):
+                    return []
+        """,
         "pandora_daemon/routes/gallery.py": """
-            async def gallery(provider):
+            def Depends(dependency):
+                return dependency
+
+
+            def get_gallery_provider():
+                return object()
+
+
+            async def gallery(provider=Depends(get_gallery_provider)):
                 return await provider.get_gallery_details("1", "token")
         """,
         "pandora_daemon/providers/registry.py": """
@@ -128,6 +155,8 @@ def test_static_metrics_detect_coupling_without_missing_neutral_seams(tmp_path: 
         "provider_factory_calls",
         "uncontracted_provider_calls",
         "top_level_provider_packages",
+        "adapter_surface_leaks",
+        "untyped_provider_dependencies",
         "packaging_provider_leaks",
         "route_module_naming_violations",
         "product_naming_violations",
@@ -168,6 +197,60 @@ def test_uncontracted_provider_calls_compare_routes_with_protocol(tmp_path: Path
     assert metrics["uncontracted_provider_calls"] == 1
 
 
+def test_adapter_surface_and_provider_dependency_metrics_are_precise(tmp_path: Path):
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/providers/contracts.py",
+        """
+        from typing import Protocol
+
+
+        class GalleryProvider(Protocol):
+            async def get_homepage(self) -> list[object]: ...
+        """,
+    )
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/providers/fixture/adapter.py",
+        """
+        class FixtureProvider:
+            async def get_homepage(self):
+                return []
+
+            async def extra_public_method(self):
+                return None
+
+            async def _private_helper(self):
+                return None
+        """,
+    )
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/routes/browse.py",
+        """
+        def Depends(dependency):
+            return dependency
+
+
+        def get_gallery_provider():
+            return object()
+
+
+        async def typed(provider: GalleryProvider = Depends(get_gallery_provider)):
+            return await provider.get_homepage()
+
+
+        async def untyped(provider=Depends(get_gallery_provider)):
+            return await provider.get_homepage()
+        """,
+    )
+
+    metrics = collect_static_metrics(tmp_path)
+
+    assert metrics["adapter_surface_leaks"] == 1
+    assert metrics["untyped_provider_dependencies"] == 1
+
+
 def test_dependency_accessor_without_mapping_is_not_a_registry(tmp_path: Path):
     _write_fixture(
         tmp_path,
@@ -200,9 +283,9 @@ def test_provider_swap_workload_passes_every_required_endpoint():
 
     assert set(metrics) == WORKLOAD_METRIC_KEYS
     assert all(type(value) is int and value >= 0 for value in metrics.values())
-    assert metrics["swap_endpoints_passed"] == 4
+    assert metrics["swap_endpoints_passed"] == 23
     assert metrics["swap_workload_failures"] == 0
-
+    assert metrics["workspace_isolation_failures"] == 0
 
 def test_score_weights_every_penalty_and_ignores_endpoint_successes():
     assert set(WEIGHTS) == PENALTY_METRIC_KEYS
@@ -213,7 +296,7 @@ def test_score_weights_every_penalty_and_ignores_endpoint_successes():
         name: index
         for index, name in enumerate(sorted(PENALTY_METRIC_KEYS), start=1)
     }
-    metrics["swap_endpoints_passed"] = 4
+    metrics["swap_endpoints_passed"] = 23
     expected = sum(WEIGHTS[name] * metrics[name] for name in WEIGHTS)
 
     assert score(metrics) == expected

@@ -18,6 +18,8 @@ WEIGHTS: dict[str, int] = {
     "concrete_provider_state_fields": 25,
     "provider_factory_calls": 20,
     "uncontracted_provider_calls": 15,
+    "adapter_surface_leaks": 10,
+    "untyped_provider_dependencies": 5,
     "missing_provider_contract": 100,
     "missing_provider_registry": 80,
     "top_level_provider_packages": 30,
@@ -27,6 +29,8 @@ WEIGHTS: dict[str, int] = {
     "architecture_doc_contradictions": 25,
     "swap_workload_failures": 200,
     "swap_contract_leaks": 40,
+    "provider_registry_failures": 100,
+    "workspace_isolation_failures": 200,
 }
 
 
