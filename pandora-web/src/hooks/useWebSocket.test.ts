@@ -35,6 +35,10 @@ class FakeWebSocket {
   disconnect() {
     this.onclose?.(new CloseEvent('close'));
   }
+
+  fail() {
+    this.onerror?.(new Event('error'));
+  }
 }
 
 function task(overrides: Partial<DownloadTaskSnapshot> = {}): DownloadTaskSnapshot {
@@ -104,6 +108,17 @@ describe('useWebSocket', () => {
 
     unmount();
     expect(socket.close).toHaveBeenCalledOnce();
+  });
+
+  it('ignores a socket error emitted after effect cleanup', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = renderHook(() => useWebSocket());
+    const socket = FakeWebSocket.instances[0];
+
+    unmount();
+    act(() => socket.fail());
+
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('reconnects and replaces stale state with the restarted daemon snapshot', async () => {

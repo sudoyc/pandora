@@ -15,6 +15,7 @@
 | 开发优先级与完成标准 | [roadmap.md](roadmap.md) | 阶段开始、完成、取消或重新排序时 |
 | 长期无人值守开发约束 | [development/unattended-development.md](development/unattended-development.md) | 自治权限、检查点、验证或停机规则变化时 |
 | 长期执行队列与状态 | [development/work-program.md](development/work-program.md) | 工作包开始、完成、阻塞或依赖变化时 |
+| 测试分层与可用性验收 | [development/testing.md](development/testing.md) | 测试证据、live 验收或发布门槛变化时 |
 | 版本、构建与回滚 | [development/release-process.md](development/release-process.md) | 版本、artifact、候选发布或回滚规则变化时 |
 | 长期 goal prompt | [development/goal-prompt.md](development/goal-prompt.md) | 启动协议或默认授权变化时 |
 | Python、REST、WebSocket、CLI 接口 | [api_reference.md](api_reference.md) | 公共接口或数据形状变化时 |

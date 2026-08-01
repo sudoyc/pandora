@@ -75,6 +75,15 @@ class TestHomepage:
         assert data[0]["pages"] == 20
         mock_api.get_homepage.assert_called_once()
 
+    def test_homepage_forwards_next_cursor(self):
+        mock_api = MagicMock()
+        mock_api.get_homepage = AsyncMock(return_value=[])
+
+        response = TestClient(_make_app(mock_api)).get("/api/homepage?next=4075469")
+
+        assert response.status_code == 200
+        mock_api.get_homepage.assert_called_once_with(next_gid="4075469")
+
 
 class TestSearch:
     def test_search_returns_200_and_calls_with_search_params(self):
@@ -95,6 +104,19 @@ class TestSearch:
         search_params = call_args[0][0]
         assert search_params.f_search == "test gallery"
         assert call_args[1]["page"] == 1
+
+    def test_search_forwards_next_cursor_instead_of_numeric_page(self):
+        mock_api = MagicMock()
+        mock_api.search = AsyncMock(return_value=[])
+
+        response = TestClient(_make_app(mock_api)).get(
+            "/api/search?keyword=fixture&page=3&next=4075469"
+        )
+
+        assert response.status_code == 200
+        call_args = mock_api.search.call_args
+        assert call_args[0][0].f_search == "fixture"
+        assert call_args[1] == {"page": 3, "next_gid": "4075469"}
 
     def test_search_with_min_rating_sets_advsearch(self):
         mock_api = MagicMock()
@@ -262,6 +284,20 @@ class TestWatched:
 
         assert response.status_code == 200
         mock_api.get_watched.assert_called_once_with(page=2)
+
+    def test_watched_forwards_next_cursor(self):
+        mock_api = MagicMock()
+        mock_api.get_watched = AsyncMock(return_value=[])
+
+        response = TestClient(_make_app(mock_api)).get(
+            "/api/watched?page=2&next=4075469"
+        )
+
+        assert response.status_code == 200
+        mock_api.get_watched.assert_called_once_with(
+            page=2,
+            next_gid="4075469",
+        )
 
     def test_watched_default_page_zero(self):
         mock_api = MagicMock()

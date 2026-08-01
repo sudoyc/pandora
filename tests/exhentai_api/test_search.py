@@ -61,3 +61,10 @@ async def test_search_api():
             "https://exhentai.org/",
             params={"f_search": "test", "f_cats": "1022", "page": "2"}
         )
+
+        await api.search(params, page=2, next_gid="4075469")
+
+        client.get_html.assert_called_with(
+            "https://exhentai.org/",
+            params={"f_search": "test", "f_cats": "1022", "next": "4075469"}
+        )

@@ -23,7 +23,14 @@ _ALLOWED_IMAGE_HOSTS = (
     "exhentai.org",
     "ehgt.org",
     "ehgt.org.gslb.e-hentai.org",
+    "hath.network",
 )
+# RFC 2544 benchmarking space is commonly used by TUN proxies for DNS fake-IP
+# routing. URLs still have to pass the HTTPS image-host allowlist above.
+_ALLOWED_TUN_FAKE_IP_NETWORKS = (ipaddress.ip_network("198.18.0.0/15"),)
+_IMAGE_REQUEST_HEADERS = {"Referer": "https://exhentai.org/"}
+_IMAGE_FETCH_CONCURRENCY = 4
+_IMAGE_TRANSPORT_RETRY_DELAYS = (0.2,)
 _MAX_REDIRECTS = 5
 _MAX_PROXY_IMAGE_BYTES = 50 * 1024 * 1024
 _IMAGE_MAGIC_PREFIXES = (
@@ -49,6 +56,12 @@ def _host_looks_public(host: str) -> bool:
     return addr.is_global
 
 
+def _address_is_allowed(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return address.is_global or any(
+        address in network for network in _ALLOWED_TUN_FAKE_IP_NETWORKS
+    )
+
+
 def _host_resolves_to_public_ip(host: str) -> bool:
     try:
         infos = socket.getaddrinfo(host, None)
@@ -65,7 +78,7 @@ def _host_resolves_to_public_ip(host: str) -> bool:
             addr = ipaddress.ip_address(sockaddr[0])
         except ValueError:
             return False
-        if not addr.is_global:
+        if not _address_is_allowed(addr):
             return False
     return seen
 
@@ -105,7 +118,7 @@ def _validate_response_peer(resp: httpx.Response) -> None:
         addr = ipaddress.ip_address(peername[0])
     except (ValueError, TypeError):
         raise PermissionError("Image host connected to a restricted address")
-    if not addr.is_global:
+    if not _address_is_allowed(addr):
         raise PermissionError("Image host connected to a restricted address")
 
 
@@ -125,7 +138,7 @@ def _validate_image_response(resp: httpx.Response) -> bytes:
     data = resp.content
     if len(data) > _MAX_PROXY_IMAGE_BYTES:
         raise RuntimeError("Image response is too large")
-    if data and not data.startswith(_IMAGE_MAGIC_PREFIXES):
+    if not data or not data.startswith(_IMAGE_MAGIC_PREFIXES):
         raise RuntimeError("Image response has invalid image signature")
     if data.startswith(b"RIFF") and data[8:12] != b"WEBP":
         raise RuntimeError("Image response has invalid image signature")
@@ -141,7 +154,20 @@ class ImageService:
         self._config = config
         self._prefetch_tasks: dict[str, asyncio.Task] = {}
         self._page_url_cache: dict[str, str] = {}  # "{gid}:{page}" -> image_url
-        self._semaphore = asyncio.Semaphore(4)
+        self._fetch_semaphore = asyncio.Semaphore(_IMAGE_FETCH_CONCURRENCY)
+        self._public_image_client: httpx.AsyncClient | None = None
+
+    def _get_public_image_client(self) -> httpx.AsyncClient:
+        if self._public_image_client is None:
+            self._public_image_client = httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=10.0,
+                limits=httpx.Limits(
+                    max_connections=_IMAGE_FETCH_CONCURRENCY,
+                    max_keepalive_connections=_IMAGE_FETCH_CONCURRENCY,
+                ),
+            )
+        return self._public_image_client
 
     async def proxy_image(self, url: str) -> bytes:
         """Restricted public image proxy with caching."""
@@ -156,26 +182,39 @@ class ImageService:
 
     async def _fetch_public_image(self, url: str) -> bytes:
         """Fetch a validated public image URL without ExHentai cookies."""
-        _validate_proxy_url(url)
-        current_url = url
-        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
-            for _ in range(_MAX_REDIRECTS + 1):
-                client.cookies.clear()
-                resp = await client.get(current_url)
-                client.cookies.clear()
-                _validate_response_peer(resp)
-                if resp.status_code in {301, 302, 303, 307, 308}:
-                    location = resp.headers.get("location")
-                    if not location:
-                        raise RuntimeError("Image redirect missing location")
-                    next_url = urljoin(str(resp.url), location)
-                    _validate_proxy_url(next_url)
-                    current_url = next_url
-                    continue
-                resp.raise_for_status()
-                return _validate_image_response(resp)
+        async with self._fetch_semaphore:
+            _validate_proxy_url(url)
+            client = self._get_public_image_client()
+            for attempt in range(len(_IMAGE_TRANSPORT_RETRY_DELAYS) + 1):
+                current_url = url
+                try:
+                    for _ in range(_MAX_REDIRECTS + 1):
+                        client.cookies.clear()
+                        try:
+                            resp = await client.get(
+                                current_url,
+                                headers=_IMAGE_REQUEST_HEADERS,
+                            )
+                        finally:
+                            client.cookies.clear()
+                        _validate_response_peer(resp)
+                        if resp.status_code in {301, 302, 303, 307, 308}:
+                            location = resp.headers.get("location")
+                            if not location:
+                                raise RuntimeError("Image redirect missing location")
+                            next_url = urljoin(str(resp.url), location)
+                            _validate_proxy_url(next_url)
+                            current_url = next_url
+                            continue
+                        resp.raise_for_status()
+                        return _validate_image_response(resp)
+                    raise RuntimeError("Too many redirects")
+                except httpx.TransportError:
+                    if attempt >= len(_IMAGE_TRANSPORT_RETRY_DELAYS):
+                        raise
+                    await asyncio.sleep(_IMAGE_TRANSPORT_RETRY_DELAYS[attempt])
 
-        raise RuntimeError("Too many redirects")
+        raise RuntimeError("Image fetch failed")
 
     async def get_page_image(self, gid: str, token: str, page: int) -> bytes:
         """Get full-size image for a gallery page. Cache-first."""
@@ -273,11 +312,10 @@ class ImageService:
 
     async def _prefetch_page(self, gid: str, token: str, page: int) -> None:
         """Prefetch a single page (fire-and-forget)."""
-        async with self._semaphore:
-            try:
-                await self.get_page_image(gid, token, page)
-            except Exception as e:
-                logger.debug("Prefetch failed for %s:%d: %s", gid, page, e)
+        try:
+            await self.get_page_image(gid, token, page)
+        except Exception as e:
+            logger.debug("Prefetch failed for %s:%d: %s", gid, page, e)
 
     async def shutdown(self) -> None:
         """Cancel all in-flight prefetch tasks."""
@@ -286,3 +324,6 @@ class ImageService:
         if self._prefetch_tasks:
             await asyncio.gather(*self._prefetch_tasks.values(), return_exceptions=True)
         self._prefetch_tasks.clear()
+        if self._public_image_client is not None:
+            await self._public_image_client.aclose()
+            self._public_image_client = None

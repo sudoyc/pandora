@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from exhentai_api.models.search import SearchParams
 from pandora_daemon.dependencies import get_api, get_image_service
@@ -67,9 +67,15 @@ def _toplist_to_gallery_item(item) -> dict | None:
 
 
 @router.get("/homepage")
-async def get_homepage(api=Depends(get_api)):
+async def get_homepage(
+    next_gid: Optional[int] = Query(None, alias="next", ge=1),
+    api=Depends(get_api),
+):
     """Return the homepage gallery list."""
-    items = await api.get_homepage()
+    if next_gid is None:
+        items = await api.get_homepage()
+    else:
+        items = await api.get_homepage(next_gid=str(next_gid))
     return [_gallery_item_to_dict(item) for item in items]
 
 
@@ -88,6 +94,7 @@ async def search(
     show_expunged: bool = False,
     min_pages: Optional[int] = None,
     max_pages: Optional[int] = None,
+    next_gid: Optional[int] = Query(None, alias="next", ge=1),
     api=Depends(get_api),
 ):
     """Search galleries with optional filters."""
@@ -124,7 +131,10 @@ async def search(
         params.f_spf = min_pages
         params.f_spt = max_pages
 
-    items = await api.search(params, page=page)
+    if next_gid is None:
+        items = await api.search(params, page=page)
+    else:
+        items = await api.search(params, page=page, next_gid=str(next_gid))
     return [_gallery_item_to_dict(item) for item in items]
 
 
@@ -148,9 +158,16 @@ async def get_toplist(tl: str = "15", api=Depends(get_api)):
 
 
 @router.get("/watched")
-async def get_watched(page: int = 0, api=Depends(get_api)):
+async def get_watched(
+    page: int = 0,
+    next_gid: Optional[int] = Query(None, alias="next", ge=1),
+    api=Depends(get_api),
+):
     """Return watched tag galleries for the given page."""
-    items = await api.get_watched(page=page)
+    if next_gid is None:
+        items = await api.get_watched(page=page)
+    else:
+        items = await api.get_watched(page=page, next_gid=str(next_gid))
     return [_gallery_item_to_dict(item) for item in items]
 
 

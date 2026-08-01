@@ -151,6 +151,20 @@ async def test_get_watched_default():
 
 
 @pytest.mark.asyncio
+async def test_get_watched_with_next_cursor():
+    mock_client = AsyncMock()
+    mock_client.get_html.return_value = "<html>No hits found</html>"
+    api = ExhentaiAPI(client=mock_client)
+
+    await api.get_watched(page=2, next_gid="4075469")
+
+    mock_client.get_html.assert_called_once_with(
+        f"{BASE_URL}/watched",
+        params={"next": "4075469"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_home_detail():
     mock_client = AsyncMock()
     mock_client.get_html.return_value = "<html><body></body></html>"

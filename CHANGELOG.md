@@ -5,6 +5,22 @@ All notable changes to Pandora are recorded here. The version in
 
 ## [Unreleased]
 
+### Added
+
+- Add three persistent Web themes, responsive desktop/mobile gallery layouts, and grid/list density controls.
+- Add advanced gallery search with tag suggestions, category/rating/page filters, and structured recent-search history.
+
+### Changed
+
+- Separate deterministic fixture checks from credentialed live usability acceptance and require decoded browser image pixels for release evidence.
+- Use cursor-based near-end prefetch for homepage, search, and watched feeds, with deduplication and explicit completion states.
+
+### Fixed
+
+- Support current thumbnail and H@H image delivery through TUN fake-IP DNS, required referrer headers, a shared bounded connection pool, and one retry for transient transport failures.
+- Suppress stale WebSocket errors emitted after React effect cleanup.
+- Reject zero-byte image responses before they can enter the image cache.
+
 ## [0.2.0] - 2026-07-25
 
 ### Added

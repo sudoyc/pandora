@@ -12,11 +12,14 @@ describe('useGalleryView', () => {
 
     expect(result.current.view).toEqual({ kind: 'homepage' });
 
-    act(() => result.current.search('  fixture query  '));
-    expect(result.current.view).toEqual({ kind: 'search', query: 'fixture query' });
-    expect(result.current.searchHistory).toEqual(['fixture query']);
+    act(() => result.current.search({ query: '  fixture query  ' }));
+    expect(result.current.view).toEqual({
+      kind: 'search',
+      criteria: { query: 'fixture query' },
+    });
+    expect(result.current.searchHistory).toEqual([{ query: 'fixture query' }]);
     expect(JSON.parse(localStorage.getItem('searchHistory') ?? '[]')).toEqual([
-      'fixture query',
+      { query: 'fixture query' },
     ]);
 
     act(() => result.current.navigate('popular'));
@@ -28,7 +31,17 @@ describe('useGalleryView', () => {
     const { result } = renderHook(() => useGalleryView());
 
     expect(result.current.searchHistory).toEqual([]);
-    act(() => result.current.search('   '));
+    act(() => result.current.search({ query: '   ' }));
     expect(result.current.view).toEqual({ kind: 'homepage' });
+  });
+
+  it('migrates legacy history and removes one structured search', () => {
+    localStorage.setItem('searchHistory', JSON.stringify(['legacy query']));
+    const { result } = renderHook(() => useGalleryView());
+
+    expect(result.current.searchHistory).toEqual([{ query: 'legacy query' }]);
+    act(() => result.current.removeSearchHistory({ query: 'legacy query' }));
+    expect(result.current.searchHistory).toEqual([]);
+    expect(JSON.parse(localStorage.getItem('searchHistory') ?? '[]')).toEqual([]);
   });
 });

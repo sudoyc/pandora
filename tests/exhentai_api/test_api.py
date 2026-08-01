@@ -28,6 +28,20 @@ async def test_get_homepage():
 
 
 @pytest.mark.asyncio
+async def test_get_homepage_with_next_cursor():
+    mock_client = AsyncMock()
+    mock_client.get_html.return_value = "<html>No hits found</html>"
+    api = ExhentaiAPI(client=mock_client)
+
+    await api.get_homepage(next_gid="4075469")
+
+    mock_client.get_html.assert_called_once_with(
+        f"{BASE_URL}/",
+        params={"next": "4075469"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_parser_failure_raises_sanitized_parse_error():
     upstream_page = "<html>FULL_UPSTREAM_PAGE</html>"
     mock_client = AsyncMock()

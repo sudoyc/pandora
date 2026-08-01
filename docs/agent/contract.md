@@ -190,6 +190,11 @@ Search, homepage, popular, watched, and other gallery-list-style responses are a
 
 Schema: [`schemas/search-response.schema.json`](schemas/search-response.schema.json).
 
+Homepage, search, and watched REST lists are cursor-paginated. The first
+request omits `next`; each subsequent request passes the previous batch's last
+`gid` as the `next` query parameter. Consumers stop on an empty response and
+must also stop if the last `gid` does not advance.
+
 ## Gallery Inspection
 
 ```bash

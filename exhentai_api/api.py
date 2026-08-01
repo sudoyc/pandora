@@ -62,13 +62,24 @@ class ExhentaiAPI:
 
     # ── Existing methods (unchanged) ──────────────────────────────────
 
-    async def get_homepage(self):
-        html = await self.client.get_html(f"{BASE_URL}/")
+    async def get_homepage(self, next_gid: Optional[str] = None):
+        params = {"next": next_gid} if next_gid else None
+        if params:
+            html = await self.client.get_html(f"{BASE_URL}/", params=params)
+        else:
+            html = await self.client.get_html(f"{BASE_URL}/")
         return _parse_response(parse_gallery_list, html)
 
-    async def search(self, params: SearchParams, page: int = 0) -> list[GalleryListItem]:
+    async def search(
+        self,
+        params: SearchParams,
+        page: int = 0,
+        next_gid: Optional[str] = None,
+    ) -> list[GalleryListItem]:
         query_params = params.to_dict()
-        if page > 0:
+        if next_gid:
+            query_params["next"] = next_gid
+        elif page > 0:
             query_params["page"] = str(page)
 
         html = await self.client.get_html(f"{BASE_URL}/", params=query_params)
@@ -312,10 +323,16 @@ class ExhentaiAPI:
         html = await self.client.post_form(f"{BASE_URL}/mytags", data=form_data)
         return _parse_response(parse_mytags, html)
 
-    async def get_watched(self, page: int = 0) -> list[GalleryListItem]:
+    async def get_watched(
+        self,
+        page: int = 0,
+        next_gid: Optional[str] = None,
+    ) -> list[GalleryListItem]:
         """Fetch galleries matching the user's watched tags."""
         params = None
-        if page > 0:
+        if next_gid:
+            params = {"next": next_gid}
+        elif page > 0:
             params = {"page": str(page)}
 
         html = await self.client.get_html(f"{BASE_URL}/watched", params=params)

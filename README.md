@@ -210,6 +210,13 @@ finishes with `git diff --check`. Each stage prints its own `[CHECK]`, `[PASS]`,
 or `[FAIL]` label so a failure identifies the specific gate. Use the narrower
 command printed for a stage when iterating on a failure.
 
+This deterministic suite proves repository contracts and fixture behavior; it
+does not prove that the current authenticated upstream and image CDN are
+usable. Before an upstream-facing release, start the candidate daemon with a
+read-only live session and run `npm --prefix pandora-web run test:live`. The
+acceptance model and non-substitution rules are documented in
+[testing and usability acceptance](docs/development/testing.md).
+
 When exercising the daemon directly from a development checkout, keep the same
 canonical diagnostic order as the installed CLI:
 

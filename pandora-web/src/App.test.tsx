@@ -38,6 +38,10 @@ describe('App gallery feed', () => {
       loadMore,
       hasMore: true,
       isLoading: false,
+      isLoadingMore: false,
+      isRefreshing: false,
+      isReachingEnd: false,
+      isPaginated: true,
       error: undefined,
       mutate: vi.fn(),
     } as ReturnType<typeof useGalleries>);
@@ -48,11 +52,11 @@ describe('App gallery feed', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Gallery Feed' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Browse Index' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: /Fixture Feed Gallery/ }));
     expect(screen.getByText('Fixture drawer 123')).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Load More' }));
+    await user.click(screen.getByRole('button', { name: 'Load next page' }));
     expect(loadMore).toHaveBeenCalledOnce();
   });
 
@@ -66,11 +70,24 @@ describe('App gallery feed', () => {
     expect(screen.getByRole('heading', { name: 'Search: fixture query' })).toBeVisible();
     expect(vi.mocked(useGalleries)).toHaveBeenLastCalledWith({
       kind: 'search',
-      query: 'fixture query',
+      criteria: { query: 'fixture query' },
     });
     expect(JSON.parse(localStorage.getItem('searchHistory') ?? '[]')).toEqual([
-      'fixture query',
+      { query: 'fixture query' },
     ]);
+  });
+
+  it('returns to browse when the last filter-only condition is removed', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Search filters' }));
+    await user.click(screen.getByRole('button', { name: '4+' }));
+    await user.click(screen.getByRole('button', { name: 'Apply search' }));
+    expect(screen.getByRole('heading', { name: 'Search Results' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Rating 4+ filter' }));
+    expect(screen.getByRole('heading', { name: 'Browse Index' })).toBeVisible();
   });
 
   it('switches the feed with a typed navigation view', async () => {
@@ -79,7 +96,29 @@ describe('App gallery feed', () => {
 
     await user.click(screen.getByRole('button', { name: 'Popular' }));
 
-    expect(screen.getByRole('heading', { name: 'popular' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Popular' })).toBeVisible();
     expect(vi.mocked(useGalleries)).toHaveBeenLastCalledWith({ kind: 'popular' });
+  });
+
+  it('switches and persists the color theme', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: /Color theme/ }));
+    await user.click(screen.getByRole('button', { name: 'Use Signal theme' }));
+
+    expect(document.documentElement.dataset.theme).toBe('signal');
+    expect(localStorage.getItem('pandora-theme')).toBe('signal');
+  });
+
+  it('switches gallery layout and density controls', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'List view' }));
+    await user.click(screen.getByRole('button', { name: 'Compact density' }));
+
+    expect(document.querySelector('.gallery-grid')).toHaveAttribute('data-layout', 'list');
+    expect(document.querySelector('.gallery-grid')).toHaveAttribute('data-density', 'compact');
   });
 });

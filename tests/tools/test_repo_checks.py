@@ -85,7 +85,7 @@ def test_unified_check_plan_covers_required_stages():
         "Markdown links and Agent schemas",
         "Python tests",
         "Web unit and component tests",
-        "Web browser tests",
+        "Web browser fixture tests",
         "Web lint",
         "Web build",
         "Git whitespace",
@@ -101,7 +101,7 @@ def test_unified_check_plan_covers_required_stages():
     assert plan["Markdown links and Agent schemas"][-1] == "scripts.repo_checks"
     assert plan["Python tests"][-3:] == ("-m", "pytest", "-q")
     assert plan["Web unit and component tests"][-2:] == ("run", "test:unit")
-    assert plan["Web browser tests"][-2:] == ("run", "test:browser")
+    assert plan["Web browser fixture tests"][-2:] == ("run", "test:browser")
     assert plan["Web lint"][-2:] == ("run", "lint")
     assert plan["Web build"][-2:] == ("run", "build")
     assert plan["Git whitespace"] == ("git", "diff", "--check")
@@ -120,7 +120,7 @@ def test_unified_check_groups_partition_required_stages():
         "Web lock and install",
         "Web dependency audit",
         "Web unit and component tests",
-        "Web browser tests",
+        "Web browser fixture tests",
         "Web lint",
         "Web build",
     ]
@@ -135,8 +135,11 @@ def test_web_test_scripts_and_browser_config_exist():
 
     assert package["scripts"]["test:unit"] == "vitest run"
     assert package["scripts"]["test:browser"] == "playwright test"
+    assert package["scripts"]["test:live"] == "playwright test --config playwright.live.config.ts"
     assert (ROOT / "pandora-web" / "vitest.config.ts").is_file()
     assert (ROOT / "pandora-web" / "playwright.config.ts").is_file()
+    assert (ROOT / "pandora-web" / "playwright.live.config.ts").is_file()
+    assert (ROOT / "pandora-web" / "tests" / "live" / "app.live.spec.ts").is_file()
 
 
 def test_unified_check_group_runs_only_selected_stages(monkeypatch):
@@ -201,6 +204,7 @@ def test_ci_workflow_runs_fixture_only_unified_groups():
         "e-hentai.org",
     )
     assert not any(reference in workflow_text.lower() for reference in forbidden_references)
+    assert "test:live" not in workflow_text
 
 
 def test_unified_check_stops_at_named_failure(capsys, tmp_path):

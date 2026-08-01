@@ -112,10 +112,25 @@ backups and follow the rollback rules below for a deployed instance.
 
 `REL-02` may proceed only after `DIST-02` has completed installation, startup,
 health/readiness, upgrade, and rollback smoke tests and an operator has granted
-the release gate. The operator then verifies a clean checkout, current `main`,
-the successful hosted CI run, the proposed tag `vVERSION`, and the recorded
-artifact checksums before creating or pushing any tag/release. `REL-01` itself
-never performs those remote mutations.
+the release gate. Fixture CI is necessary but is not usability evidence. Before
+creating a tag, run the candidate daemon with a read-only live session and run:
+
+```bash
+npm --prefix pandora-web run test:live
+```
+
+The live gate must report a valid session, a non-empty gallery feed, decodable
+thumbnail/cover/reader pixels, no failed image responses, no direct browser
+requests to upstream image hosts, and no browser runtime errors. Run it against
+a controlled cold image cache for release evidence; a warm-cache rerun is only
+diagnostic. Missing credentials or an unavailable upstream means the live gate
+has no evidence and remains incomplete, not passed. See
+[testing and usability acceptance](testing.md) for the evidence boundaries.
+
+The operator then verifies a clean checkout, current `main`, the successful
+hosted CI run, the proposed tag `vVERSION`, the live acceptance result, and the
+recorded artifact checksums before creating or pushing any tag/release.
+`REL-01` itself never performs those remote mutations.
 
 ## Rollback
 

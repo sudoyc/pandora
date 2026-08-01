@@ -19,6 +19,7 @@ describe('Reader', () => {
     );
     expect(pages[0]).toHaveAttribute('loading', 'eager');
     expect(pages[2]).toHaveAttribute('loading', 'lazy');
+    expect(screen.getByRole('slider', { name: 'Reader width' })).toHaveValue('680');
 
     await user.click(screen.getByRole('button', { name: 'Exit reader' }));
     expect(onClose).toHaveBeenCalledOnce();

@@ -35,7 +35,7 @@ CHECKS: tuple[Check, ...] = (
         ("npm", "--prefix", "pandora-web", "run", "test:unit"),
     ),
     (
-        "Web browser tests",
+        "Web browser fixture tests",
         ("npm", "--prefix", "pandora-web", "run", "test:browser"),
     ),
     ("Web lint", ("npm", "--prefix", "pandora-web", "run", "lint")),

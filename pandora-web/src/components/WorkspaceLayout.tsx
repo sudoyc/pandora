@@ -11,8 +11,10 @@ type WorkspaceLayoutProps = {
 export function WorkspaceLayout({ title, count, onRefresh, children }: WorkspaceLayoutProps) {
   return (
     <section className="workspace-view">
+      <div className="workspace-mobile-brand">PANDORA</div>
       <header className="workspace-header">
         <div>
+          <div className="eyebrow">LOCAL WORKSPACE</div>
           <h1>{title}</h1>
           {count !== undefined && <div className="muted">{count} {count === 1 ? 'item' : 'items'}</div>}
         </div>

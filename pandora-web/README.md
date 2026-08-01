@@ -55,6 +55,11 @@ VITE_PANDORA_DAEMON_URL=http://127.0.0.1:7860 npm run dev
 
 ## Test / lint / build
 
+The default browser suite is deterministic and intercepts daemon requests with
+fixtures. Its image fixtures contain decodable pixels and assert non-zero
+browser image dimensions; it does not claim that the current upstream session
+or CDN is usable.
+
 ```bash
 cd pandora-web
 npm run test:unit
@@ -62,6 +67,24 @@ npm run test:browser
 npm run lint
 npm run build
 ```
+
+For read-only end-to-end usability evidence, start an authenticated daemon and
+run the separate live suite. It requires readiness to be fully healthy, loads
+real gallery data through the daemon, decodes multiple thumbnails plus the
+detail cover and first reader page, rejects failed image responses, and checks
+that the browser never contacts upstream image hosts directly:
+
+```bash
+cd pandora-web
+npm run test:live
+```
+
+The daemon defaults to `http://127.0.0.1:7860`. Override it with
+`PANDORA_LIVE_DAEMON_URL`; change the sample size with
+`PANDORA_LIVE_IMAGE_SAMPLES`. Live tests remain outside hosted CI because they
+require credentials and a changing external service, but they are mandatory
+release-gate evidence for upstream-facing changes. See
+[testing and usability acceptance](../docs/development/testing.md).
 
 ## Recommended next work
 

@@ -182,6 +182,7 @@ export function useWebSocket(): DownloadProgressItem[] {
       };
 
       nextSocket.onerror = (error) => {
+        if (disposed || socket !== nextSocket) return;
         console.error('WebSocket error:', error);
       };
 

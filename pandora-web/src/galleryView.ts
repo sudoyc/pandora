@@ -1,10 +1,12 @@
+import type { SearchCriteria } from './search';
+
 export type GalleryNavigationKind = 'homepage' | 'popular' | 'watched';
 export type WorkspaceNavigationKind = 'favorites' | 'history' | 'downloads' | 'library';
 export type AppNavigationKind = GalleryNavigationKind | WorkspaceNavigationKind;
 
 export type GalleryView =
   | { kind: GalleryNavigationKind }
-  | { kind: 'search'; query: string };
+  | { kind: 'search'; criteria: SearchCriteria };
 
 export type AppView = GalleryView | { kind: WorkspaceNavigationKind };
 
@@ -18,7 +20,9 @@ export function isGalleryView(view: AppView): view is GalleryView {
 }
 
 export function galleryViewTitle(view: GalleryView): string {
-  if (view.kind === 'search') return `Search: ${view.query}`;
-  if (view.kind === 'homepage') return 'Gallery Feed';
-  return view.kind;
+  if (view.kind === 'search') {
+    return view.criteria.query ? `Search: ${view.criteria.query}` : 'Search Results';
+  }
+  if (view.kind === 'homepage') return 'Browse Index';
+  return view.kind[0].toUpperCase() + view.kind.slice(1);
 }

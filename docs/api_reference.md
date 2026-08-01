@@ -20,11 +20,11 @@ async with ExhentaiAPI(client=client) as api:
 
 | Method | Description |
 |---|---|
-| `get_homepage()` | Main gallery list |
-| `search(params, page=0)` | Advanced gallery search |
+| `get_homepage(next_gid=None)` | Main gallery list with optional next-batch cursor |
+| `search(params, page=0, next_gid=None)` | Advanced gallery search; cursor takes precedence over legacy page number |
 | `get_popular()` | Popular galleries |
 | `get_toplist(tl="15")` | Toplist rankings; currently E-Hentai host only in live probing |
-| `get_watched(page=0)` | Watched-tag gallery list; live page may validly be empty |
+| `get_watched(page=0, next_gid=None)` | Watched-tag gallery list; live page may validly be empty |
 | `image_search(file_path, similar=True, covers=True, exp=True)` | SHA1 image search |
 
 ### Gallery
@@ -126,15 +126,21 @@ Schema: [`agent/schemas/upstream-error.schema.json`](agent/schemas/upstream-erro
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/homepage` | Homepage galleries |
-| GET | `/api/search?keyword=...&page=0&min_rating=...&category=...` | Search galleries; `category` is an include bitmask |
+| GET | `/api/homepage?next=...` | Homepage galleries; `next` is the last `gid` from the previous batch |
+| GET | `/api/search?keyword=...&next=...&min_rating=...&category=...` | Search galleries; `next` is the last `gid` from the previous batch and `category` is an include bitmask |
 | GET | `/api/popular` | Popular galleries |
 | GET | `/api/toplist?tl=15` | Toplist as gallery-compatible rows |
-| GET | `/api/watched?page=0` | Watched-tag galleries |
+| GET | `/api/watched?next=...` | Watched-tag galleries; `next` is the last `gid` from the previous batch |
 | GET | `/api/image/proxy?url=...` | Proxy/cache arbitrary image URL |
 
 Search, homepage, popular, toplist, and watched gallery-list responses use the
 [`search response schema`](agent/schemas/search-response.schema.json).
+
+Homepage, search, and watched lists use upstream cursor pagination. Omit
+`next` for the first batch, then pass the final returned gallery's `gid` as
+`next` for the following batch. An empty batch ends the list. The legacy
+numeric `page` parameter remains accepted for compatibility, but cursor
+pagination is the stable interface for continuous gallery feeds.
 
 ### Gallery
 

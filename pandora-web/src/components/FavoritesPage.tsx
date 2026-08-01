@@ -47,7 +47,7 @@ export function FavoritesPage({ onSelect }: FavoritesPageProps) {
         errorLabel="Couldn't load favorites."
         onRetry={() => void mutate()}
       >
-        <div className="gallery-grid">
+        <div className="gallery-grid" data-layout="grid" data-density="cozy">
           {data?.galleries.map((gallery) => (
             <GalleryCard key={gallery.gid} gallery={gallery} onClick={() => onSelect(gallery)} />
           ))}
