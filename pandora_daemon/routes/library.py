@@ -41,6 +41,9 @@ def _find_gallery_dir(download_path: Path, gid: str) -> Path | None:
             return d
     return None
 
+def _library_path(request: Request) -> Path:
+    return request.app.state.pandora.downloads.download_path
+
 
 def _detect_media_type(data: bytes) -> str:
     if data[:4] == b"\x89PNG":
@@ -107,8 +110,7 @@ async def _raise_pdf_export_http_error(
 @router.get("")
 async def list_library(request: Request):
     """List all downloaded galleries by scanning download directory."""
-    config = request.app.state.pandora.config
-    download_path = Path(config.download.path).expanduser()
+    download_path = _library_path(request)
     if not download_path.exists():
         return []
 
@@ -137,8 +139,7 @@ async def export_library_pdf(gid: str, body: PdfExportBody, request: Request):
     if not gid.isdigit():
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
-    config = request.app.state.pandora.config
-    download_path = Path(config.download.path).expanduser()
+    download_path = _library_path(request)
     gallery_dir = _find_gallery_dir(download_path, gid)
     if gallery_dir is None:
         raise HTTPException(status_code=404, detail=f"Gallery {gid} not found")
@@ -205,8 +206,7 @@ async def get_library_file(
     # Validate gid is numeric to prevent path traversal
     if not gid.isdigit():
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
-    config = request.app.state.pandora.config
-    download_path = Path(config.download.path).expanduser()
+    download_path = _library_path(request)
     gallery_dir = _find_gallery_dir(download_path, gid)
     if gallery_dir is None:
         raise HTTPException(status_code=404, detail=f"Gallery {gid} not found")

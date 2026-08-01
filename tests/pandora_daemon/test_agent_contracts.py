@@ -309,6 +309,7 @@ def test_library_item_contract_shape(tmp_path: Path):
     app.include_router(library_router)
     state = MagicMock(spec=AppState)
     state.config = PandoraConfig(download=DownloadConfig(path=str(tmp_path)))
+    state.downloads = MagicMock(download_path=tmp_path)
     app.state.pandora = state
 
     data = TestClient(app).get("/api/library").json()[0]

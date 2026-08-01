@@ -1,9 +1,10 @@
 """Tests for _build_state and lifespan in app.py."""
 from __future__ import annotations
 
+from pathlib import Path
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -33,6 +34,7 @@ def _build_dependencies(config: PandoraConfig):
 
         yield SimpleNamespace(
             database=database,
+            database_class=database_class,
             cache_class=cache_class,
             image_service_class=image_service_class,
             websocket_class=websocket_class,
@@ -97,12 +99,15 @@ class TestBuildState:
             cache=dependencies.cache_class.return_value,
             config=config.cache,
         )
+        selected_dir = Path("~/.config/pandora/providers/selected").expanduser()
+        dependencies.database_class.assert_called_once_with(selected_dir / "pandora.db")
         dependencies.download_manager_class.assert_called_once_with(
             provider=provider,
             config=config.download,
             ws=dependencies.websocket_class.return_value,
             image_service=dependencies.image_service_class.return_value,
-            state_file=ANY,
+            state_file=selected_dir / "downloads.json",
+            download_path=Path(config.download.path).expanduser() / "selected",
         )
 
     @pytest.mark.asyncio
@@ -141,6 +146,27 @@ class TestBuildState:
         assert state.provider is provider
         assert config.provider.id == "fallback"
         fallback_factory.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_non_default_provider_uses_isolated_workspace(self):
+        config = PandoraConfig(provider=ProviderConfig(id="fixture"))
+        provider = MagicMock()
+        provider.provider_id = "fixture"
+        registry = ProviderRegistry(
+            {"default": MagicMock(), "fixture": MagicMock(return_value=provider)},
+            default_provider_id="default",
+        )
+
+        with _build_dependencies(config) as dependencies:
+            state = await _build_state(provider_registry=registry)
+
+        config_dir = Path("~/.config/pandora").expanduser()
+        provider_dir = config_dir / "providers" / "fixture"
+        dependencies.database_class.assert_called_once_with(provider_dir / "pandora.db")
+        call = dependencies.download_manager_class.call_args
+        assert call.kwargs["state_file"] == provider_dir / "downloads.json"
+        assert call.kwargs["download_path"] == Path(config.download.path).expanduser() / "fixture"
+        assert state.config.download.path == "~/Downloads/pandora"
 
 
 class TestLifespan:

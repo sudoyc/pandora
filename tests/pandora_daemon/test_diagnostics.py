@@ -182,8 +182,10 @@ def test_pdf_rest_ws_and_logs_share_ids_without_password(tmp_path, caplog):
     ws = MagicMock()
     ws.broadcast = AsyncMock()
     app = create_app()
+    downloads = MagicMock(download_path=tmp_path)
     app.state.pandora = _state(
         config=PandoraConfig(download=DownloadConfig(path=str(tmp_path))),
+        downloads=downloads,
         ws=ws,
     )
 

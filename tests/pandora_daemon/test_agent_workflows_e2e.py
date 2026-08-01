@@ -72,6 +72,7 @@ class _FixtureDownloads:
     def __init__(self, hub: _FixtureWebSocketHub, output_dir: Path):
         self._hub = hub
         self._output_dir = output_dir
+        self.download_path = output_dir
         self._tasks: dict[str, DownloadTask] = {}
         self.terminal_event = "download_complete"
 

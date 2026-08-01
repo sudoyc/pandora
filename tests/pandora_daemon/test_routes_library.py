@@ -29,6 +29,8 @@ def _make_app(download_path: str):
     app.include_router(router)
     state = MagicMock(spec=AppState)
     state.config = PandoraConfig(download=DownloadConfig(path=download_path))
+    state.downloads = MagicMock()
+    state.downloads.download_path = Path(download_path)
     state.ws = MagicMock()
     state.ws.broadcast = AsyncMock()
     app.state.pandora = state
@@ -61,6 +63,22 @@ class TestLibraryRoutes:
         assert len(data) == 1
         assert data[0]["gid"] == "12345"
         assert data[0]["title"] == "Test Gallery"
+
+    def test_library_uses_active_provider_path_not_public_config_root(self, tmp_path):
+        public_root = tmp_path / "configured-library"
+        provider_root = tmp_path / "configured-library" / "fixture"
+        provider_root.mkdir(parents=True)
+        (provider_root / "12345-Provider Gallery").mkdir()
+        (provider_root / "12345-Provider Gallery" / "metadata.json").write_text(
+            '{"gid": "12345", "title": "Provider Gallery"}'
+        )
+
+        app = _make_app(str(provider_root))
+        app.state.pandora.config.download.path = str(public_root)
+        response = TestClient(app).get("/api/library")
+
+        assert response.status_code == 200
+        assert response.json()[0]["title"] == "Provider Gallery"
 
     def test_library_list_empty_when_no_downloads(self, tmp_path):
         app = _make_app(str(tmp_path))

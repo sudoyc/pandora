@@ -201,7 +201,8 @@ def test_library_list_route_response_matches_schema(tmp_path):
     app = FastAPI()
     app.include_router(library_router)
     app.state.pandora = _state(
-        config=PandoraConfig(download=DownloadConfig(path=str(tmp_path)))
+        config=PandoraConfig(download=DownloadConfig(path=str(tmp_path))),
+        downloads=MagicMock(download_path=tmp_path),
     )
 
     response = TestClient(app).get("/api/library")

@@ -151,13 +151,22 @@ class DownloadTask:
 class DownloadManager:
     """Produces complete offline gallery clones with metadata, covers, thumbs, and pages."""
 
-    def __init__(self, provider, config, ws, image_service, state_file: Path) -> None:
+    def __init__(
+        self,
+        provider,
+        config,
+        ws,
+        image_service,
+        state_file: Path,
+        *,
+        download_path: Path | str | None = None,
+    ) -> None:
         self._provider = provider
         self._config = config
         self._ws = ws
         self._image_service = image_service
         self._state_file = state_file
-        self._download_path = Path(config.path).expanduser()
+        self._download_path = Path(download_path or config.path).expanduser()
         self._tasks: dict[str, DownloadTask] = {}
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._workers: list[asyncio.Task] = []
@@ -165,6 +174,11 @@ class DownloadManager:
         self._save_dirty: bool = False
         self._save_task: asyncio.Task | None = None
         self._submit_lock = asyncio.Lock()
+
+    @property
+    def download_path(self) -> Path:
+        """Return the active provider's isolated library root."""
+        return self._download_path
 
     async def _broadcast_task_event(
         self,

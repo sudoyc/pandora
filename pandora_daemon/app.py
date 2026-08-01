@@ -30,6 +30,7 @@ from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
 from pandora_daemon.tag_database import TagDatabase
 from pandora_daemon.db import PandoraDB
+from pandora_daemon.workspace import ProviderWorkspace
 from pandora_daemon.providers import (
     ProviderContext,
     ProviderRegistry,
@@ -98,9 +99,6 @@ async def _build_state(
     """Construct all components and return AppState."""
     config_path = Path("~/.config/pandora/config.toml").expanduser()
     config = load_config(config_path)
-    db_path = config_path.parent / "pandora.db"
-    db = PandoraDB(db_path)
-    await db.initialize()
     registry = (
         provider_registry
         if provider_registry is not None
@@ -123,7 +121,15 @@ async def _build_state(
         timeout=config.network.timeout,
     )
     provider = registry.create(selected_provider_id, provider_context)
-    config.provider.id = provider.provider_id
+    workspace = ProviderWorkspace.for_provider(
+        config_dir=config_path.parent,
+        library_root=config.download.path,
+        provider_id=provider.provider_id,
+        legacy_provider_id=registry.default_provider_id,
+    )
+    config.provider.id = workspace.provider_id
+    db = PandoraDB(workspace.database_path)
+    await db.initialize()
     cache = CacheManager(config.cache)
     image_service = ImageService(provider=provider, cache=cache, config=config.cache)
     ws = WebSocketManager()
@@ -132,10 +138,13 @@ async def _build_state(
         await tag_database.download_and_load()
     except Exception:
         pass  # Non-fatal: suggest will return empty results
-    state_file = config_path.parent / "downloads.json"
     downloads = DownloadManager(
-        provider=provider, config=config.download, ws=ws,
-        image_service=image_service, state_file=state_file,
+        provider=provider,
+        config=config.download,
+        ws=ws,
+        image_service=image_service,
+        state_file=workspace.state_file,
+        download_path=workspace.library_path,
     )
     return AppState(
         config=config, config_path=config_path,
