@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from pandora_daemon.routes.bookmarks_routes import router as bookmarks_router
+from pandora_daemon.routes.bookmarks import router as bookmarks_router
 from pandora_daemon.routes.browse import router as browse_router
-from pandora_daemon.routes.config_routes import router as config_router
+from pandora_daemon.routes.config import router as config_router
 from pandora_daemon.routes.downloads import router as downloads_router
 from pandora_daemon.routes.favorites import router as favorites_router
 from pandora_daemon.routes.filters import router as filters_router

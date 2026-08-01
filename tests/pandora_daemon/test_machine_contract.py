@@ -29,7 +29,7 @@ from pandora_daemon.cli import (
     _machine_error,
 )
 from pandora_daemon.config import PandoraConfig
-from pandora_daemon.routes.config_routes import router as config_router
+from pandora_daemon.routes.config import router as config_router
 from pandora_daemon.state import AppState
 
 

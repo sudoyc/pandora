@@ -63,7 +63,7 @@ daemon，`exhentai_api` 也不得反向依赖配置、数据库或 UI。
 | 子系统 | 主要模块 | 说明 |
 |---|---|---|
 | 应用生命周期 | `app.py`, `state.py`, `dependencies.py` | 构造共享 `AppState`，按依赖顺序启动和关闭资源 |
-| 配置 | `config.py`, `routes/config_routes.py` | TOML 配置、公开字段白名单和校验 |
+| 配置 | `config.py`, `routes/config.py` | TOML 配置、公开字段白名单和校验 |
 | 数据库 | `db.py` | SQLite/WAL；历史、本地收藏、书签、搜索、过滤和标签缓存 |
 | 图片缓存 | `cache.py` | URL 哈希文件缓存、详情 TTL、容量淘汰 |
 | 图片服务 | `image_service.py` | 受限图片代理、页面解析、预取、缩略图裁剪 |

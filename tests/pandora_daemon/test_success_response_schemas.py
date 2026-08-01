@@ -13,7 +13,7 @@ from pandora_daemon.config import DownloadConfig, PandoraConfig, ProviderConfig
 from pandora_daemon.providers.contracts import GalleryComment, GalleryDetail, GallerySummary
 from pandora_daemon.download import DownloadTask
 from pandora_daemon.routes.browse import router as browse_router
-from pandora_daemon.routes.config_routes import router as config_router
+from pandora_daemon.routes.config import router as config_router
 from pandora_daemon.routes.downloads import router as downloads_router
 from pandora_daemon.routes.gallery import router as gallery_router
 from pandora_daemon.routes.library import router as library_router

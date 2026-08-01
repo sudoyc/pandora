@@ -1,4 +1,4 @@
-"""Tests for pandora_daemon.routes.config_routes module."""
+"""Tests for pandora_daemon.routes.config module."""
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError
@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from pandora_daemon.config import PandoraConfig, ProviderConfig
-from pandora_daemon.routes.config_routes import _pandora_version, router
+from pandora_daemon.routes.config import _pandora_version, router
 from pandora_daemon.state import AppState
 
 
@@ -116,7 +116,7 @@ class TestGetConfig:
 class TestHealth:
     def test_health_version_has_no_hardcoded_fallback(self):
         with patch(
-            "pandora_daemon.routes.config_routes.version",
+            "pandora_daemon.routes.config.version",
             side_effect=PackageNotFoundError,
         ):
             assert _pandora_version() == "unknown"
@@ -188,7 +188,7 @@ class TestUpdateConfig:
         app, _ = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config"):
+        with patch("pandora_daemon.routes.config.save_config"):
             resp = client.put("/api/config", json={"server": {"port": 9999}})
 
         assert resp.status_code == 200
@@ -198,7 +198,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config"):
+        with patch("pandora_daemon.routes.config.save_config"):
             resp = client.put("/api/config", json={"server": {"port": 9999}})
 
         assert resp.status_code == 200
@@ -209,7 +209,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             resp = client.put("/api/config", json={"server": {"port": 9999}})
             assert resp.status_code == 200
             assert state.config.server.port == 9999
@@ -220,7 +220,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config"):
+        with patch("pandora_daemon.routes.config.save_config"):
             resp = client.put("/api/config", json={"download": {"gallery_concurrency": 5}})
 
         assert resp.status_code == 200
@@ -231,7 +231,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config"):
+        with patch("pandora_daemon.routes.config.save_config"):
             resp = client.put("/api/config", json={"cache": {"gallery_ttl_seconds": 600}})
 
         assert resp.status_code == 200
@@ -242,7 +242,7 @@ class TestUpdateConfig:
         app, _ = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             resp = client.put("/api/config", json={"server": {"nonexistent_key": "value"}})
 
         assert resp.status_code == 422
@@ -253,7 +253,7 @@ class TestUpdateConfig:
         app, _ = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             resp = client.put("/api/config", json={"credentials": {"access_token": "secret"}})
 
         assert resp.status_code == 422
@@ -264,7 +264,7 @@ class TestUpdateConfig:
         app, _ = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             resp = client.put("/api/config", json={"server": {"port": 0}})
 
         assert resp.status_code == 422
@@ -284,7 +284,7 @@ class TestUpdateConfig:
         app, _ = _make_app(config=config, config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config"):
+        with patch("pandora_daemon.routes.config.save_config"):
             resp = client.put("/api/config", json={"server": {"port": 8080}})
 
         data = resp.json()
@@ -299,7 +299,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             resp = client.put("/api/config", json={"server": None})
 
         assert resp.status_code == 422
@@ -311,7 +311,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             resp = client.put("/api/config", json={"server": {"port": None}})
 
         assert resp.status_code == 422
@@ -323,7 +323,7 @@ class TestUpdateConfig:
         app, state = _make_app(config_path=config_path)
         client = TestClient(app)
 
-        with patch("pandora_daemon.routes.config_routes.save_config") as mock_save:
+        with patch("pandora_daemon.routes.config.save_config") as mock_save:
             client.put("/api/config", json={"server": {"port": 1234}})
 
         mock_save.assert_called_once_with(state.config, config_path)

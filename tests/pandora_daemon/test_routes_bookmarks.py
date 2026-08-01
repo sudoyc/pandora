@@ -1,4 +1,4 @@
-"""Tests for pandora_daemon.routes.bookmarks_routes module."""
+"""Tests for pandora_daemon.routes.bookmarks module."""
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from pandora_daemon.routes.bookmarks_routes import router
+from pandora_daemon.routes.bookmarks import router
 from pandora_daemon.state import AppState
 
 
