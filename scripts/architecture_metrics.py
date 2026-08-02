@@ -97,7 +97,10 @@ def _normalized(value: str) -> str:
 
 def _contains_provider_name(value: str) -> bool:
     normalized = _normalized(value)
-    return "exhentai" in normalized or "ehentai" in normalized
+    return any(
+        marker in normalized
+        for marker in ("exhentai", "ehentai", "ehtagtranslation")
+    )
 
 
 def _is_provider_module(module: str) -> bool:

@@ -35,7 +35,7 @@ from pandora_daemon.providers.contracts import (
     UserTag,
 )
 from pandora_daemon.providers.registry import ProviderRegistry
-from pandora_daemon.routes import browse, favorites, gallery, user
+from pandora_daemon.routes import browse, favorites, gallery, tags, user
 from pandora_daemon.workspace import ProviderWorkspace
 
 
@@ -94,6 +94,24 @@ _ENDPOINTS = (
         {"name": "fixture:tag", "watched": True},
     ),
     _Endpoint("DELETE", "/api/tags/7", "delete_tag", "ok"),
+    _Endpoint(
+        "GET",
+        "/api/tags/suggest?q=fixture",
+        "tag_catalog.suggest",
+        "tag_suggestions",
+    ),
+    _Endpoint(
+        "GET",
+        "/api/tags/status",
+        "tag_catalog.status",
+        "tag_status",
+    ),
+    _Endpoint(
+        "POST",
+        "/api/tags/refresh",
+        "tag_catalog.refresh",
+        "tag_refresh",
+    ),
     _Endpoint(
         "GET",
         f"/api/gallery/{_FIXTURE_GID}/{_FIXTURE_TOKEN}",
@@ -426,6 +444,17 @@ def _has_expected_result(
             and isinstance(payload[0], dict)
             and payload[0].get("name") == provider.tag.name
         )
+    if shape == "tag_suggestions":
+        return (
+            isinstance(payload, dict)
+            and isinstance(payload.get("suggestions"), list)
+            and bool(payload["suggestions"])
+            and payload["suggestions"][0].get("tag") == "fixture"
+        )
+    if shape == "tag_status":
+        return isinstance(payload, dict) and payload.get("loaded") is True
+    if shape == "tag_refresh":
+        return isinstance(payload, dict) and payload.get("ok") is True
     if shape == "detail":
         return isinstance(payload, dict) and payload.get("gid") == provider.detail.gid
     if shape == "torrents":
@@ -516,7 +545,7 @@ def run_provider_swap_workload() -> dict[str, int]:
     database = _FakeDatabase()
     image_service = ImageService(provider, cache, CacheConfig())
     app = FastAPI()
-    for router in (browse.router, favorites.router, gallery.router, user.router):
+    for router in (browse.router, favorites.router, gallery.router, tags.router, user.router):
         app.include_router(router)
 
     app.dependency_overrides[get_gallery_provider] = lambda: provider

@@ -251,6 +251,20 @@ def test_adapter_surface_and_provider_dependency_metrics_are_precise(tmp_path: P
     assert metrics["untyped_provider_dependencies"] == 1
 
 
+def test_provider_specific_tag_catalog_is_a_generic_symbol_leak(tmp_path: Path):
+    _write_fixture(
+        tmp_path,
+        "pandora_daemon/tag_database.py",
+        '''
+        SOURCE_URL = "https://example.invalid/EhTagTranslation/catalog.json"
+        ''',
+    )
+
+    metrics = collect_static_metrics(tmp_path)
+
+    assert metrics["provider_symbol_leaks"] == 1
+
+
 def test_dependency_accessor_without_mapping_is_not_a_registry(tmp_path: Path):
     _write_fixture(
         tmp_path,
@@ -278,13 +292,13 @@ def test_dependency_accessor_without_mapping_is_not_a_registry(tmp_path: Path):
     assert metrics["missing_provider_registry"] == 1
 
 
-def test_provider_swap_workload_passes_every_required_endpoint():
+def test_provider_swap_workload_exposes_unowned_tag_catalog_endpoints():
     metrics = run_provider_swap_workload()
 
     assert set(metrics) == WORKLOAD_METRIC_KEYS
     assert all(type(value) is int and value >= 0 for value in metrics.values())
     assert metrics["swap_endpoints_passed"] == 23
-    assert metrics["swap_workload_failures"] == 0
+    assert metrics["swap_workload_failures"] == 3
     assert metrics["workspace_isolation_failures"] == 0
 
 def test_score_weights_every_penalty_and_ignores_endpoint_successes():
