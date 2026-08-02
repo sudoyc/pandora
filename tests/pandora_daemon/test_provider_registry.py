@@ -4,7 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 import pandora_daemon.providers.registry as registry_module
-from pandora_daemon.providers.contracts import ProviderContext
+from pandora_daemon.providers.contracts import (
+    GalleryProvider,
+    ProviderContext,
+    TagCatalog,
+)
 from pandora_daemon.providers.registry import ProviderRegistry, default_provider_registry
 
 
@@ -14,6 +18,13 @@ def _context() -> ProviderContext:
         proxy="http://proxy.test:8080",
         timeout=17,
     )
+
+
+def _provider(provider_id: str) -> MagicMock:
+    provider = MagicMock(spec=GalleryProvider)
+    provider.provider_id = provider_id
+    provider.tag_catalog = MagicMock(spec=TagCatalog)
+    return provider
 
 
 def test_provider_ids_and_default_are_normalized() -> None:
@@ -28,8 +39,7 @@ def test_provider_ids_and_default_are_normalized() -> None:
 
 def test_register_and_create_normalize_ids_and_forward_context() -> None:
     context = _context()
-    provider = MagicMock()
-    provider.provider_id = "fixture"
+    provider = _provider("fixture")
     factory = MagicMock(return_value=provider)
     registry = ProviderRegistry()
     registry.register(" Fixture ", factory)
@@ -74,8 +84,7 @@ def test_create_rejects_unknown_ids_and_lists_sorted_available_ids() -> None:
 
 
 def test_create_rejects_factory_identity_mismatch() -> None:
-    provider = MagicMock()
-    provider.provider_id = "unexpected"
+    provider = _provider("unexpected")
     registry = ProviderRegistry({"expected": MagicMock(return_value=provider)})
 
     with pytest.raises(
@@ -93,6 +102,23 @@ def test_create_rejects_factory_without_a_valid_provider_id() -> None:
         registry.create("fixture", _context())
 
 
+def test_create_rejects_incomplete_provider_contract() -> None:
+    provider = SimpleNamespace(provider_id="fixture")
+    registry = ProviderRegistry({"fixture": MagicMock(return_value=provider)})
+
+    with pytest.raises(TypeError, match="does not satisfy GalleryProvider"):
+        registry.create("fixture", _context())
+
+
+def test_create_rejects_incomplete_tag_catalog_contract() -> None:
+    provider = _provider("fixture")
+    provider.tag_catalog = SimpleNamespace()
+    registry = ProviderRegistry({"fixture": MagicMock(return_value=provider)})
+
+    with pytest.raises(TypeError, match="returned an invalid tag_catalog"):
+        registry.create("fixture", _context())
+
+
 def test_default_provider_must_be_registered() -> None:
     with pytest.raises(ValueError, match="Default provider is not registered: missing"):
         ProviderRegistry({"fixture": MagicMock()}, default_provider_id="missing")
@@ -100,8 +126,7 @@ def test_default_provider_must_be_registered() -> None:
 
 def test_default_registry_discovers_builtin_package_and_loads_factory(monkeypatch) -> None:
     context = _context()
-    provider = MagicMock()
-    provider.provider_id = "fixture"
+    provider = _provider("fixture")
     factory = MagicMock(return_value=provider)
     builtin = SimpleNamespace(
         PROVIDER_ID="fixture",

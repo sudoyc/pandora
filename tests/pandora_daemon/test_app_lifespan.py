@@ -10,7 +10,20 @@ import pytest
 
 from pandora_daemon.app import _build_state
 from pandora_daemon.config import NetworkConfig, PandoraConfig, ProviderConfig
-from pandora_daemon.providers import ProviderContext, ProviderRegistry
+from pandora_daemon.providers import (
+    GalleryProvider,
+    ProviderContext,
+    ProviderRegistry,
+    TagCatalog,
+)
+
+
+def _provider(provider_id: str) -> MagicMock:
+    provider = MagicMock(spec=GalleryProvider)
+    provider.provider_id = provider_id
+    provider.tag_catalog = MagicMock(spec=TagCatalog)
+    provider.tag_catalog.initialize = AsyncMock()
+    return provider
 
 
 @contextmanager
@@ -50,9 +63,7 @@ class TestBuildState:
                 timeout=60,
             ),
         )
-        provider = MagicMock()
-        provider.provider_id = "explicit"
-        provider.tag_catalog.initialize = AsyncMock()
+        provider = _provider("explicit")
         explicit_factory = MagicMock(return_value=provider)
         configured_factory = MagicMock()
         fallback_factory = MagicMock()
@@ -108,9 +119,7 @@ class TestBuildState:
     @pytest.mark.asyncio
     async def test_configured_provider_is_selected_without_an_override(self):
         config = PandoraConfig(provider=ProviderConfig(id="configured"))
-        provider = MagicMock()
-        provider.provider_id = "configured"
-        provider.tag_catalog.initialize = AsyncMock()
+        provider = _provider("configured")
         configured_factory = MagicMock(return_value=provider)
         fallback_factory = MagicMock()
         registry = ProviderRegistry(
@@ -128,9 +137,7 @@ class TestBuildState:
     @pytest.mark.asyncio
     async def test_registry_default_is_selected_when_config_has_no_provider_id(self):
         config = PandoraConfig(provider=ProviderConfig())
-        provider = MagicMock()
-        provider.provider_id = "fallback"
-        provider.tag_catalog.initialize = AsyncMock()
+        provider = _provider("fallback")
         fallback_factory = MagicMock(return_value=provider)
         registry = ProviderRegistry(
             {"fallback": fallback_factory},
@@ -147,9 +154,7 @@ class TestBuildState:
     @pytest.mark.asyncio
     async def test_non_default_provider_uses_isolated_workspace(self):
         config = PandoraConfig(provider=ProviderConfig(id="fixture"))
-        provider = MagicMock()
-        provider.provider_id = "fixture"
-        provider.tag_catalog.initialize = AsyncMock()
+        provider = _provider("fixture")
         registry = ProviderRegistry(
             {"default": MagicMock(), "fixture": MagicMock(return_value=provider)},
             default_provider_id="default",

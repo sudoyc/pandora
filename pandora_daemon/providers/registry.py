@@ -5,7 +5,11 @@ from importlib import import_module
 from pathlib import Path
 from pkgutil import iter_modules
 
-from pandora_daemon.providers.contracts import GalleryProvider, ProviderContext
+from pandora_daemon.providers.contracts import (
+    GalleryProvider,
+    ProviderContext,
+    TagCatalog,
+)
 
 
 ProviderFactory = Callable[[ProviderContext], GalleryProvider]
@@ -83,6 +87,14 @@ class ProviderRegistry:
             raise ValueError(
                 "Provider factory identity mismatch: "
                 f"registered {normalized_id!r}, returned {actual_id!r}"
+            )
+        if not isinstance(provider, GalleryProvider):
+            raise TypeError(
+                f"Provider factory for {normalized_id!r} does not satisfy GalleryProvider"
+            )
+        if not isinstance(provider.tag_catalog, TagCatalog):
+            raise TypeError(
+                f"Provider factory for {normalized_id!r} returned an invalid tag_catalog"
             )
         return provider
 

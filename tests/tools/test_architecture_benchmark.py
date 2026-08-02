@@ -300,7 +300,7 @@ def test_provider_swap_workload_passes_every_required_endpoint():
     assert metrics["swap_endpoints_passed"] == 26
     assert metrics["swap_workload_failures"] == 0
     assert metrics["workspace_isolation_failures"] == 0
-    assert metrics["provider_registry_failures"] == 1
+    assert metrics["provider_registry_failures"] == 0
 
 def test_score_weights_every_penalty_and_ignores_endpoint_successes():
     assert set(WEIGHTS) == PENALTY_METRIC_KEYS

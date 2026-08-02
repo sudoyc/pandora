@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +170,7 @@ class GalleryDetail:
     comments_has_more: bool = False
 
 
+@runtime_checkable
 class TagCatalog(Protocol):
     """Provider-owned translated-tag suggestion catalog."""
 
@@ -203,6 +204,7 @@ class BrowseProvider(Protocol):
     ) -> Sequence[GallerySummary]: ...
 
 
+@runtime_checkable
 class GalleryProvider(BrowseProvider, Protocol):
     """Complete provider-neutral contract consumed by the daemon."""
 
