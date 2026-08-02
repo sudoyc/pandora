@@ -5,7 +5,6 @@ from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
-from pandora_daemon.tag_database import TagDatabase
 from pandora_daemon.db import PandoraDB
 
 def get_state(request: Request) -> AppState:
@@ -28,8 +27,6 @@ def get_ws(state: AppState = Depends(get_state)) -> WebSocketManager:
 def get_image_service(state: AppState = Depends(get_state)) -> ImageService:
     return state.image_service
 
-def get_tag_database(state: AppState = Depends(get_state)) -> TagDatabase:
-    return state.tag_database
 
 def get_db(state: AppState = Depends(get_state)) -> PandoraDB:
     return state.db

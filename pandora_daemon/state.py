@@ -12,7 +12,6 @@ from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
-from pandora_daemon.tag_database import TagDatabase
 from pandora_daemon.db import PandoraDB
 
 
@@ -26,7 +25,6 @@ class AppState:
     image_service: ImageService
     ws: WebSocketManager
     db: PandoraDB
-    tag_database: TagDatabase = field(default_factory=TagDatabase)
     _eviction_task: asyncio.Task[None] | None = field(
         default=None, init=False, repr=False
     )

@@ -20,7 +20,7 @@ from pandora_daemon.routes.library import router as library_router
 from pandora_daemon.routes.readiness import router as readiness_router
 from pandora_daemon.routes.tags import router as tags_router
 from pandora_daemon.state import AppState
-from pandora_daemon.tag_database import TagDatabase
+from pandora_daemon.providers.exhentai.tags import ExHentaiTagCatalog
 
 
 SCHEMA_DIR = Path(__file__).parents[2] / "docs" / "agent" / "schemas"
@@ -212,14 +212,16 @@ def test_library_list_route_response_matches_schema(tmp_path):
 
 
 def test_tag_suggest_and_status_routes_match_schemas(tmp_path):
-    tag_db = TagDatabase()
+    tag_db = ExHentaiTagCatalog()
     tag_db.load_from_dict(
         {"data": [{"namespace": "artist", "data": {"alice": {"name": "Alice"}}}]},
         cache_path=tmp_path / "db.text.json",
     )
     app = FastAPI()
     app.include_router(tags_router)
-    app.state.pandora = _state(tag_database=tag_db)
+    provider = MagicMock()
+    provider.tag_catalog = tag_db
+    app.state.pandora = _state(provider=provider)
     client = TestClient(app)
 
     suggestions = client.get("/api/tags/suggest?q=ali")

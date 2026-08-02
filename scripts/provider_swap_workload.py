@@ -1,7 +1,7 @@
 """Deterministic in-process workload for the complete gallery-provider seam."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -31,6 +31,7 @@ from pandora_daemon.providers.contracts import (
     GalleryTorrent,
     ProviderContext,
     RatingResult,
+    TagSuggestion,
     UserProfile,
     UserTag,
 )
@@ -199,6 +200,29 @@ def _gallery_detail() -> GalleryDetail:
     )
 
 
+class _FakeTagCatalog:
+    def __init__(
+        self,
+        record: Callable[[str, tuple[object, ...], dict[str, object]], None],
+    ) -> None:
+        self._record = record
+
+    async def initialize(self) -> None:
+        self._record("tag_catalog.initialize", (), {})
+
+    def status(self) -> dict[str, object]:
+        self._record("tag_catalog.status", (), {})
+        return {"loaded": True, "entries": 1}
+
+    async def refresh(self, *, force: bool = False) -> dict[str, object]:
+        self._record("tag_catalog.refresh", (), {"force": force})
+        return {"ok": True, "updated": False, "status": self.status()}
+
+    def suggest(self, query: str, limit: int = 10) -> list[TagSuggestion]:
+        self._record("tag_catalog.suggest", (query,), {"limit": limit})
+        return [TagSuggestion("fixture", "fixture", "Fixture")]
+
+
 class FakeGalleryProvider:
     """Provider double implementing every daemon-consumed capability."""
 
@@ -210,6 +234,7 @@ class FakeGalleryProvider:
         self.detail = _gallery_detail()
         self.tag = UserTag(7, "fixture:tag", True, False, None, 0)
         self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+        self.tag_catalog = _FakeTagCatalog(self._record)
 
     def _record(self, method: str, args: tuple[object, ...], kwargs: dict[str, object]) -> None:
         self.calls.append((method, args, kwargs))

@@ -24,7 +24,7 @@ from pandora_daemon.routes.gallery import _detail_to_dict
 from pandora_daemon.routes.library import router as library_router
 from pandora_daemon.routes.tags import router as tags_router
 from pandora_daemon.state import AppState
-from pandora_daemon.tag_database import TagDatabase
+from pandora_daemon.providers.exhentai.tags import ExHentaiTagCatalog
 
 
 def _assert_keys(data: dict, keys: set[str]) -> None:
@@ -319,12 +319,13 @@ def test_library_item_contract_shape(tmp_path: Path):
 
 
 def test_tag_suggestion_contract_shape():
-    tag_db = TagDatabase()
+    tag_db = ExHentaiTagCatalog()
     tag_db.load_from_dict({"data": [{"namespace": "artist", "data": {"alice": {"name": "Alice"}}}]})
     app = FastAPI()
     app.include_router(tags_router)
     state = MagicMock(spec=AppState)
-    state.tag_database = tag_db
+    state.provider = MagicMock()
+    state.provider.tag_catalog = tag_db
     app.state.pandora = state
 
     data = TestClient(app).get("/api/tags/suggest?q=ali").json()

@@ -1,6 +1,6 @@
 import pytest
 import httpx
-from pandora_daemon.tag_database import TagDatabase, TagEntry
+from pandora_daemon.providers.exhentai.tags import ExHentaiTagCatalog
 
 
 SAMPLE_DB_JSON = {
@@ -33,7 +33,7 @@ SAMPLE_DB_JSON = {
 
 
 def test_status_before_load_reports_empty_metadata(tmp_path):
-    db = TagDatabase()
+    db = ExHentaiTagCatalog()
 
     status = db.status(cache_path=tmp_path / "db.text.json")
 
@@ -48,7 +48,7 @@ def test_status_before_load_reports_empty_metadata(tmp_path):
 
 
 def test_load_from_dict_records_metadata(tmp_path):
-    db = TagDatabase()
+    db = ExHentaiTagCatalog()
 
     db.load_from_dict(SAMPLE_DB_JSON, cache_path=tmp_path / "db.text.json", metadata={"etag": '"v1"'})
 
@@ -62,7 +62,7 @@ def test_load_from_dict_records_metadata(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_download_and_load_writes_cache_and_metadata_atomically(tmp_path, monkeypatch):
+async def test_initialize_writes_cache_and_metadata_atomically(tmp_path, monkeypatch):
     class FakeAsyncClient:
         def __init__(self, *args, **kwargs):
             pass
@@ -76,11 +76,13 @@ async def test_download_and_load_writes_cache_and_metadata_atomically(tmp_path, 
         async def get(self, url, **kwargs):
             return httpx.Response(200, json=SAMPLE_DB_JSON, headers={"ETag": '"v1"'})
 
-    monkeypatch.setattr("pandora_daemon.tag_database.httpx.AsyncClient", FakeAsyncClient)
-    db = TagDatabase()
+    monkeypatch.setattr(
+        "pandora_daemon.providers.exhentai.tags.httpx.AsyncClient", FakeAsyncClient
+    )
+    db = ExHentaiTagCatalog()
     cache_path = tmp_path / "db.text.json"
 
-    await db.download_and_load(cache_path=cache_path)
+    await db.initialize(cache_path=cache_path)
 
     assert cache_path.exists()
     metadata_path = tmp_path / "metadata.json"
@@ -113,8 +115,10 @@ async def test_refresh_uses_etag_and_preserves_loaded_data_on_304(tmp_path, monk
             seen_headers.append(headers or {})
             return httpx.Response(304)
 
-    monkeypatch.setattr("pandora_daemon.tag_database.httpx.AsyncClient", FakeAsyncClient)
-    db = TagDatabase()
+    monkeypatch.setattr(
+        "pandora_daemon.providers.exhentai.tags.httpx.AsyncClient", FakeAsyncClient
+    )
+    db = ExHentaiTagCatalog()
     cache_path = tmp_path / "db.text.json"
     db.load_from_dict(SAMPLE_DB_JSON, cache_path=cache_path, metadata={"etag": '"v1"'})
 
@@ -142,8 +146,10 @@ async def test_failed_refresh_preserves_entries_and_records_last_error(tmp_path,
         async def get(self, url, headers=None, **kwargs):
             raise httpx.ConnectError("network down")
 
-    monkeypatch.setattr("pandora_daemon.tag_database.httpx.AsyncClient", FakeAsyncClient)
-    db = TagDatabase()
+    monkeypatch.setattr(
+        "pandora_daemon.providers.exhentai.tags.httpx.AsyncClient", FakeAsyncClient
+    )
+    db = ExHentaiTagCatalog()
     cache_path = tmp_path / "db.text.json"
     db.load_from_dict(SAMPLE_DB_JSON, cache_path=cache_path)
 
@@ -158,9 +164,9 @@ async def test_failed_refresh_preserves_entries_and_records_last_error(tmp_path,
     assert "network down" in result["status"]["last_error"]
 
 
-class TestTagDatabase:
+class TestExHentaiTagCatalog:
     def setup_method(self):
-        self.db = TagDatabase()
+        self.db = ExHentaiTagCatalog()
         self.db.load_from_dict(SAMPLE_DB_JSON)
 
     def test_load_entry_count(self):

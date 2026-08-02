@@ -114,6 +114,13 @@ class UserProfile:
 
 
 @dataclass(frozen=True, slots=True)
+class TagSuggestion:
+    namespace: str
+    tag: str
+    translation: str
+
+
+@dataclass(frozen=True, slots=True)
 class UserTag:
     id: int
     name: str
@@ -163,6 +170,18 @@ class GalleryDetail:
     comments_has_more: bool = False
 
 
+class TagCatalog(Protocol):
+    """Provider-owned translated-tag suggestion catalog."""
+
+    async def initialize(self) -> None: ...
+
+    def status(self) -> Mapping[str, object]: ...
+
+    async def refresh(self, *, force: bool = False) -> Mapping[str, object]: ...
+
+    def suggest(self, query: str, limit: int = 10) -> Sequence[TagSuggestion]: ...
+
+
 class BrowseProvider(Protocol):
     async def get_homepage(self, next_gid: str | None = None) -> Sequence[GallerySummary]: ...
 
@@ -189,6 +208,7 @@ class GalleryProvider(BrowseProvider, Protocol):
 
     provider_id: str
     auth_configured: bool
+    tag_catalog: TagCatalog
 
     async def get_gallery_details(self, gid: str, token: str) -> GalleryDetail: ...
 

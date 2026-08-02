@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
+
+from pandora_daemon.providers.contracts import TagSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -17,18 +18,11 @@ DEFAULT_CACHE_PATH = Path("~/.cache/pandora/tags/db.text.json")
 DEFAULT_METADATA_PATH = Path("~/.cache/pandora/tags/metadata.json")
 
 
-@dataclass
-class TagEntry:
-    namespace: str
-    tag: str
-    translation: str
-
-
-class TagDatabase:
+class ExHentaiTagCatalog:
     """In-memory EhTagTranslation database with substring search."""
 
     def __init__(self) -> None:
-        self.entries: list[TagEntry] = []
+        self.entries: list[TagSuggestion] = []
         self._lookup: dict[tuple[str, str], str] = {}  # (namespace, tag) → translation
         self._loaded = False
         self._metadata: dict[str, Any] = {}
@@ -66,7 +60,8 @@ class TagDatabase:
         base["cache_path"] = str(cache_path)
         base["entries"] = entries
         base["upstream_repo"] = data.get("repo")
-        head = data.get("head") if isinstance(data.get("head"), dict) else {}
+        head_value = data.get("head")
+        head = head_value if isinstance(head_value, dict) else {}
         base["upstream_sha"] = head.get("sha")
         base["updated_at"] = datetime.now(timezone.utc).isoformat()
         return base
@@ -80,13 +75,13 @@ class TagDatabase:
     ) -> None:
         """Parse db.text.json structure into flat entry list."""
         cache_path = cache_path.expanduser()
-        entries: list[TagEntry] = []
+        entries: list[TagSuggestion] = []
         lookup: dict[tuple[str, str], str] = {}
         for ns_block in data.get("data", []):
             namespace = ns_block.get("namespace", "")
             for tag, info in ns_block.get("data", {}).items():
                 translation = info.get("name", "")
-                entry = TagEntry(namespace=namespace, tag=tag, translation=translation)
+                entry = TagSuggestion(namespace=namespace, tag=tag, translation=translation)
                 entries.append(entry)
                 lookup[(namespace, tag)] = translation
         self.entries = entries
@@ -99,7 +94,7 @@ class TagDatabase:
             entries=len(entries),
         )
         self._last_error = None
-        logger.info("TagDatabase loaded %d entries", len(entries))
+        logger.info("ExHentai tag catalog loaded %d entries", len(entries))
 
     def load_from_file(self, path: Path) -> None:
         """Load from a local JSON file."""
@@ -129,8 +124,8 @@ class TagDatabase:
         tmp_path.write_bytes(content)
         tmp_path.replace(path)
 
-    async def download_and_load(self, cache_path: Path = DEFAULT_CACHE_PATH) -> None:
-        """Download db.text.json from GitHub, cache locally, and load."""
+    async def initialize(self, cache_path: Path = DEFAULT_CACHE_PATH) -> None:
+        """Load the cached catalog or download the current release."""
         cache_path = cache_path.expanduser()
         cache_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -171,13 +166,13 @@ class TagDatabase:
                     resp.raise_for_status()
                 data = resp.json()
 
-                entries: list[TagEntry] = []
+                entries: list[TagSuggestion] = []
                 lookup: dict[tuple[str, str], str] = {}
                 for ns_block in data.get("data", []):
                     namespace = ns_block.get("namespace", "")
                     for tag, info in ns_block.get("data", {}).items():
                         translation = info.get("name", "")
-                        entry = TagEntry(namespace=namespace, tag=tag, translation=translation)
+                        entry = TagSuggestion(namespace=namespace, tag=tag, translation=translation)
                         entries.append(entry)
                         lookup[(namespace, tag)] = translation
 
@@ -197,11 +192,11 @@ class TagDatabase:
                 self._loaded = True
                 self._metadata = new_metadata
                 self._last_error = None
-                logger.info("TagDatabase updated from GitHub")
+                logger.info("ExHentai tag catalog updated from GitHub")
                 return {"ok": True, "updated": True, "status": self.status(cache_path=cache_path)}
         except Exception as e:
             self._last_error = str(e)
-            logger.warning("TagDatabase update check failed", exc_info=True)
+            logger.warning("ExHentai tag catalog update check failed", exc_info=True)
             return {
                 "ok": False,
                 "updated": False,
@@ -209,13 +204,13 @@ class TagDatabase:
                 "status": self.status(cache_path=cache_path),
             }
 
-    def suggest(self, query: str, limit: int = 10) -> list[TagEntry]:
+    def suggest(self, query: str, limit: int = 10) -> list[TagSuggestion]:
         """Substring match on tag name or translation. Prefix matches ranked first."""
         if not query:
             return []
         q = query.lower()
-        prefix_matches: list[TagEntry] = []
-        substring_matches: list[TagEntry] = []
+        prefix_matches: list[TagSuggestion] = []
+        substring_matches: list[TagSuggestion] = []
         for entry in self.entries:
             tag_lower = entry.tag.lower()
             if tag_lower.startswith(q) or entry.translation.startswith(query):

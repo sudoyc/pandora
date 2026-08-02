@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
-from pandora_daemon.tag_database import TagDatabase, TagEntry
+from pandora_daemon.providers.exhentai.tags import ExHentaiTagCatalog
 
 SAMPLE_DB = {
     "data": [
@@ -21,11 +21,11 @@ def app_with_tags():
     from pandora_daemon.app import create_app
 
     app = create_app()
-    tag_db = TagDatabase()
+    tag_db = ExHentaiTagCatalog()
     tag_db.load_from_dict(SAMPLE_DB)
 
     mock_state = MagicMock()
-    mock_state.tag_database = tag_db
+    mock_state.provider.tag_catalog = tag_db
     app.state.pandora = mock_state
     return app
 
@@ -82,7 +82,7 @@ def test_tags_refresh_passes_force_false_by_default(app_with_tags, monkeypatch):
         calls.append(force)
         return {"ok": True, "updated": False, "status": {"entries": 2}}
 
-    monkeypatch.setattr(TagDatabase, "refresh", fake_refresh)
+    monkeypatch.setattr(ExHentaiTagCatalog, "refresh", fake_refresh)
     client = TestClient(app_with_tags)
 
     resp = client.post("/api/tags/refresh")
@@ -99,7 +99,7 @@ def test_tags_refresh_passes_force_true(app_with_tags, monkeypatch):
         calls.append(force)
         return {"ok": True, "updated": True, "status": {"entries": 2}}
 
-    monkeypatch.setattr(TagDatabase, "refresh", fake_refresh)
+    monkeypatch.setattr(ExHentaiTagCatalog, "refresh", fake_refresh)
     client = TestClient(app_with_tags)
 
     resp = client.post("/api/tags/refresh?force=true")

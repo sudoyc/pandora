@@ -21,16 +21,11 @@ def _build_dependencies(config: PandoraConfig):
         patch("pandora_daemon.app.CacheManager") as cache_class,
         patch("pandora_daemon.app.ImageService") as image_service_class,
         patch("pandora_daemon.app.WebSocketManager") as websocket_class,
-        patch("pandora_daemon.app.TagDatabase") as tag_database_class,
         patch("pandora_daemon.app.DownloadManager") as download_manager_class,
     ):
         database = MagicMock()
         database.initialize = AsyncMock()
         database_class.return_value = database
-
-        tag_database = MagicMock()
-        tag_database.download_and_load = AsyncMock()
-        tag_database_class.return_value = tag_database
 
         yield SimpleNamespace(
             database=database,
@@ -38,7 +33,6 @@ def _build_dependencies(config: PandoraConfig):
             cache_class=cache_class,
             image_service_class=image_service_class,
             websocket_class=websocket_class,
-            tag_database=tag_database,
             download_manager_class=download_manager_class,
         )
 
@@ -58,6 +52,7 @@ class TestBuildState:
         )
         provider = MagicMock()
         provider.provider_id = "explicit"
+        provider.tag_catalog.initialize = AsyncMock()
         explicit_factory = MagicMock(return_value=provider)
         configured_factory = MagicMock()
         fallback_factory = MagicMock()
@@ -93,7 +88,7 @@ class TestBuildState:
         )
         assert context.credentials is not config.provider.credentials
         dependencies.database.initialize.assert_awaited_once()
-        dependencies.tag_database.download_and_load.assert_awaited_once()
+        provider.tag_catalog.initialize.assert_awaited_once()
         dependencies.image_service_class.assert_called_once_with(
             provider=provider,
             cache=dependencies.cache_class.return_value,
@@ -115,6 +110,7 @@ class TestBuildState:
         config = PandoraConfig(provider=ProviderConfig(id="configured"))
         provider = MagicMock()
         provider.provider_id = "configured"
+        provider.tag_catalog.initialize = AsyncMock()
         configured_factory = MagicMock(return_value=provider)
         fallback_factory = MagicMock()
         registry = ProviderRegistry(
@@ -134,6 +130,7 @@ class TestBuildState:
         config = PandoraConfig(provider=ProviderConfig())
         provider = MagicMock()
         provider.provider_id = "fallback"
+        provider.tag_catalog.initialize = AsyncMock()
         fallback_factory = MagicMock(return_value=provider)
         registry = ProviderRegistry(
             {"fallback": fallback_factory},
@@ -152,6 +149,7 @@ class TestBuildState:
         config = PandoraConfig(provider=ProviderConfig(id="fixture"))
         provider = MagicMock()
         provider.provider_id = "fixture"
+        provider.tag_catalog.initialize = AsyncMock()
         registry = ProviderRegistry(
             {"default": MagicMock(), "fixture": MagicMock(return_value=provider)},
             default_provider_id="default",

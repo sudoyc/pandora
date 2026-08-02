@@ -34,7 +34,6 @@ def _make_state() -> AppState:
         image_service=image_service,
         ws=MagicMock(),
         db=db,
-        tag_database=MagicMock(),
     )
 
 

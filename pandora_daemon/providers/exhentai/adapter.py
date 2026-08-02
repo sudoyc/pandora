@@ -40,6 +40,7 @@ from pandora_daemon.providers.exhentai.upstream.models.vote import (
     VoteCommentResult,
 )
 from pandora_daemon.providers.exhentai.media import ExHentaiMedia
+from pandora_daemon.providers.exhentai.tags import ExHentaiTagCatalog
 from pandora_daemon.providers.contracts import (
     AccountOverview,
     ArchiveOption,
@@ -54,6 +55,7 @@ from pandora_daemon.providers.contracts import (
     ProviderContext,
     GalleryTorrent,
     RatingResult,
+    TagCatalog,
     UserProfile,
     UserTag,
 )
@@ -246,10 +248,12 @@ class ExHentaiProvider:
         *,
         owns_client: bool = False,
         media: ExHentaiMedia | None = None,
+        tag_catalog: TagCatalog | None = None,
         auth_configured: bool = False,
     ) -> None:
         self._api = api
         self._media = media
+        self.tag_catalog = tag_catalog or ExHentaiTagCatalog()
         self._owns_client = owns_client
         self.auth_configured = auth_configured
         self._closed = False

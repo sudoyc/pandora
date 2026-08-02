@@ -28,7 +28,6 @@ from pandora_daemon.download import DownloadManager
 from pandora_daemon.cache import CacheManager
 from pandora_daemon.ws import WebSocketManager
 from pandora_daemon.image_service import ImageService
-from pandora_daemon.tag_database import TagDatabase
 from pandora_daemon.db import PandoraDB
 from pandora_daemon.workspace import ProviderWorkspace
 from pandora_daemon.providers import (
@@ -133,9 +132,8 @@ async def _build_state(
     cache = CacheManager(config.cache)
     image_service = ImageService(provider=provider, cache=cache, config=config.cache)
     ws = WebSocketManager()
-    tag_database = TagDatabase()
     try:
-        await tag_database.download_and_load()
+        await provider.tag_catalog.initialize()
     except Exception:
         pass  # Non-fatal: suggest will return empty results
     downloads = DownloadManager(
@@ -151,7 +149,7 @@ async def _build_state(
         provider=provider,
         downloads=downloads, cache=cache,
         image_service=image_service, ws=ws,
-        db=db, tag_database=tag_database,
+        db=db,
     )
 
 
