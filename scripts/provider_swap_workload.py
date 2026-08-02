@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -28,6 +28,7 @@ from pandora_daemon.providers.contracts import (
     GalleryDetail,
     GallerySearchQuery,
     GallerySummary,
+    GalleryProvider,
     GalleryTorrent,
     ProviderContext,
     RatingResult,
@@ -504,9 +505,29 @@ def _method_ran_since(
     return any(name == method for name, _, _ in provider.calls[call_count:])
 
 
+class _IncompleteProvider:
+    provider_id = "incomplete"
+
+
 def _provider_registry_failures() -> int:
     failures = 0
     context = ProviderContext(credentials={}, proxy="", timeout=30)
+    incomplete = ProviderRegistry(
+        {
+            "incomplete": lambda _: cast(
+                GalleryProvider,
+                _IncompleteProvider(),
+            )
+        },
+        default_provider_id="incomplete",
+    )
+    try:
+        incomplete.create("incomplete", context)
+    except (TypeError, ValueError):
+        pass
+    else:
+        failures += 1
+
 
     try:
         ProviderRegistry({"../escape": lambda _: FakeGalleryProvider("../escape")})
