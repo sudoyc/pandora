@@ -51,8 +51,8 @@ Pandora 是一个本地运行的画廊浏览、检索、下载和离线库服务
 
 | 层 | 仓库位置 | 拥有的职责 | 明确不拥有 |
 |---|---|---|---|
-| Provider 契约 | `pandora_daemon/providers/contracts.py` | provider-neutral 查询、详情、媒体与错误语义 | 上游字段、凭据格式、持久化 |
-| Provider adapter | `pandora_daemon/providers/<id>/` | 上游 client、parser、model 映射和媒体访问 | 配置、数据库、队列、UI |
+| Provider 契约 | `pandora_daemon/providers/contracts.py` | provider-neutral 查询、详情、媒体、翻译标签目录与错误语义 | 上游字段、凭据格式、持久化 |
+| Provider adapter | `pandora_daemon/providers/<id>/` | 上游 client、parser、model 映射、媒体访问和 provider-specific 标签目录 | 配置、数据库、队列、UI |
 | 本地服务 | `pandora_daemon/` | provider 选择、凭据和 session、REST/WS、SQLite、缓存、下载、本地库、配置 | UI 渲染、agent 决策 |
 | CLI | `pandora_daemon/cli.py` | daemon 的人类和 JSON/NDJSON 客户端 | 直接抓取、持久化副本 |
 | Agent Pack | `docs/agent/` | 机器契约、schema、工作流、故障处理 | 业务状态、第二套控制平面 |
@@ -64,14 +64,14 @@ Pandora 是一个本地运行的画廊浏览、检索、下载和离线库服务
 | 子系统 | 主要模块 | 说明 |
 |---|---|---|
 | 应用生命周期 | `app.py`, `state.py`, `dependencies.py` | 构造共享 `AppState`，按依赖顺序启动和关闭资源 |
-| Provider 组合 | `providers/registry.py`, `workspace.py` | 确定性选择 adapter，并隔离每个 provider 的数据库、下载状态和离线库 |
+| Provider 组合 | `providers/registry.py`, `workspace.py` | 确定性选择并验证 adapter，隔离每个 provider 的数据库、下载状态和离线库 |
 | 配置 | `config.py`, `routes/config.py` | TOML 配置、公开字段白名单和校验 |
 | 数据库 | `db.py` | SQLite/WAL；历史、本地收藏、书签、搜索、过滤和标签缓存 |
 | 图片缓存 | `cache.py` | URL 哈希文件缓存、详情 TTL、容量淘汰 |
 | 图片服务 | `image_service.py` | 受限图片代理、页面解析、预取、缩略图裁剪 |
 | 下载 | `download.py`, `routes/downloads.py` | 队列、并发、重试、原子文件写入、恢复和公开状态 |
 | 本地库/PDF | `routes/library.py`, `pdf_export.py` | 扫描已下载内容、受限文件服务、PDF 导出 |
-| 标签库 | `tag_database.py`, `routes/tags.py` | 翻译标签缓存、状态、刷新和建议 |
+| 翻译标签 | `providers/<id>/tags.py`, `routes/tags.py` | provider-owned 标签目录的初始化、缓存、状态、刷新和建议 |
 | 实时事件 | `ws.py` | WebSocket 连接管理与事件广播 |
 | HTTP 路由 | `routes/` | 浏览、详情、收藏、用户状态和本地数据接口 |
 
@@ -85,15 +85,16 @@ Pandora 是一个本地运行的画廊浏览、检索、下载和离线库服务
 | SQLite 数据 | `~/.config/pandora/pandora.db` | daemon | 专用 REST/CLI 接口 |
 | 下载队列快照 | `~/.config/pandora/downloads.json` | daemon | 内部 v1 envelope；仅经公开 download DTO 暴露，不含 token/本地路径 |
 | 图片缓存 | `~/.cache/pandora/images` | daemon | 受限图片/页面接口 |
-| 标签数据库缓存 | `~/.cache/pandora/tags` | daemon | status/refresh/suggest 接口 |
+| 标签目录缓存 | `~/.cache/pandora/tags` | daemon 内的 active provider adapter | status/refresh/suggest 接口 |
 | 离线画廊 | `download.path`，默认 `~/Downloads/pandora` | daemon | library API 和 PDF export |
 | Web 临时视图状态 | 浏览器内存/`localStorage` | Web | 不成为业务事实来源 |
 
 默认 provider 继续使用表中的兼容路径。非默认 provider 使用
 `~/.config/pandora/providers/<provider-id>/pandora.db`、同目录的 `downloads.json`，以及
 `download.path/<provider-id>`；公开配置中的 `download.path` 仍是用户配置的根目录。
-Provider ID 是规范化的小写安全路径组件，且 factory 声明的 ID 必须与 registry 选择一致；
-不合法或不一致的 ID 在数据库、下载状态或 library 初始化前终止启动。
+Provider ID 是规范化的小写安全路径组件，factory 声明的 ID 必须与 registry 选择一致，且
+factory 结果必须运行时满足完整 `GalleryProvider` 和 `TagCatalog` 协议；不合法或不完整的
+adapter 在数据库、下载状态或 library 初始化前终止启动。
 
 consumer 不应直接编辑 daemon 状态文件。需要修复或迁移时，应由 daemon/CLI 提供
 显式操作并保持原子写入。
@@ -103,9 +104,9 @@ consumer 不应直接编辑 daemon 状态文件。需要修复或迁移时，应
 ### 启动与探测
 
 ```text
-load config -> discover built-in adapters -> select provider -> resolve provider workspace
-            -> initialize SQLite/cache/tag DB/download manager -> start workers and eviction loop
-            -> expose health/config/readiness/status
+load config -> discover built-in adapters -> select and validate provider -> resolve provider workspace
+            -> initialize SQLite/cache/provider tag catalog/download manager
+            -> start workers and eviction loop -> expose health/config/readiness/status
 ```
 
 `health.auth_configured` 只表示凭据字段已配置，不表示上游会话已验证。`readiness` 通过

@@ -4,12 +4,15 @@
 
 `pandora_daemon.providers.exhentai` 是 Pandora 的内置 provider adapter。其 `upstream/` 子包使用 `httpx` 和 `BeautifulSoup4` 实现无状态 HTTP、HTML parser 与上游 model；consumer 不应直接导入该实现，公共操作入口仍是 daemon REST/WS 与 CLI。
 
+`tags.py` 实现 provider-neutral `TagCatalog`，在 adapter 内拥有 EhTagTranslation 的下载、缓存、状态、刷新和建议；通用 daemon 路由不导入该实现。
+
 ## 包结构
 
 ```
 pandora_daemon/providers/exhentai/
 ├── adapter.py           # GalleryProvider 契约映射
 ├── media.py             # provider-specific 图片与缩略图访问
+├── tags.py              # EhTagTranslation TagCatalog 实现
 └── upstream/
     ├── __init__.py      # 导出 ExhentaiAPI、ExhentaiClient 与上游 model
     ├── api.py           # ExhentaiAPI: 22 个异步方法

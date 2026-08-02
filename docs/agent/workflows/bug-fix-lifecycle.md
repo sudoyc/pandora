@@ -45,7 +45,7 @@ Typical repair targets:
 
 - `pandora_daemon/routes/*.py`
 - `pandora_daemon/cli.py`
-- `pandora_daemon/tag_database.py`
+- `pandora_daemon/providers/exhentai/tags.py`
 - `docs/agent/workflows/*.md`
 - `docs/agent/snippets/*.md`
 - `.agents/skills/pandora/SKILL.md`

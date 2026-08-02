@@ -86,7 +86,7 @@ uv run python -m pandora_daemon.cli tags status --json
 - `readiness --json` runs read-only authenticated probes for homepage, search,
   popular, and home without returning upstream content.
 - `status --json` returns the download queue state.
-- `tags status --json` reports the EhTagTranslation cache state for search agents.
+- `tags status --json` reports the active provider's translated-tag catalog state; the built-in ExHentai provider uses EhTagTranslation.
 
 `GET /api/health` returns the minimal successful daemon capability envelope.
 Its stable shape is defined by

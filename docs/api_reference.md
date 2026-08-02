@@ -5,11 +5,13 @@ This document summarizes Pandora's provider contracts, the built-in provider dev
 ## Provider application contract
 
 `pandora_daemon.providers.contracts` defines immutable provider context, search, browse, detail,
-account, mutation-result, and media metadata values together with the `GalleryProvider` protocol.
-Routes, image handling, downloads, and application state depend on these types only.
-Every provider supplies a stable `provider_id`, authentication readiness, browse/search/detail
-operations, page/thumbnail/media access, supported mutations, home diagnostics, and `aclose()`.
-Adapter-owned `GalleryDetail.provider_data` is opaque outside that adapter and is never serialized.
+account, mutation-result, media metadata, and translated-tag suggestion values together with the
+`GalleryProvider` and `TagCatalog` protocols. Routes, image handling, downloads, and application
+state depend on these types only. Every provider supplies a stable `provider_id`, authentication
+readiness, a conforming tag catalog, browse/search/detail operations, page/thumbnail/media access,
+supported mutations, home diagnostics, and `aclose()`. The registry rejects incomplete protocol
+implementations at creation time. Adapter-owned `GalleryDetail.provider_data` is opaque outside
+that adapter and is never serialized.
 
 ## Built-in provider developer API
 
@@ -243,7 +245,7 @@ request ID with the ID of the state-changing request.
 | GET | `/api/tags` | Account watched/hidden tags |
 | POST | `/api/tags` | Add account tag |
 | DELETE | `/api/tags/{tag_id}` | Delete account tag |
-| GET | `/api/tags/suggest?q=...&limit=10` | EhTagTranslation suggestions |
+| GET | `/api/tags/suggest?q=...&limit=10` | Active provider suggestions; the built-in ExHentai adapter uses EhTagTranslation |
 | GET | `/api/tags/status` | Tag translation database cache/load status |
 | POST | `/api/tags/refresh?force=false` | Refresh tag translation database cache using ETag metadata |
 | GET | `/api/library` | Downloaded gallery metadata list |

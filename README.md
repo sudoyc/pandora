@@ -74,7 +74,7 @@ FastAPI service orchestrating the selected `GalleryProvider` and owning all pers
 - **Thumb cropping** — CSS sprite cropping for gdtm-mode thumbnails, on-demand preview page loading
 - **Download manager** — complete offline gallery clones (metadata + cover + thumbs + pages), resume support, WebSocket progress events
 - **Library API** — browse downloaded galleries, serve local files
-- **Tag suggest/maintenance** — versioned EhTagTranslation database, ETag-aware refresh, substring search with prefix-first ranking
+- **Tag suggest/maintenance** — provider-owned tag catalogs; the built-in ExHentai adapter supplies an ETag-aware EhTagTranslation catalog with prefix-first substring search
 - **Config** — TOML-based provider selection and credentials (`~/.config/pandora/config.toml`)
 
 30+ REST endpoints, WebSocket real-time events. The default provider retains SQLite at `~/.config/pandora/pandora.db`; non-default providers use provider-qualified database, download-state, and library paths.
